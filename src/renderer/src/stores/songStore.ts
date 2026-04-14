@@ -1,0 +1,720 @@
+// Per-song store with scoped undo/redo
+import { create, StateCreator } from 'zustand'
+import { temporal, TemporalState } from 'zundo'
+import { v4 as uuidv4 } from 'uuid'
+import type {
+  SongData,
+  SongEditorState,
+  Note,
+  Instrument,
+  Difficulty,
+  SongMetadata,
+  VideoSync,
+  TempoEvent,
+  TimeSignature,
+  StarPowerPhrase,
+  SoloSection,
+  VocalNote,
+  VocalPhrase,
+  HarmonyPart
+} from '../types'
+
+// Song store state interface
+interface SongStoreState extends SongEditorState {
+  // Clipboard (not in undo history)
+  clipboard: Omit<Note, 'id'>[]
+
+  // Note actions
+  addNote: (note: Omit<Note, 'id'>) => void
+  updateNote: (noteId: string, updates: Partial<Note>) => void
+  deleteNote: (noteId: string) => void
+  deleteSelectedNotes: () => void
+
+  // Selection actions
+  selectNote: (noteId: string, addToSelection?: boolean) => void
+  selectNotes: (noteIds: string[]) => void
+  clearSelection: () => void
+  selectAllInRange: (startTick: number, endTick: number, instrument?: Instrument) => void
+  selectStarPowerPhrase: (id: string | null) => void
+
+  // Clipboard actions
+  copySelectedNotes: () => void
+  pasteNotes: () => void
+
+  // Playback actions
+  setCurrentTick: (tick: number) => void
+  setIsPlaying: (isPlaying: boolean) => void
+  togglePlayback: () => void
+
+  // View actions
+  setZoomLevel: (zoom: number) => void
+  toggleInstrumentVisibility: (instrument: Instrument) => void
+  setActiveDifficulty: (difficulty: Difficulty) => void
+  setSnapDivision: (division: number) => void
+
+  // Metadata actions
+  updateMetadata: (updates: Partial<SongMetadata>) => void
+  updateVideoSync: (updates: Partial<VideoSync>) => void
+
+  // Tempo/time signature actions
+  addTempoEvent: (event: Omit<TempoEvent, 'tick'> & { tick: number }) => void
+  updateTempoEvent: (tick: number, bpm: number) => void
+  deleteTempoEvent: (tick: number) => void
+  addTimeSignature: (event: TimeSignature) => void
+  updateTimeSignature: (tick: number, updates: Partial<TimeSignature>) => void
+  deleteTimeSignature: (tick: number) => void
+
+  // Star Power phrase actions
+  addStarPowerPhrase: (phrase: Omit<StarPowerPhrase, 'id'>) => void
+  updateStarPowerPhrase: (id: string, updates: Partial<StarPowerPhrase>) => void
+  deleteStarPowerPhrase: (id: string) => void
+  createStarPowerFromSelection: () => void
+
+  // Solo section actions
+  addSoloSection: (section: Omit<SoloSection, 'id'>) => void
+  updateSoloSection: (id: string, updates: Partial<SoloSection>) => void
+  deleteSoloSection: (id: string) => void
+  selectSoloSection: (id: string | null) => void
+  createSoloFromSelection: () => void
+
+  // Vocal note actions
+  addVocalNote: (note: Omit<VocalNote, 'id'>) => void
+  updateVocalNote: (id: string, updates: Partial<VocalNote>) => void
+  deleteVocalNote: (id: string) => void
+  deleteSelectedVocalNotes: () => void
+
+  // Vocal phrase actions
+  addVocalPhrase: (phrase: Omit<VocalPhrase, 'id'>) => void
+  updateVocalPhrase: (id: string, updates: Partial<VocalPhrase>) => void
+  deleteVocalPhrase: (id: string) => void
+
+  // Vocal selection actions
+  selectVocalNote: (id: string, addToSelection?: boolean) => void
+  selectVocalNotes: (ids: string[]) => void
+  clearVocalSelection: () => void
+  selectVocalPhrase: (id: string | null) => void
+  setActiveHarmonyPart: (part: HarmonyPart) => void
+  selectAllVocalInRange: (startTick: number, endTick: number) => void
+  deleteHarmonyPartNotes: (part: HarmonyPart) => void
+
+  // Song data actions
+  loadSong: (song: SongData) => void
+  markClean: () => void
+}
+
+// Create default empty song
+const createDefaultSong = (id: string, folderPath: string): SongData => ({
+  id,
+  folderPath,
+  metadata: {
+    name: 'Untitled Song',
+    artist: 'Unknown Artist'
+  },
+  notes: [],
+  vocalNotes: [],
+  vocalPhrases: [],
+  starPowerPhrases: [],
+  soloSections: [],
+  tempoEvents: [{ tick: 0, bpm: 120 }],
+  timeSignatures: [{ tick: 0, numerator: 4, denominator: 4 }],
+  videoSync: {
+    clips: [],
+    offsetMs: 0,
+    trimStartMs: 0,
+    trimEndMs: 0
+  },
+  sourceFormat: 'midi'
+})
+
+// Create default editor state
+const createDefaultEditorState = (song: SongData): SongEditorState => ({
+  song,
+  selectedNoteIds: [],
+  selectedSpId: null,
+  selectedSoloId: null,
+  selectedVocalNoteIds: [],
+  selectedVocalPhraseId: null,
+  activeHarmonyPart: 0,
+  currentTick: 0,
+  zoomLevel: 1.0,
+  isPlaying: false,
+  isDirty: false,
+  visibleInstruments: new Set(['drums', 'guitar', 'bass', 'vocals', 'keys', 'proKeys', 'proGuitar', 'proBass'] as Instrument[]),
+  activeDifficulty: 'expert',
+  snapDivision: 4
+})
+
+// Store creator function
+const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
+  const defaultSong = createDefaultSong('default', '')
+  const defaultState = createDefaultEditorState(defaultSong)
+
+  return {
+    ...defaultState,
+    clipboard: [],
+
+    // Note actions
+    addNote: (noteData) =>
+      set((state) => {
+        const note: Note = { ...noteData, id: uuidv4() }
+        return {
+          song: {
+            ...state.song,
+            notes: [...state.song.notes, note]
+          },
+          isDirty: true
+        }
+      }),
+
+    updateNote: (noteId, updates) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          notes: state.song.notes.map((note) =>
+            note.id === noteId ? { ...note, ...updates } : note
+          )
+        },
+        isDirty: true
+      })),
+
+    deleteNote: (noteId) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          notes: state.song.notes.filter((note) => note.id !== noteId)
+        },
+        selectedNoteIds: state.selectedNoteIds.filter((id) => id !== noteId),
+        isDirty: true
+      })),
+
+    deleteSelectedNotes: () =>
+      set((state) => {
+        const selectedSet = new Set(state.selectedNoteIds)
+        return {
+          song: {
+            ...state.song,
+            notes: state.song.notes.filter((note) => !selectedSet.has(note.id))
+          },
+          selectedNoteIds: [],
+          isDirty: true
+        }
+      }),
+
+    // Selection actions
+    selectNote: (noteId, addToSelection = false) =>
+      set((state) => ({
+        selectedNoteIds: addToSelection
+          ? state.selectedNoteIds.includes(noteId)
+            ? state.selectedNoteIds.filter((id) => id !== noteId)
+            : [...state.selectedNoteIds, noteId]
+          : [noteId],
+        selectedSpId: null
+      })),
+
+    selectNotes: (noteIds) => set({ selectedNoteIds: noteIds, selectedSpId: null }),
+
+    clearSelection: () => set({ selectedNoteIds: [], selectedSpId: null }),
+
+    selectStarPowerPhrase: (id) => set({ selectedSpId: id, selectedNoteIds: [] }),
+
+    selectAllInRange: (startTick, endTick, instrument) =>
+      set((state) => {
+        const noteIds = state.song.notes
+          .filter(
+            (note) =>
+              note.tick >= startTick &&
+              note.tick <= endTick &&
+              note.difficulty === state.activeDifficulty &&
+              (!instrument || note.instrument === instrument)
+          )
+          .map((note) => note.id)
+        return { selectedNoteIds: noteIds }
+      }),
+
+    // Clipboard actions
+    copySelectedNotes: () =>
+      set((state) => {
+        const selectedSet = new Set(state.selectedNoteIds)
+        const selected = state.song.notes.filter((n) => selectedSet.has(n.id))
+        if (selected.length === 0) return {}
+        // Store notes relative to the earliest selected note's tick
+        const minTick = Math.min(...selected.map((n) => n.tick))
+        const clipboard = selected.map(({ id: _id, ...rest }) => ({
+          ...rest,
+          tick: rest.tick - minTick
+        }))
+        return { clipboard }
+      }),
+
+    pasteNotes: () =>
+      set((state) => {
+        if (state.clipboard.length === 0) return {}
+        // Snap currentTick to the active snap grid
+        const snapTicks = 480 / state.snapDivision
+        const snappedTick = Math.round(state.currentTick / snapTicks) * snapTicks
+        const newNotes: Note[] = state.clipboard.map((noteData) => ({
+          ...noteData,
+          tick: noteData.tick + snappedTick,
+          id: uuidv4()
+        }))
+        return {
+          song: {
+            ...state.song,
+            notes: [...state.song.notes, ...newNotes]
+          },
+          selectedNoteIds: newNotes.map((n) => n.id),
+          isDirty: true
+        }
+      }),
+
+    // Playback actions
+    setCurrentTick: (tick) => set((state) => {
+      // Clamp to [0, maxTick]. Max = last note/vocal end + buffer, or song_length from metadata
+      const noteMax = state.song.notes.reduce(
+        (max, n) => Math.max(max, n.tick + n.duration), 0
+      )
+      const vocalMax = state.song.vocalNotes.reduce(
+        (max, n) => Math.max(max, n.tick + n.duration), 0
+      )
+      const bufferTicks = 9600
+      // Use song_length from metadata (in ms) to estimate ticks at average tempo
+      // Use a generous minimum of 600 seconds (~10 min) worth of ticks to avoid cutting off songs
+      const avgBpm = state.song.tempoEvents.length > 0 ? state.song.tempoEvents[0].bpm : 120
+      const songLengthMs = state.song.metadata.song_length
+      const songLengthTicks = songLengthMs
+        ? (songLengthMs / 1000) * (avgBpm / 60) * 480
+        : 0
+      const tenMinTicks = 600 * (avgBpm / 60) * 480 // 10-minute fallback
+      const maxTick = Math.max(tenMinTicks, noteMax + bufferTicks, vocalMax + bufferTicks, songLengthTicks + bufferTicks)
+      return { currentTick: Math.max(0, Math.min(tick, maxTick)) }
+    }),
+
+    setIsPlaying: (isPlaying) => set({ isPlaying }),
+
+    togglePlayback: () => set((state) => ({ isPlaying: !state.isPlaying })),
+
+    // View actions
+    setZoomLevel: (zoom) => set({ zoomLevel: Math.max(0.1, Math.min(10, zoom)) }),
+
+    toggleInstrumentVisibility: (instrument) =>
+      set((state) => {
+        const newVisible = new Set(state.visibleInstruments)
+        if (newVisible.has(instrument)) {
+          newVisible.delete(instrument)
+        } else {
+          newVisible.add(instrument)
+        }
+        return { visibleInstruments: newVisible }
+      }),
+
+    setActiveDifficulty: (difficulty) => set({ activeDifficulty: difficulty }),
+
+    setSnapDivision: (division) => set({ snapDivision: division }),
+
+    // Metadata actions
+    updateMetadata: (updates) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          metadata: { ...state.song.metadata, ...updates }
+        },
+        isDirty: true
+      })),
+
+    updateVideoSync: (updates) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          videoSync: { ...state.song.videoSync, ...updates }
+        },
+        isDirty: true
+      })),
+
+    // Tempo actions
+    addTempoEvent: (event) =>
+      set((state) => {
+        const existingIndex = state.song.tempoEvents.findIndex((e) => e.tick === event.tick)
+        const newEvents =
+          existingIndex >= 0
+            ? state.song.tempoEvents.map((e, i) => (i === existingIndex ? event : e))
+            : [...state.song.tempoEvents, event].sort((a, b) => a.tick - b.tick)
+        return {
+          song: { ...state.song, tempoEvents: newEvents },
+          isDirty: true
+        }
+      }),
+
+    updateTempoEvent: (tick, bpm) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          tempoEvents: state.song.tempoEvents.map((e) =>
+            e.tick === tick ? { ...e, bpm } : e
+          )
+        },
+        isDirty: true
+      })),
+
+    deleteTempoEvent: (tick) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          tempoEvents:
+            tick === 0
+              ? state.song.tempoEvents // Can't delete initial tempo
+              : state.song.tempoEvents.filter((e) => e.tick !== tick)
+        },
+        isDirty: true
+      })),
+
+    // Time signature actions
+    addTimeSignature: (event) =>
+      set((state) => {
+        const existingIndex = state.song.timeSignatures.findIndex(
+          (e) => e.tick === event.tick
+        )
+        const newEvents =
+          existingIndex >= 0
+            ? state.song.timeSignatures.map((e, i) => (i === existingIndex ? event : e))
+            : [...state.song.timeSignatures, event].sort((a, b) => a.tick - b.tick)
+        return {
+          song: { ...state.song, timeSignatures: newEvents },
+          isDirty: true
+        }
+      }),
+
+    updateTimeSignature: (tick, updates) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          timeSignatures: state.song.timeSignatures.map((e) =>
+            e.tick === tick ? { ...e, ...updates } : e
+          )
+        },
+        isDirty: true
+      })),
+
+    deleteTimeSignature: (tick) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          timeSignatures:
+            tick === 0
+              ? state.song.timeSignatures // Can't delete initial time sig
+              : state.song.timeSignatures.filter((e) => e.tick !== tick)
+        },
+        isDirty: true
+      })),
+
+    // Star Power phrase actions
+    addStarPowerPhrase: (phraseData) =>
+      set((state) => {
+        const phrase: StarPowerPhrase = { ...phraseData, id: uuidv4() }
+        return {
+          song: {
+            ...state.song,
+            starPowerPhrases: [...state.song.starPowerPhrases, phrase].sort((a, b) => a.tick - b.tick)
+          },
+          isDirty: true
+        }
+      }),
+
+    updateStarPowerPhrase: (id, updates) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          starPowerPhrases: state.song.starPowerPhrases
+            .map((sp) => (sp.id === id ? { ...sp, ...updates } : sp))
+            .sort((a, b) => a.tick - b.tick)
+        },
+        isDirty: true
+      })),
+
+    deleteStarPowerPhrase: (id) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          starPowerPhrases: state.song.starPowerPhrases.filter((sp) => sp.id !== id)
+        },
+        isDirty: true
+      })),
+
+    createStarPowerFromSelection: () =>
+      set((state) => {
+        const selectedSet = new Set(state.selectedNoteIds)
+        const selected = state.song.notes.filter((n) => selectedSet.has(n.id))
+        if (selected.length === 0) return {}
+        const instrument = selected[0].instrument
+        const sameInstrument = selected.filter((n) => n.instrument === instrument)
+        if (sameInstrument.length === 0) return {}
+        const minTick = Math.min(...sameInstrument.map((n) => n.tick))
+        const maxTick = Math.max(...sameInstrument.map((n) => n.tick + n.duration))
+        const phrase: StarPowerPhrase = {
+          id: uuidv4(),
+          tick: minTick,
+          duration: maxTick - minTick || 480, // Min 1 beat if zero-length
+          instrument
+        }
+        return {
+          song: {
+            ...state.song,
+            starPowerPhrases: [...state.song.starPowerPhrases, phrase].sort((a, b) => a.tick - b.tick)
+          },
+          isDirty: true
+        }
+      }),
+
+    // Solo section actions
+    addSoloSection: (sectionData) =>
+      set((state) => {
+        const section: SoloSection = { ...sectionData, id: uuidv4() }
+        return {
+          song: {
+            ...state.song,
+            soloSections: [...state.song.soloSections, section].sort((a, b) => a.tick - b.tick)
+          },
+          isDirty: true
+        }
+      }),
+
+    updateSoloSection: (id, updates) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          soloSections: state.song.soloSections
+            .map((s) => (s.id === id ? { ...s, ...updates } : s))
+            .sort((a, b) => a.tick - b.tick)
+        },
+        isDirty: true
+      })),
+
+    deleteSoloSection: (id) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          soloSections: state.song.soloSections.filter((s) => s.id !== id)
+        },
+        selectedSoloId: state.selectedSoloId === id ? null : state.selectedSoloId,
+        isDirty: true
+      })),
+
+    selectSoloSection: (id) => set({ selectedSoloId: id, selectedNoteIds: [] }),
+
+    createSoloFromSelection: () =>
+      set((state) => {
+        const selectedSet = new Set(state.selectedNoteIds)
+        const selected = state.song.notes.filter((n) => selectedSet.has(n.id))
+        if (selected.length === 0) return {}
+        const instrument = selected[0].instrument
+        const sameInstrument = selected.filter((n) => n.instrument === instrument)
+        if (sameInstrument.length === 0) return {}
+        const minTick = Math.min(...sameInstrument.map((n) => n.tick))
+        const maxTick = Math.max(...sameInstrument.map((n) => n.tick + n.duration))
+        const section: SoloSection = {
+          id: uuidv4(),
+          tick: minTick,
+          duration: maxTick - minTick || 480,
+          instrument
+        }
+        return {
+          song: {
+            ...state.song,
+            soloSections: [...state.song.soloSections, section].sort((a, b) => a.tick - b.tick)
+          },
+          isDirty: true
+        }
+      }),
+
+    // Vocal note actions
+    addVocalNote: (noteData) =>
+      set((state) => {
+        const note: VocalNote = { ...noteData, id: uuidv4() }
+        return {
+          song: {
+            ...state.song,
+            vocalNotes: [...state.song.vocalNotes, note].sort((a, b) => a.tick - b.tick)
+          },
+          isDirty: true
+        }
+      }),
+
+    updateVocalNote: (id, updates) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          vocalNotes: state.song.vocalNotes.map((n) => (n.id === id ? { ...n, ...updates } : n))
+        },
+        isDirty: true
+      })),
+
+    deleteVocalNote: (id) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          vocalNotes: state.song.vocalNotes.filter((n) => n.id !== id)
+        },
+        selectedVocalNoteIds: state.selectedVocalNoteIds.filter((nid) => nid !== id),
+        isDirty: true
+      })),
+
+    deleteSelectedVocalNotes: () =>
+      set((state) => {
+        const selectedSet = new Set(state.selectedVocalNoteIds)
+        return {
+          song: {
+            ...state.song,
+            vocalNotes: state.song.vocalNotes.filter((n) => !selectedSet.has(n.id))
+          },
+          selectedVocalNoteIds: [],
+          isDirty: true
+        }
+      }),
+
+    // Vocal phrase actions
+    addVocalPhrase: (phraseData) =>
+      set((state) => {
+        const phrase: VocalPhrase = { ...phraseData, id: uuidv4() }
+        return {
+          song: {
+            ...state.song,
+            vocalPhrases: [...state.song.vocalPhrases, phrase].sort((a, b) => a.tick - b.tick)
+          },
+          isDirty: true
+        }
+      }),
+
+    updateVocalPhrase: (id, updates) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          vocalPhrases: state.song.vocalPhrases.map((p) => (p.id === id ? { ...p, ...updates } : p))
+        },
+        isDirty: true
+      })),
+
+    deleteVocalPhrase: (id) =>
+      set((state) => ({
+        song: {
+          ...state.song,
+          vocalPhrases: state.song.vocalPhrases.filter((p) => p.id !== id)
+        },
+        selectedVocalPhraseId: state.selectedVocalPhraseId === id ? null : state.selectedVocalPhraseId,
+        isDirty: true
+      })),
+
+    // Vocal selection actions
+    selectVocalNote: (id, addToSelection) =>
+      set((state) => ({
+        selectedVocalNoteIds: addToSelection
+          ? state.selectedVocalNoteIds.includes(id)
+            ? state.selectedVocalNoteIds.filter((nid) => nid !== id)
+            : [...state.selectedVocalNoteIds, id]
+          : [id]
+      })),
+
+    selectVocalNotes: (ids) =>
+      set({ selectedVocalNoteIds: ids }),
+
+    clearVocalSelection: () =>
+      set({ selectedVocalNoteIds: [], selectedVocalPhraseId: null }),
+
+    selectVocalPhrase: (id) =>
+      set({ selectedVocalPhraseId: id }),
+
+    setActiveHarmonyPart: (part) =>
+      set({ activeHarmonyPart: part }),
+
+    selectAllVocalInRange: (startTick, endTick) =>
+      set((state) => {
+        const ids = state.song.vocalNotes
+          .filter(
+            (n) =>
+              n.harmonyPart === state.activeHarmonyPart &&
+              n.tick >= startTick &&
+              n.tick <= endTick
+          )
+          .map((n) => n.id)
+        return { selectedVocalNoteIds: ids }
+      }),
+
+    deleteHarmonyPartNotes: (part) =>
+      set((state) => {
+        const removedIds = new Set(
+          state.song.vocalNotes.filter((n) => n.harmonyPart === part).map((n) => n.id)
+        )
+        return {
+          song: {
+            ...state.song,
+            vocalNotes: state.song.vocalNotes.filter((n) => n.harmonyPart !== part),
+            vocalPhrases: state.song.vocalPhrases.filter((p) => p.harmonyPart !== part)
+          },
+          selectedVocalNoteIds: state.selectedVocalNoteIds.filter((id) => !removedIds.has(id)),
+          activeHarmonyPart: part === state.activeHarmonyPart ? 0 as HarmonyPart : state.activeHarmonyPart,
+          isDirty: true
+        }
+      }),
+
+    // Song data actions
+    loadSong: (song) =>
+      set((state) => ({
+        ...createDefaultEditorState(song),
+        snapDivision: state.snapDivision,
+        song
+      })),
+
+    markClean: () => set({ isDirty: false })
+  }
+}
+
+// Type for song store with temporal (undo/redo)
+export type SongStore = SongStoreState & {
+  temporal: TemporalState<SongStoreState>
+}
+
+// Song store registry - maintains one store per song
+const songStoreRegistry = new Map<string, ReturnType<typeof createSongStore>>()
+
+// Create a new song store with temporal middleware
+function createSongStore(_songId: string) {
+  return create<SongStoreState>()(
+    temporal(createSongStoreSlice, {
+      // Only track state changes that should be undoable
+      partialize: (state) => ({
+        song: state.song
+      }),
+      // Limit history size
+      limit: 100,
+      // Equality check to avoid duplicate history entries
+      // Reference equality works because Zustand uses immutable updates
+      equality: (pastState, currentState) =>
+        pastState.song === currentState.song
+    })
+  )
+}
+
+// Get or create a song store for a given song ID
+export function getSongStore(songId: string) {
+  let store = songStoreRegistry.get(songId)
+  if (!store) {
+    store = createSongStore(songId)
+    songStoreRegistry.set(songId, store)
+  }
+  return store
+}
+
+// Remove a song store from the registry
+export function removeSongStore(songId: string) {
+  songStoreRegistry.delete(songId)
+}
+
+// Get all registered song store IDs
+export function getRegisteredSongIds(): string[] {
+  return Array.from(songStoreRegistry.keys())
+}
+
+// Hook to use the active song's store
+export function useActiveSongStore() {
+  // This will be implemented with a context provider
+  // For now, return a default store getter
+  return getSongStore('default')
+}
