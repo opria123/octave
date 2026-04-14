@@ -4,7 +4,7 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { TRACK_WIDTH, STRIKE_LINE_POS, HIGHWAY_LENGTH, COLORS, getLaneConfig, isBlackKey, PRO_KEYS_MIN, PRO_KEYS_VISIBLE } from './constants'
 import type { InstrumentRenderType } from './constants'
-import { YARGAssetsContext } from './YARGAssetProvider'
+import { HighwayAssetsContext } from './AssetProvider'
 
 export function Highway({
   instrumentType,
@@ -25,7 +25,7 @@ export function Highway({
   const isVocals = instrumentType === 'vocals'
   // For proKeys/vocals, skip shader lane lines — we draw overlays instead
   const shaderLaneCount = (isProKeys || isVocals) ? 1 : laneCount
-  const assets = useContext(YARGAssetsContext)
+  const assets = useContext(HighwayAssetsContext)
   const shaderRef = useRef<THREE.ShaderMaterial>(null)
 
   const highwayMaterial = useMemo(

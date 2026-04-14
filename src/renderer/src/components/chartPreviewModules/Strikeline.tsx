@@ -8,7 +8,7 @@ import {
   getLaneConfig, getFretX, PRO_KEYS_COLOR, VOCAL_COLOR
 } from './constants'
 import type { InstrumentRenderType } from './constants'
-import { YARGAssetsContext } from './YARGAssetProvider'
+import { HighwayAssetsContext } from './AssetProvider'
 
 function FretPad({
   x,
@@ -27,7 +27,7 @@ function FretPad({
   isDrum: boolean
   laneWidth: number
 }): React.JSX.Element {
-  const assets = useContext(YARGAssetsContext)
+  const assets = useContext(HighwayAssetsContext)
   const groupRef = useRef<THREE.Group>(null)
   const fretScaleX = isDrum ? DRUM_FRET_SCALE_X : GUITAR_FRET_SCALE_X
 
@@ -143,7 +143,7 @@ export function Strikeline({
     : instrumentType === 'proGuitar' ? COLORS.proGuitar : COLORS[instrumentType]
   const { laneCount, laneWidth } = getLaneConfig(instrumentType)
   const isDrum = instrumentType === 'drums'
-  const assets = useContext(YARGAssetsContext)
+  const assets = useContext(HighwayAssetsContext)
 
   return (
     <group position={[offsetX, 0, 0]}>

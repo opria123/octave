@@ -7,10 +7,10 @@ import {
   pitchToProKeysLane, PRO_KEYS_MIN
 } from './constants'
 import type { InstrumentRenderType } from './constants'
-import { YARGAssetsContext } from './YARGAssetProvider'
+import { HighwayAssetsContext } from './AssetProvider'
 import { getSongStore, useUIStore } from '../../stores'
 import type { Note, NoteFlags, NoteModifiers, Instrument, Difficulty } from '../../types'
-import type { YARGAssets, EditingTool } from './types'
+import type { HighwayAssets, EditingTool } from './types'
 
 // Build note flags from UI toggle modifiers
 function buildNoteFlags(instrument: Instrument, mods: NoteModifiers): NoteFlags | undefined {
@@ -42,7 +42,7 @@ function GhostNote({
 }: {
   position: [number, number, number]
   color: string
-  assets: YARGAssets | null
+  assets: HighwayAssets | null
   isDrum: boolean
   isKick: boolean
   noteModifiers: NoteModifiers
@@ -118,7 +118,7 @@ export function HighwayEditLayer({
   songId: string
   editTool: EditingTool
   snapDivision: number
-  assets: YARGAssets | null
+  assets: HighwayAssets | null
   proKeysViewStart?: number
 }): React.JSX.Element {
   const instrumentType: InstrumentRenderType = instrument === 'drums' ? 'drums'

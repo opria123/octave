@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 import * as THREE from 'three'
 import { TRACK_WIDTH, STRIKE_LINE_POS } from './constants'
 import type { Note } from '../../types'
-import type { YARGAssets } from './types'
+import type { HighwayAssets } from './types'
 
 // Cached canvas textures for fret number labels (0-22)
 const fretTextureCache = new Map<number, THREE.CanvasTexture>()
@@ -59,7 +59,7 @@ export function NoteGem({
   sustainOffset?: number
   noteFlags?: Note['flags']
   isHeadVisible?: boolean
-  assets: YARGAssets | null
+  assets: HighwayAssets | null
   isCymbal?: boolean
   fretNumber?: number
 }): React.JSX.Element {
@@ -161,7 +161,7 @@ export function KickNoteBar({
 }: {
   z: number
   color: string
-  assets: YARGAssets | null
+  assets: HighwayAssets | null
   isSelected?: boolean
 }): React.JSX.Element {
   return (

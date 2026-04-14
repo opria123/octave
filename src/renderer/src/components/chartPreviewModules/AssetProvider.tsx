@@ -1,39 +1,39 @@
-// YARG Asset Provider - Loads FBX models and textures into context
+// Asset Provider - Loads FBX models and textures into context
 import { useMemo, createContext } from 'react'
 import { useFBX, useTexture } from '@react-three/drei'
 import * as THREE from 'three'
 import { extractBakedGeometry, extractBakedGroup, extractAllMeshes } from './fbxUtils'
 import { TRACK_WIDTH } from './constants'
-import type { YARGAssets } from './types'
+import type { HighwayAssets } from './types'
 
-export const YARGAssetsContext = createContext<YARGAssets | null>(null)
+export const HighwayAssetsContext = createContext<HighwayAssets | null>(null)
 
-export function YARGAssetProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
-  const normalFBX = useFBX('/yarg/models/NormalNote.fbx')
-  const hopoFBX = useFBX('/yarg/models/HOPONote.fbx')
-  const tapFBX = useFBX('/yarg/models/TapNote.fbx')
-  const ghostFBX = useFBX('/yarg/models/GhostNote.fbx')
-  const accentFBX = useFBX('/yarg/models/AccentNote.fbx')
-  const cymbalFBX = useFBX('/yarg/models/CymbalNote.fbx')
-  const fretFBX = useFBX('/yarg/models/RectangularFret.fbx')
-  const drumFretBaseFBX = useFBX('/yarg/models/CircularFretBase.fbx')
-  const drumFretTopFBX = useFBX('/yarg/models/CircularFretTop.fbx')
-  const kickFBX = useFBX('/yarg/models/KickNote.fbx')
-  const kickFretFBX = useFBX('/yarg/models/RectangularKickFret.fbx')
-  const trackTrimFBX = useFBX('/yarg/models/TrackTrim.fbx')
+export function AssetProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
+  const normalFBX = useFBX('/highway-assets/models/NormalNote.fbx')
+  const hopoFBX = useFBX('/highway-assets/models/HOPONote.fbx')
+  const tapFBX = useFBX('/highway-assets/models/TapNote.fbx')
+  const ghostFBX = useFBX('/highway-assets/models/GhostNote.fbx')
+  const accentFBX = useFBX('/highway-assets/models/AccentNote.fbx')
+  const cymbalFBX = useFBX('/highway-assets/models/CymbalNote.fbx')
+  const fretFBX = useFBX('/highway-assets/models/RectangularFret.fbx')
+  const drumFretBaseFBX = useFBX('/highway-assets/models/CircularFretBase.fbx')
+  const drumFretTopFBX = useFBX('/highway-assets/models/CircularFretTop.fbx')
+  const kickFBX = useFBX('/highway-assets/models/KickNote.fbx')
+  const kickFretFBX = useFBX('/highway-assets/models/RectangularKickFret.fbx')
+  const trackTrimFBX = useFBX('/highway-assets/models/TrackTrim.fbx')
 
   const [
     noteMap, noteEmission, fretMap, fretShine, kickMap,
     kickFretMap, trackTrimMap, sidePattern
   ] = useTexture([
-    '/yarg/textures/NormalNote.png',
-    '/yarg/textures/NormalNoteEmission.png',
-    '/yarg/textures/RectangularFret.png',
-    '/yarg/textures/RectangularFretShine.png',
-    '/yarg/textures/KickNote.png',
-    '/yarg/textures/RectangularKickFret.png',
-    '/yarg/textures/TrackTrim.png',
-    '/yarg/textures/SidePattern_Default.png'
+    '/highway-assets/textures/NormalNote.png',
+    '/highway-assets/textures/NormalNoteEmission.png',
+    '/highway-assets/textures/RectangularFret.png',
+    '/highway-assets/textures/RectangularFretShine.png',
+    '/highway-assets/textures/KickNote.png',
+    '/highway-assets/textures/RectangularKickFret.png',
+    '/highway-assets/textures/TrackTrim.png',
+    '/highway-assets/textures/SidePattern_Default.png'
   ])
 
   useMemo(() => {
@@ -41,7 +41,7 @@ export function YARGAssetProvider({ children }: { children: React.ReactNode }): 
     trackTrimMap.wrapS = trackTrimMap.wrapT = THREE.RepeatWrapping
   }, [sidePattern, trackTrimMap])
 
-  const assets = useMemo<YARGAssets>(() => {
+  const assets = useMemo<HighwayAssets>(() => {
     const noteFallback: [number, number, number] = [0.34, 0.06, 0.2]
     const drumFretFallback: [number, number, number] = [0.35, 0.03, 0.35]
     const kickFallback: [number, number, number] = [TRACK_WIDTH, 0.06, 0.15]
@@ -73,5 +73,5 @@ export function YARGAssetProvider({ children }: { children: React.ReactNode }): 
       noteMap, noteEmission, fretMap, fretShine, kickMap, kickFretMap,
       trackTrimMap, sidePattern])
 
-  return <YARGAssetsContext.Provider value={assets}>{children}</YARGAssetsContext.Provider>
+  return <HighwayAssetsContext.Provider value={assets}>{children}</HighwayAssetsContext.Provider>
 }

@@ -11,7 +11,7 @@ import type { Instrument, Difficulty, EditingTool, VideoSync, TempoEvent } from 
 import {
   CAMERA_HEIGHT, CAMERA_DISTANCE, CAMERA_ANGLE, CAMERA_FOV, STRIKE_LINE_POS
 } from './chartPreviewModules'
-import { YARGAssetProvider } from './chartPreviewModules/YARGAssetProvider'
+import { AssetProvider } from './chartPreviewModules/AssetProvider'
 import { AnimatedHighwayScene } from './chartPreviewModules/AnimatedHighwayScene'
 import {
   InstrumentToggles, DifficultySelector, TimelineScrubber,
@@ -206,14 +206,14 @@ function HighwayWrapper({ songId, editTool }: { songId: string; editTool: Editin
       <pointLight position={[0, 1.5, STRIKE_LINE_POS + 1]} intensity={0.3} color="#4488FF" distance={5} />
 
       <Suspense fallback={null}>
-        <YARGAssetProvider>
+        <AssetProvider>
           <AnimatedHighwayScene
             songId={songId}
             visibleInstruments={visibleInstruments}
             activeDifficulty={activeDifficulty}
             editTool={editTool}
           />
-        </YARGAssetProvider>
+        </AssetProvider>
       </Suspense>
 
       {!hasVideo && (

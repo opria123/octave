@@ -18,7 +18,7 @@ export interface ExtractedMesh {
   name: string
 }
 
-export interface YARGAssets {
+export interface HighwayAssets {
   noteGeo: THREE.BufferGeometry
   hopoGeo: THREE.BufferGeometry
   tapGeo: THREE.BufferGeometry

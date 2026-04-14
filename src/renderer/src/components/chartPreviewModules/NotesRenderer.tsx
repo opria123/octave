@@ -2,11 +2,11 @@
 import { useMemo, useCallback, useContext } from 'react'
 import { STRIKE_LINE_POS, HIGHWAY_LENGTH, COLORS, DRUM_KICK_COLOR, getLaneConfig, getFretX, PRO_GUITAR_COLORS, PRO_KEYS_COLOR, VOCAL_COLOR, PRO_KEYS_MIN, PRO_KEYS_MAX, PRO_KEYS_VISIBLE } from './constants'
 import type { InstrumentRenderType } from './constants'
-import { YARGAssetsContext } from './YARGAssetProvider'
+import { HighwayAssetsContext } from './AssetProvider'
 import { NoteGem, KickNoteBar } from './NoteGem'
 import type { Note, Instrument, Difficulty } from '../../types'
 import { SUSTAIN_THRESHOLD_MID, SUSTAIN_THRESHOLD_CHART } from '../../types'
-import type { YARGAssets } from './types'
+import type { HighwayAssets } from './types'
 
 export function NotesRenderer({
   notes,
@@ -34,7 +34,7 @@ export function NotesRenderer({
   onNoteClick: (noteId: string, event?: MouseEvent) => void
   hitNotesRef: React.MutableRefObject<Set<string>>
   onNoteHit: (noteId: string, laneIndex: number, color: string, x: number, endTick: number) => void
-  assets: YARGAssets | null
+  assets: HighwayAssets | null
   isPlaying: boolean
   proKeysViewStart?: number
   sourceFormat?: 'midi' | 'chart'

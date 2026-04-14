@@ -5,7 +5,7 @@ import { useFrame } from '@react-three/fiber'
 import { useStore } from 'zustand'
 import { getSongStore, useSettingsStore, useUIStore } from '../../stores'
 import { BASE_PIXELS_PER_TICK, TRACK_WIDTH, STRIKE_LINE_POS, HIGHWAY_LENGTH, HIT_EFFECT_TICKS, FRET_PRESS_TICKS, computeProKeysViewStart } from './constants'
-import { YARGAssetsContext } from './YARGAssetProvider'
+import { HighwayAssetsContext } from './AssetProvider'
 import { Highway } from './Highway'
 import { Strikeline } from './Strikeline'
 import { BeatGrid } from './BeatGrid'
@@ -106,7 +106,7 @@ export function AnimatedHighwayScene({
   const sourceFormat = useStore(store, (s) => s.song.sourceFormat)
   const snapDivision = useStore(store, (s) => s.snapDivision)
   const isPlaying = useStore(store, (s) => s.isPlaying)
-  const assets = useContext(YARGAssetsContext)
+  const assets = useContext(HighwayAssetsContext)
   const { highwaySpeed: _highwaySpeed } = useSettingsStore()
 
   const pixelsPerTick = BASE_PIXELS_PER_TICK
