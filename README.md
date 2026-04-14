@@ -103,9 +103,6 @@ The interface has four main areas:
 - Use **File → Export** to convert between formats
 - OCTAVE preserves all metadata, tempo maps, and instrument data on round-trip
 
-<!-- Screenshot: 3D highway close-up -->
-![3D Highway Preview](docs/screenshots/highway-preview.png)
-
 ---
 
 ## Features
