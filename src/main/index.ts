@@ -4,6 +4,7 @@ import { readdir, readFile, writeFile, stat, rename, copyFile, unlink } from 'fs
 import { existsSync } from 'fs'
 import { execFile } from 'child_process'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { autoUpdater } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
 import ffmpeg from 'fluent-ffmpeg'
 
@@ -77,7 +78,7 @@ protocol.registerSchemesAsPrivileged([
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('com.opria123.octave')
 
   // Register protocol handler: song-file://<encoded-path>
   // Only allows access to files within the currently opened project folder
@@ -108,6 +109,51 @@ app.whenReady().then(() => {
   ipcMain.on('ping', () => console.log('pong'))
 
   createWindow()
+
+  // Check for updates after window is ready (skip in dev)
+  if (!is.dev) {
+    autoUpdater.autoDownload = false
+    autoUpdater.on('update-available', (info) => {
+      const win = BrowserWindow.getAllWindows()[0]
+      if (!win) return
+      dialog
+        .showMessageBox(win, {
+          type: 'info',
+          title: 'Update Available',
+          message: `A new version (v${info.version}) is available.`,
+          detail: 'Would you like to download and install it now?',
+          buttons: ['Update', 'Later'],
+          defaultId: 0,
+          cancelId: 1
+        })
+        .then(({ response }) => {
+          if (response === 0) {
+            autoUpdater.downloadUpdate()
+          }
+        })
+    })
+    autoUpdater.on('update-downloaded', () => {
+      const win = BrowserWindow.getAllWindows()[0]
+      if (!win) return
+      dialog
+        .showMessageBox(win, {
+          type: 'info',
+          title: 'Update Ready',
+          message: 'Update downloaded. The app will restart to apply it.',
+          buttons: ['Restart Now', 'Later'],
+          defaultId: 0,
+          cancelId: 1
+        })
+        .then(({ response }) => {
+          if (response === 0) {
+            autoUpdater.quitAndInstall()
+          }
+        })
+    })
+    autoUpdater.checkForUpdates().catch(() => {
+      // Silently fail if offline or no releases yet
+    })
+  }
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
