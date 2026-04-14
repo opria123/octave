@@ -19,6 +19,16 @@ try {
 // Allow AudioContext to start without user gesture requirement in Electron
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
+// Track the currently opened project folder for path validation
+let allowedProjectPath: string | null = null
+
+/** Validate that a path is within the allowed project folder */
+function isPathAllowed(targetPath: string): boolean {
+  if (!allowedProjectPath) return true // No project opened yet — allow (dialog-gated)
+  const resolved = resolve(targetPath)
+  return resolved.startsWith(allowedProjectPath)
+}
+
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -31,7 +41,8 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false, // Required for preload Node.js APIs
+      contextIsolation: true
     }
   })
 
@@ -57,7 +68,7 @@ function createWindow(): void {
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'song-file',
-    privileges: { bypassCSP: true, stream: true, supportFetchAPI: true }
+    privileges: { stream: true, supportFetchAPI: true }
   }
 ])
 
@@ -69,18 +80,20 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.electron')
 
   // Register protocol handler: song-file://<encoded-path>
+  // Only allows access to files within the currently opened project folder
   protocol.handle('song-file', (request) => {
-    // request.url looks like: song-file://F%3A%5Cprojects%5C...
-    // But Chromium may lowercase the hostname portion after ://
-    // so we need to handle that carefully
     const raw = request.url.replace('song-file://', '')
     const filePath = decodeURIComponent(raw)
-    console.log('[song-file] request.url:', request.url)
-    console.log('[song-file] decoded path:', filePath)
-    // On Windows: file:///F:/path/to/file  (forward slashes, with drive letter)
-    const normalized = filePath.replace(/\\/g, '/')
+    const resolved = resolve(filePath)
+
+    // Validate: only allow access to files within a known project folder
+    if (allowedProjectPath && !resolved.startsWith(allowedProjectPath)) {
+      console.error('[song-file] Blocked access outside project folder:', resolved)
+      return new Response('Forbidden', { status: 403 })
+    }
+
+    const normalized = resolved.replace(/\\/g, '/')
     const fileUrl = `file:///${normalized}`
-    console.log('[song-file] fetching:', fileUrl)
     return net.fetch(fileUrl)
   })
 
@@ -130,6 +143,8 @@ ipcMain.handle('dialog:openFolder', async () => {
     return null
   }
 
+  // Track the opened project folder for path validation
+  allowedProjectPath = resolve(result.filePaths[0])
   return result.filePaths[0]
 })
 
@@ -166,6 +181,7 @@ ipcMain.handle('folder:scan', async (_event, folderPath: string) => {
 
 // Read song.ini file
 ipcMain.handle('song:readIni', async (_event, songPath: string) => {
+  if (!isPathAllowed(songPath)) return null
   const iniPath = join(songPath, 'song.ini')
 
   try {
@@ -179,6 +195,7 @@ ipcMain.handle('song:readIni', async (_event, songPath: string) => {
 
 // Write song.ini file
 ipcMain.handle('song:writeIni', async (_event, songPath: string, metadata: Record<string, unknown>) => {
+  if (!isPathAllowed(songPath)) return false
   const iniPath = join(songPath, 'song.ini')
 
   try {
@@ -193,6 +210,7 @@ ipcMain.handle('song:writeIni', async (_event, songPath: string, metadata: Recor
 
 // Read notes.mid file (also returns chart format info)
 ipcMain.handle('song:readMidi', async (_event, songPath: string) => {
+  if (!isPathAllowed(songPath)) return null
   const midiPath = join(songPath, 'notes.mid')
   const chartPath = join(songPath, 'notes.chart')
 
@@ -221,6 +239,7 @@ ipcMain.handle('song:readMidi', async (_event, songPath: string) => {
 const MAX_BACKUPS = 3
 
 ipcMain.handle('song:writeMidi', async (_event, songPath: string, midiBase64: string) => {
+  if (!isPathAllowed(songPath)) return false
   const midiPath = join(songPath, 'notes.mid')
   const tempPath = join(songPath, 'notes.mid.tmp')
 
@@ -276,6 +295,7 @@ ipcMain.handle('song:writeMidi', async (_event, songPath: string, midiBase64: st
 
 // Write notes.chart file — with backup + atomic write
 ipcMain.handle('song:writeChart', async (_event, songPath: string, chartText: string) => {
+  if (!isPathAllowed(songPath)) return false
   const chartPath = join(songPath, 'notes.chart')
   const tempPath = join(songPath, 'notes.chart.tmp')
 
@@ -317,6 +337,7 @@ ipcMain.handle('song:writeChart', async (_event, songPath: string, chartText: st
 
 // Read video.json (video sync/clip data)
 ipcMain.handle('video:readJson', async (_event, songPath: string) => {
+  if (!isPathAllowed(songPath)) return null
   const jsonPath = join(songPath, 'video.json')
   try {
     const content = await readFile(jsonPath, 'utf-8')
@@ -328,6 +349,7 @@ ipcMain.handle('video:readJson', async (_event, songPath: string) => {
 
 // Write video.json (video sync/clip data)
 ipcMain.handle('video:writeJson', async (_event, songPath: string, data: unknown) => {
+  if (!isPathAllowed(songPath)) return false
   const jsonPath = join(songPath, 'video.json')
   try {
     await writeFile(jsonPath, JSON.stringify(data, null, 2), 'utf-8')
@@ -340,6 +362,7 @@ ipcMain.handle('video:writeJson', async (_event, songPath: string, data: unknown
 
 // Read album art (album.png, album.jpg, or album.jpeg)
 ipcMain.handle('song:readAlbumArt', async (_event, songPath: string) => {
+  if (!isPathAllowed(songPath)) return null
   const extensions = ['png', 'jpg', 'jpeg']
 
   for (const ext of extensions) {
@@ -358,6 +381,7 @@ ipcMain.handle('song:readAlbumArt', async (_event, songPath: string) => {
 
 // Write album art
 ipcMain.handle('song:writeAlbumArt', async (_event, songPath: string, dataUrl: string) => {
+  if (!isPathAllowed(songPath)) return false
   try {
     // Parse data URL
     const matches = dataUrl.match(/^data:image\/(png|jpeg|jpg);base64,(.+)$/)
@@ -378,6 +402,7 @@ ipcMain.handle('song:writeAlbumArt', async (_event, songPath: string, dataUrl: s
 
 // Read audio files - returns all audio stems found in the song folder
 ipcMain.handle('song:readAudio', async (_event, songPath: string) => {
+  if (!isPathAllowed(songPath)) return null
   const audioExtensions = ['.ogg', '.mp3', '.opus', '.wav']
   const results: { filePath: string; filename: string }[] = []
 
@@ -464,6 +489,7 @@ ipcMain.handle('dialog:openVideo', async () => {
 
 // Copy video into song folder so it's portable
 ipcMain.handle('video:import', async (_event, songPath: string, videoSourcePath: string) => {
+  if (!isPathAllowed(songPath)) return null
   try {
     const ext = videoSourcePath.substring(videoSourcePath.lastIndexOf('.')).toLowerCase()
     const destFilename = `video${ext}`
@@ -482,6 +508,7 @@ ipcMain.handle('video:import', async (_event, songPath: string, videoSourcePath:
 
 // Scan song folder for existing video files
 ipcMain.handle('video:scan', async (_event, songPath: string) => {
+  if (!isPathAllowed(songPath)) return null
   const videoExtensions = ['.mp4', '.webm', '.mkv', '.avi', '.mov', '.wmv', '.flv']
   try {
     const entries = await readdir(songPath)
@@ -501,6 +528,16 @@ ipcMain.handle('video:scan', async (_event, songPath: string) => {
 
 // Download video from URL (YouTube, etc.) using yt-dlp
 ipcMain.handle('video:download-url', async (event, songPath: string, url: string) => {
+  if (!isPathAllowed(songPath)) return { success: false, error: 'Invalid path' }
+  // Validate URL scheme — only allow http(s)
+  try {
+    const parsed = new URL(url)
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return { success: false, error: 'Only HTTP/HTTPS URLs are allowed' }
+    }
+  } catch {
+    return { success: false, error: 'Invalid URL' }
+  }
   const outputTemplate = join(songPath, 'video.%(ext)s')
   const args = [
     '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
@@ -565,6 +602,7 @@ ipcMain.handle('video:download-url', async (event, songPath: string, url: string
 
 // Get audio waveform data - returns peak amplitude samples for visualization
 ipcMain.handle('audio:waveform', async (_event, songPath: string) => {
+  if (!isPathAllowed(songPath)) return null
   const audioExtensions = ['.ogg', '.mp3', '.opus', '.wav']
   try {
     const entries = await readdir(songPath)

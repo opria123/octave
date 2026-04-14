@@ -1,5 +1,4 @@
 // Note Gem, Kick Note Bar, and Hit Flash Effect rendering
-import { useMemo } from 'react'
 import * as THREE from 'three'
 import { TRACK_WIDTH, STRIKE_LINE_POS } from './constants'
 import type { Note } from '../../types'
@@ -45,7 +44,7 @@ export function NoteGem({
   color,
   isSelected,
   sustainLength,
-  sustainOffset = 0,
+  sustainOffset: _sustainOffset = 0,
   noteFlags,
   isHeadVisible = true,
   assets,

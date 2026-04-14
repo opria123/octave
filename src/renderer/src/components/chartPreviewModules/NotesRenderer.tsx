@@ -1,8 +1,7 @@
 // Notes Renderer - Bot-hit detection via refs, no useState
-import { useMemo, useCallback, useContext } from 'react'
-import { STRIKE_LINE_POS, HIGHWAY_LENGTH, COLORS, DRUM_KICK_COLOR, getLaneConfig, getFretX, PRO_GUITAR_COLORS, PRO_KEYS_COLOR, VOCAL_COLOR, PRO_KEYS_MIN, PRO_KEYS_MAX, PRO_KEYS_VISIBLE } from './constants'
+import { useMemo, useCallback } from 'react'
+import { STRIKE_LINE_POS, HIGHWAY_LENGTH, COLORS, DRUM_KICK_COLOR, getLaneConfig, getFretX, PRO_GUITAR_COLORS, PRO_KEYS_COLOR, VOCAL_COLOR, PRO_KEYS_MIN, PRO_KEYS_VISIBLE } from './constants'
 import type { InstrumentRenderType } from './constants'
-import { HighwayAssetsContext } from './AssetProvider'
 import { NoteGem, KickNoteBar } from './NoteGem'
 import type { Note, Instrument, Difficulty } from '../../types'
 import { SUSTAIN_THRESHOLD_MID, SUSTAIN_THRESHOLD_CHART } from '../../types'

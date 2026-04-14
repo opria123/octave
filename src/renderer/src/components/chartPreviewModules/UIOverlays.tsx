@@ -425,7 +425,7 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
 
   // Canvas mouse move: track hover for erase tool cursor
   const handleCanvasMouseMove = useCallback(
-    (e: React.MouseEvent) => {
+    (e: React.MouseEvent<HTMLElement>) => {
       if (dragRef.current) return
       const rect = e.currentTarget.getBoundingClientRect()
       const mx = e.clientX - rect.left

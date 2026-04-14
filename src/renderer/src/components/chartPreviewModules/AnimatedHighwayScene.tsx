@@ -95,11 +95,9 @@ export function AnimatedHighwayScene({
   const store = getSongStore(songId)
   const currentTick = useStore(store, (s) => s.currentTick)
   const notes = useStore(store, (s) => s.song.notes)
-  const vocalNotes = useStore(store, (s) => s.song.vocalNotes)
   const starPowerPhrases = useStore(store, (s) => s.song.starPowerPhrases)
   const soloSections = useStore(store, (s) => s.song.soloSections)
   const selectedNoteIds = useStore(store, (s) => s.selectedNoteIds)
-  const selectedVocalNoteIds = useStore(store, (s) => s.selectedVocalNoteIds)
   const selectedSpId = useStore(store, (s) => s.selectedSpId)
   const selectedSoloId = useStore(store, (s) => s.selectedSoloId)
   const tempoEvents = useStore(store, (s) => s.song.tempoEvents)
@@ -503,7 +501,6 @@ function SoloOverlay({
 }
 
 // Imperative hit flash — no React reconciliation, no stale meshes
-const _tmpColor = new THREE.Color()
 const _sphereGeo = new THREE.SphereGeometry(0.06, 8, 8)
 const _boxGeo = new THREE.BoxGeometry(0.02, 0.02, 0.02)
 

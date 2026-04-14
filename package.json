@@ -4,7 +4,24 @@
   "description": "OCTAVE — Orchestrated Chart & Track Authoring Visual Editor for rhythm games",
   "main": "./out/main/index.js",
   "author": "opria123",
+  "license": "MIT",
   "homepage": "https://github.com/opria123/octave",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opria123/octave.git"
+  },
+  "bugs": {
+    "url": "https://github.com/opria123/octave/issues"
+  },
+  "keywords": [
+    "chart-editor",
+    "rhythm-game",
+    "midi",
+    "clone-hero",
+    "electron",
+    "music",
+    "guitar-hero"
+  ],
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",

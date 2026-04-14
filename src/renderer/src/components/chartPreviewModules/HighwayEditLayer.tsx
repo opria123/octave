@@ -1,15 +1,14 @@
 // Highway Edit Layer - Click-to-place/erase editing via raycasting
-import { useMemo, useState, useCallback, useRef, useContext } from 'react'
+import { useMemo, useState, useCallback, useRef } from 'react'
 import * as THREE from 'three'
 import {
   TRACK_WIDTH, STRIKE_LINE_POS, HIGHWAY_LENGTH, COLORS, DRUM_KICK_COLOR,
   PRO_GUITAR_COLORS, PRO_KEYS_COLOR, VOCAL_COLOR, getLaneConfig, getFretX,
-  pitchToProKeysLane, PRO_KEYS_MIN
+  PRO_KEYS_MIN
 } from './constants'
 import type { InstrumentRenderType } from './constants'
-import { HighwayAssetsContext } from './AssetProvider'
 import { getSongStore, useUIStore } from '../../stores'
-import type { Note, NoteFlags, NoteModifiers, Instrument, Difficulty } from '../../types'
+import type { Note, NoteFlags, NoteModifiers, Instrument, Difficulty, ProGuitarString } from '../../types'
 import type { HighwayAssets, EditingTool } from './types'
 
 // Build note flags from UI toggle modifiers
@@ -403,7 +402,7 @@ export function HighwayEditLayer({
           lane: noteLane as Note['lane'],
           velocity: 100,
           ...(flags ? { flags } : {}),
-          ...(isProGtr ? { string: noteLane as number, fret: 0 } : {})
+          ...(isProGtr ? { string: noteLane as ProGuitarString, fret: 0 } : {})
         })
         // For non-drum instruments, start sustain drag
         if (instrument !== 'drums') {

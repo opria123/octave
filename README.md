@@ -1,8 +1,21 @@
-# OCTAVE
+<div align="center">
+  <img src="resources/octave.svg" alt="OCTAVE" width="128" height="128" />
 
-**Orchestrated Chart & Track Authoring Visual Editor**
+  # OCTAVE
 
-A desktop chart editor for rhythm games like [YARG](https://yarg.in) and Clone Hero. Built with Electron, React, Three.js, and Zustand.
+  **Orchestrated Chart & Track Authoring Visual Editor**
+
+  [![GitHub release](https://img.shields.io/github/v/release/opria123/octave?style=flat-square&color=00F2FE)](https://github.com/opria123/octave/releases/latest)
+  [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+  [![Electron](https://img.shields.io/badge/Electron-39-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/)
+  [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
+  [![Three.js](https://img.shields.io/badge/Three.js-r182-000000?style=flat-square&logo=threedotjs&logoColor=white)](https://threejs.org/)
+  [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+  [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)]()
+
+  A desktop chart editor for rhythm games like [YARG](https://yarg.in) and Clone Hero.
+
+</div>
 
 <!-- Screenshot: Full editor view with piano roll + 3D highway -->
 ![OCTAVE Editor Overview](docs/screenshots/editor-overview.png)

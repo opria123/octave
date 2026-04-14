@@ -932,7 +932,7 @@ function Notes({
 
       // Check sustain right-edge hover (for any note, not just selected)
       for (let i = visibleNotes.length - 1; i >= 0; i--) {
-        const { note, x, y, w, h, isSustain } = visibleNotes[i]
+        const { x, y, w, h, isSustain } = visibleNotes[i]
         if (!isSustain) continue
         if (my >= y && my <= y + h && mx >= x + w - SUSTAIN_HANDLE_WIDTH && mx <= x + w + 2) {
           canvas.style.cursor = 'ew-resize'
