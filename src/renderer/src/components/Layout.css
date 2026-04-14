@@ -1,0 +1,228 @@
+/* Layout styles */
+.layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.layout-main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ==================== */
+/* Allotment overrides for dark theme */
+/* ==================== */
+
+.layout-main .split-view-view {
+  overflow: hidden;
+}
+
+/* Sash (resize handle) styling */
+.layout-main .sash {
+  background-color: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.layout-main .sash:hover,
+.layout-main .sash.active {
+  background-color: var(--accent-color);
+}
+
+.layout-main .sash-vertical {
+  width: 4px !important;
+}
+
+.layout-main .sash-horizontal {
+  height: 4px !important;
+}
+
+/* ==================== */
+/* Panel styles */
+/* ==================== */
+
+.panel {
+  background-color: var(--bg-secondary);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.panel-left {
+  border-right: 1px solid var(--border-color);
+}
+
+.panel-right {
+  border-left: 1px solid var(--border-color);
+}
+
+.panel-bottom {
+  border-top: 1px solid var(--border-color);
+}
+
+.panel-center {
+  position: relative;
+}
+
+/* Panel header */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.panel-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Panel content */
+.panel-content {
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+  min-height: 0;
+}
+
+.panel-content-no-padding {
+  padding: 0;
+}
+
+/* Tab styles for bottom panel */
+.panel-tabs {
+  display: flex;
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.panel-tab {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.panel-tab:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+}
+
+.panel-tab.active {
+  color: var(--accent-color);
+  border-bottom-color: var(--accent-color);
+}
+
+/* Scrollbar styling */
+.panel-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.panel-content::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+}
+
+.panel-content::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+.panel-content::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.empty-state-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-state-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+}
+
+.empty-state-description {
+  font-size: 13px;
+  max-width: 280px;
+  line-height: 1.5;
+}
+
+/* Icon button */
+.icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.icon-button:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.icon-button:active {
+  background-color: var(--bg-active);
+}
+
+/* Dirty indicator */
+.dirty-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--warning-color);
+}

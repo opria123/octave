@@ -1,0 +1,16 @@
+/* Bottom Panel styles */
+.bottom-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+}
+
+.bottom-panel-content {
+  flex: 1;
+  overflow: hidden;
+  background-color: var(--bg-secondary);
+  width: 100%;
+  min-width: 0;
+}

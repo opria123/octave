@@ -1,0 +1,146 @@
+/* Project Explorer styles */
+.project-explorer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.explorer-folder-path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.folder-icon {
+  font-size: 14px;
+}
+
+.folder-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Song list */
+.explorer-song-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+}
+
+.explorer-song-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.explorer-song-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.explorer-song-item.active {
+  background-color: var(--accent-color-transparent);
+  border: 1px solid var(--accent-color);
+}
+
+.explorer-song-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.explorer-song-art {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.explorer-song-art-placeholder {
+  font-size: 18px;
+}
+
+.explorer-song-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.explorer-song-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.explorer-song-artist {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.explorer-song-instruments {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.instrument-badge {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* Empty state */
+.explorer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.explorer-empty-hint {
+  font-size: 11px;
+  margin-top: 4px;
+  opacity: 0.7;
+}
+
+.explorer-open-button {
+  margin-top: 16px;
+  padding: 8px 16px;
+  background-color: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.explorer-open-button:hover {
+  background-color: var(--accent-color-hover);
+}

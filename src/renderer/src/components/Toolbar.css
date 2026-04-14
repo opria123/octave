@@ -1,0 +1,232 @@
+/* Toolbar styles */
+.toolbar {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 12px;
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  gap: 8px;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background-color: var(--border-color);
+  margin: 0 4px;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+/* Toolbar button */
+.toolbar-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.toolbar-button:hover:not(:disabled) {
+  background-color: var(--bg-hover);
+}
+
+.toolbar-button:active:not(:disabled) {
+  background-color: var(--bg-active);
+}
+
+.toolbar-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar-button-play {
+  font-size: 18px;
+}
+
+.toolbar-button-accent {
+  background-color: var(--accent-color);
+  color: white;
+}
+
+.toolbar-button-accent:hover:not(:disabled) {
+  background-color: var(--accent-color-hover);
+}
+
+.toolbar-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.toolbar-label {
+  font-weight: 500;
+}
+
+/* Playback controls */
+.toolbar-playback {
+  gap: 2px;
+}
+
+/* Volume control */
+.toolbar-volume {
+  gap: 6px;
+}
+
+.toolbar-volume-icon {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.toolbar-volume-slider {
+  width: 80px;
+  height: 4px;
+  appearance: none;
+  background: var(--bg-secondary);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.toolbar-volume-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: var(--accent-color);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.toolbar-volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.toolbar-volume-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+}
+
+/* Highway speed control */
+.toolbar-speed {
+  gap: 6px;
+}
+
+.toolbar-speed-label {
+  font-size: 12px;
+  opacity: 0.7;
+  color: var(--text-secondary);
+}
+
+.toolbar-speed-slider {
+  width: 70px;
+  height: 4px;
+  appearance: none;
+  background: var(--bg-secondary);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.toolbar-speed-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: var(--accent-color);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.toolbar-speed-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.toolbar-speed-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+}
+
+.toolbar-speed-value {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 28px;
+  text-align: center;
+}
+
+/* Song info */
+.toolbar-song-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-song-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar-song-artist {
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar-no-song {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.dirty-indicator {
+  width: 8px;
+  height: 8px;
+  background: var(--accent-color);
+  border-radius: 50%;
+}
+
+/* Toggle */
+.toolbar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.toolbar-toggle input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent-color);
+  cursor: pointer;
+}
+
+.toolbar-toggle-label {
+  user-select: none;
+}

@@ -1,0 +1,249 @@
+/* Property Panel styles */
+.property-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Property sections */
+.property-section {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.property-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.property-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+/* Property group */
+.property-group {
+  margin-bottom: 12px;
+}
+
+.property-group:last-child {
+  margin-bottom: 0;
+}
+
+.property-row {
+  display: flex;
+  gap: 12px;
+}
+
+.property-group-half {
+  flex: 1;
+}
+
+.property-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+/* Input styles */
+.property-input,
+.property-select {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.property-input:focus,
+.property-select:focus {
+  border-color: var(--accent-color);
+}
+
+.property-input:hover,
+.property-select:hover {
+  border-color: var(--border-color-hover);
+}
+
+.property-input::placeholder {
+  color: var(--text-muted);
+}
+
+.property-select {
+  cursor: pointer;
+}
+
+/* Checkbox */
+.property-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.property-checkbox input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent-color);
+  cursor: pointer;
+}
+
+.property-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* Buttons */
+.property-actions {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.property-button {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.property-button-danger {
+  background-color: var(--danger-color);
+  color: white;
+}
+
+.property-button-danger:hover {
+  background-color: var(--danger-color-hover);
+}
+
+/* Multi-note editor */
+.multi-note-editor {
+  text-align: center;
+  padding: 16px 0;
+}
+
+.multi-note-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.multi-note-count {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--accent-color);
+}
+
+.multi-note-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Hints */
+.difficulty-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 8px;
+  font-style: italic;
+}
+
+/* Note editor */
+.note-editor,
+.metadata-editor {
+  padding: 4px 0;
+}
+
+/* Album Art */
+.album-art-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  background-color: var(--bg-tertiary);
+  border: 2px dashed var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.album-art-container:hover {
+  border-color: var(--accent-color);
+}
+
+.album-art-container.dragging {
+  border-color: var(--accent-color);
+  background-color: var(--accent-color-transparent);
+}
+
+.album-art-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.album-art-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.album-art-icon {
+  font-size: 32px;
+  opacity: 0.5;
+}
+
+.album-art-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.album-art-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(68, 136, 255, 0.8);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.album-art-container.dragging .album-art-overlay {
+  opacity: 1;
+}
+
+.album-art-container:hover .album-art-overlay {
+  opacity: 0;
+}
+
+.album-art-container.dragging:hover .album-art-overlay {
+  opacity: 1;
+}
