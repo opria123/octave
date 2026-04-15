@@ -118,6 +118,45 @@ jobs:
     needs: [tag, build]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          CURRENT="${{ needs.tag.outputs.tag }}"
+          PREV=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "^${CURRENT}$" | head -n1)
+          if [ -z "$PREV" ]; then
+            COMMITS=$(git log --pretty=format:'- %s' "$CURRENT")
+          else
+            COMMITS=$(git log --pretty=format:'- %s' "${PREV}..${CURRENT}" | grep -v '^- release:')
+          fi
+
+          # Write to file to preserve newlines
+          echo "$COMMITS" > /tmp/commits.txt
+          echo "Generated changelog with $(echo "$COMMITS" | wc -l) commits"
+
+      - name: Build release body
+        run: |
+          COMMITS=$(cat /tmp/commits.txt)
+          {
+            echo "## OCTAVE ${{ needs.tag.outputs.tag }}"
+            echo ""
+            echo "### What's Changed"
+            echo "$COMMITS"
+            echo ""
+            echo "### Downloads"
+            echo "- **Windows**: \`.exe\` installer"
+            echo "- **macOS**: \`.dmg\` disk image"
+            echo "- **Linux**: \`.AppImage\` or \`.deb\` package"
+            echo ""
+            echo "---"
+            echo "*Built automatically from \`master\`*"
+          } > /tmp/release-body.md
+          cat /tmp/release-body.md
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -132,16 +171,7 @@ jobs:
         with:
           tag_name: ${{ needs.tag.outputs.tag }}
           name: OCTAVE ${{ needs.tag.outputs.tag }}
-          body: |
-            ## OCTAVE ${{ needs.tag.outputs.tag }}
-
-            ### Downloads
-            - **Windows**: `.exe` installer
-            - **macOS**: `.dmg` disk image
-            - **Linux**: `.AppImage` or `.deb` package
-
-            ---
-            *Built automatically from `master`*
+          body_path: /tmp/release-body.md
           files: artifacts/*
           draft: false
           prerelease: false
