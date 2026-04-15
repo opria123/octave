@@ -1,6 +1,6 @@
 // Project Explorer - Left panel showing song folder tree
-import { useState, useCallback, useEffect } from 'react'
-import { useProjectStore, useSettingsStore, getSongStore } from '../stores'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { useProjectStore, useSettingsStore, getSongStore, removeSongStore } from '../stores'
 import { parseMidiBase64, parseChartFile } from '../utils/midiParser'
 import type { SongMetadata, Instrument, VideoSync } from '../types'
 import './ProjectExplorer.css'
@@ -56,18 +56,37 @@ function useAlbumArt(folderPath: string): string | null {
 function SongItem({
   song,
   isActive,
-  onSelect
+  onSelect,
+  onDelete
 }: {
   song: SongEntry
   isActive: boolean
   onSelect: () => void
+  onDelete: () => void
 }): React.JSX.Element {
   const artUrl = useAlbumArt(song.folderPath)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // Close context menu on outside click or Escape
+  useEffect(() => {
+    if (!contextMenu) return
+    const handleClose = (e: MouseEvent): void => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setContextMenu(null)
+    }
+    const handleKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setContextMenu(null)
+    }
+    document.addEventListener('mousedown', handleClose)
+    document.addEventListener('keydown', handleKey)
+    return () => { document.removeEventListener('mousedown', handleClose); document.removeEventListener('keydown', handleKey) }
+  }, [contextMenu])
 
   return (
     <div
       className={`explorer-song-item ${isActive ? 'active' : ''}`}
       onClick={onSelect}
+      onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY }) }}
     >
       <div className="explorer-song-icon">
         {artUrl ? (
@@ -90,24 +109,35 @@ function SongItem({
         {song.hasVocals && <span className="instrument-badge" title="Vocals">🎤</span>}
         {song.hasKeys && <span className="instrument-badge" title="Keys">🎹</span>}
       </div>
+      {contextMenu && (
+        <div ref={menuRef} className="song-context-menu" style={{ top: contextMenu.y, left: contextMenu.x }}>
+          <button className="song-context-menu-item delete" onClick={(e) => { e.stopPropagation(); setContextMenu(null); onDelete() }}>
+            🗑️ Delete Song
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
 export function ProjectExplorer(): React.JSX.Element {
-  const { loadedFolderPath, songIds, activeSongId, setActiveSong, setLoadedFolder, addSong } =
+  const { loadedFolderPath, songIds, activeSongId, setActiveSong, setLoadedFolder, addSong, removeSong } =
     useProjectStore()
   const { lastOpenedFolder, updateSettings } = useSettingsStore()
   const [isLoading, setIsLoading] = useState(false)
+  const [showNewSongDialog, setShowNewSongDialog] = useState(false)
+  const [newSongName, setNewSongName] = useState('')
+  const [newSongAudioPath, setNewSongAudioPath] = useState<string | null>(null)
   // For future folder tree expansion feature
   const [_expandedFolders, _setExpandedFolders] = useState<Set<string>>(new Set())
 
   // Load a folder's songs (shared between initial load and handleOpenFolder)
   const loadFolder = useCallback(async (folderPath: string) => {
-    setLoadedFolder(folderPath)
-
     const songFolders = await window.api.scanFolder(folderPath)
     console.log('Found songs:', songFolders)
+
+    // Only clear state after we've confirmed the scan succeeded
+    setLoadedFolder(folderPath)
 
     for (const songFolder of songFolders) {
       try {
@@ -315,6 +345,68 @@ export function ProjectExplorer(): React.JSX.Element {
     }
   }
 
+  const handleCreateNewSong = async (): Promise<void> => {
+    const name = newSongName.trim()
+    if (!name || !loadedFolderPath) return
+
+    try {
+      const result = await window.api.createSongFolder(loadedFolderPath, name, newSongAudioPath ?? undefined)
+      if (!result) return
+
+      // Initialize the song store with defaults
+      const store = getSongStore(result.id)
+      store.getState().loadSong({
+        id: result.id,
+        folderPath: result.path,
+        metadata: { name, artist: 'Unknown Artist' },
+        notes: [],
+        vocalNotes: [],
+        vocalPhrases: [],
+        starPowerPhrases: [],
+        soloSections: [],
+        tempoEvents: [{ tick: 0, bpm: 120 }],
+        timeSignatures: [{ tick: 0, numerator: 4, denominator: 4 }],
+        videoSync: { clips: [], offsetMs: 0, trimStartMs: 0, trimEndMs: 0 },
+        sourceFormat: 'midi'
+      })
+
+      addSong(result.id)
+      setActiveSong(result.id)
+      setShowNewSongDialog(false)
+      setNewSongName('')
+      setNewSongAudioPath(null)
+    } catch (error) {
+      console.error('Failed to create new song:', error)
+    }
+  }
+
+  const handlePickAudio = async (): Promise<void> => {
+    const path = await window.api.openAudioDialog()
+    if (path) setNewSongAudioPath(path)
+  }
+
+  const handleImportAudio = async (): Promise<void> => {
+    if (!activeSongId) return
+    const store = getSongStore(activeSongId)
+    const folderPath = store.getState().song.folderPath
+    const audioPath = await window.api.openAudioDialog()
+    if (!audioPath) return
+    await window.api.importAudio(folderPath, audioPath)
+  }
+
+  const handleDeleteSong = async (songId: string): Promise<void> => {
+    const store = getSongStore(songId)
+    const songName = store.getState().song.metadata.name
+    const folderPath = store.getState().song.folderPath
+    if (!confirm(`Delete "${songName}"?\n\nThis will move the song folder to the trash.`)) return
+
+    const deleted = await window.api.deleteSongFolder(folderPath)
+    if (deleted) {
+      removeSong(songId)
+      removeSongStore(songId)
+    }
+  }
+
   // Future: folder tree expansion
   // const toggleFolder = (path: string): void => {
   //   _setExpandedFolders((prev) => {
@@ -336,6 +428,12 @@ export function ProjectExplorer(): React.JSX.Element {
           <span>Explorer</span>
         </span>
         <div className="panel-header-actions">
+          <button className="icon-button" onClick={handleImportAudio} title="Import Audio" disabled={!activeSongId}>
+            🔊
+          </button>
+          <button className="icon-button" onClick={() => loadedFolderPath ? setShowNewSongDialog(true) : undefined} title="New Song" disabled={!loadedFolderPath}>
+            🎵
+          </button>
           <button className="icon-button" onClick={handleOpenFolder} title="Open Folder">
             +
           </button>
@@ -362,6 +460,7 @@ export function ProjectExplorer(): React.JSX.Element {
                     song={song}
                     isActive={activeSongId === song.id}
                     onSelect={() => handleSongSelect(song.id)}
+                    onDelete={() => handleDeleteSong(song.id)}
                   />
                 ))
               ) : (
@@ -387,6 +486,49 @@ export function ProjectExplorer(): React.JSX.Element {
           </div>
         )}
       </div>
+
+      {/* New Song Dialog */}
+      {showNewSongDialog && (
+        <div className="new-song-dialog-overlay" onClick={() => { setShowNewSongDialog(false); setNewSongAudioPath(null) }}>
+          <div className="new-song-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="new-song-dialog-title">New Song</div>
+            <label className="new-song-dialog-label">Song Name</label>
+            <input
+              autoFocus
+              className="new-song-dialog-input"
+              type="text"
+              placeholder="Song name..."
+              value={newSongName}
+              onChange={(e) => setNewSongName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newSongName.trim()) handleCreateNewSong()
+                if (e.key === 'Escape') setShowNewSongDialog(false)
+              }}
+            />
+            <label className="new-song-dialog-label">Audio File</label>
+            <div className="new-song-audio-picker">
+              <span className="new-song-audio-name">
+                {newSongAudioPath ? newSongAudioPath.split(/[\\/]/).pop() : 'No file selected'}
+              </span>
+              <button className="new-song-dialog-btn browse" onClick={handlePickAudio}>
+                Browse...
+              </button>
+            </div>
+            <div className="new-song-dialog-actions">
+              <button className="new-song-dialog-btn cancel" onClick={() => { setShowNewSongDialog(false); setNewSongAudioPath(null) }}>
+                Cancel
+              </button>
+              <button
+                className="new-song-dialog-btn create"
+                onClick={handleCreateNewSong}
+                disabled={!newSongName.trim()}
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

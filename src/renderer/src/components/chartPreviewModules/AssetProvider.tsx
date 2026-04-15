@@ -9,31 +9,31 @@ import type { HighwayAssets } from './types'
 export const HighwayAssetsContext = createContext<HighwayAssets | null>(null)
 
 export function AssetProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
-  const normalFBX = useFBX('/highway-assets/models/NormalNote.fbx')
-  const hopoFBX = useFBX('/highway-assets/models/HOPONote.fbx')
-  const tapFBX = useFBX('/highway-assets/models/TapNote.fbx')
-  const ghostFBX = useFBX('/highway-assets/models/GhostNote.fbx')
-  const accentFBX = useFBX('/highway-assets/models/AccentNote.fbx')
-  const cymbalFBX = useFBX('/highway-assets/models/CymbalNote.fbx')
-  const fretFBX = useFBX('/highway-assets/models/RectangularFret.fbx')
-  const drumFretBaseFBX = useFBX('/highway-assets/models/CircularFretBase.fbx')
-  const drumFretTopFBX = useFBX('/highway-assets/models/CircularFretTop.fbx')
-  const kickFBX = useFBX('/highway-assets/models/KickNote.fbx')
-  const kickFretFBX = useFBX('/highway-assets/models/RectangularKickFret.fbx')
-  const trackTrimFBX = useFBX('/highway-assets/models/TrackTrim.fbx')
+  const normalFBX = useFBX('./highway-assets/models/NormalNote.fbx')
+  const hopoFBX = useFBX('./highway-assets/models/HOPONote.fbx')
+  const tapFBX = useFBX('./highway-assets/models/TapNote.fbx')
+  const ghostFBX = useFBX('./highway-assets/models/GhostNote.fbx')
+  const accentFBX = useFBX('./highway-assets/models/AccentNote.fbx')
+  const cymbalFBX = useFBX('./highway-assets/models/CymbalNote.fbx')
+  const fretFBX = useFBX('./highway-assets/models/RectangularFret.fbx')
+  const drumFretBaseFBX = useFBX('./highway-assets/models/CircularFretBase.fbx')
+  const drumFretTopFBX = useFBX('./highway-assets/models/CircularFretTop.fbx')
+  const kickFBX = useFBX('./highway-assets/models/KickNote.fbx')
+  const kickFretFBX = useFBX('./highway-assets/models/RectangularKickFret.fbx')
+  const trackTrimFBX = useFBX('./highway-assets/models/TrackTrim.fbx')
 
   const [
     noteMap, noteEmission, fretMap, fretShine, kickMap,
     kickFretMap, trackTrimMap, sidePattern
   ] = useTexture([
-    '/highway-assets/textures/NormalNote.png',
-    '/highway-assets/textures/NormalNoteEmission.png',
-    '/highway-assets/textures/RectangularFret.png',
-    '/highway-assets/textures/RectangularFretShine.png',
-    '/highway-assets/textures/KickNote.png',
-    '/highway-assets/textures/RectangularKickFret.png',
-    '/highway-assets/textures/TrackTrim.png',
-    '/highway-assets/textures/SidePattern_Default.png'
+    './highway-assets/textures/NormalNote.png',
+    './highway-assets/textures/NormalNoteEmission.png',
+    './highway-assets/textures/RectangularFret.png',
+    './highway-assets/textures/RectangularFretShine.png',
+    './highway-assets/textures/KickNote.png',
+    './highway-assets/textures/RectangularKickFret.png',
+    './highway-assets/textures/TrackTrim.png',
+    './highway-assets/textures/SidePattern_Default.png'
   ])
 
   useMemo(() => {

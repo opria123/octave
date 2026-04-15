@@ -822,7 +822,7 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
       >
         <canvas
           ref={canvasRef}
-          style={{ width: '100%', height: '100%', display: 'block' }}
+          style={{ width: '100%', height: '100%', display: 'block', pointerEvents: 'none' }}
         />
         <div
           style={{

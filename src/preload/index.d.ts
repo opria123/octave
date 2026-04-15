@@ -7,7 +7,12 @@ interface ChartEditorAPI {
   // Folder APIs
   scanFolder: (folderPath: string) => Promise<Array<{ id: string; path: string; name: string }>>
 
+  // Dialog APIs
+  openAudioDialog: () => Promise<string | null>
+
   // Song APIs
+  createSongFolder: (parentPath: string, folderName: string, audioPath?: string) => Promise<{ id: string; path: string; name: string } | null>
+  deleteSongFolder: (songPath: string) => Promise<boolean>
   readSongIni: (songPath: string) => Promise<Record<string, string | number> | null>
   writeSongIni: (songPath: string, metadata: Record<string, unknown>) => Promise<boolean>
   readSongMidi: (songPath: string) => Promise<{ type: 'midi' | 'chart'; data: string } | null>
@@ -19,6 +24,7 @@ interface ChartEditorAPI {
   writeAlbumArt: (songPath: string, dataUrl: string) => Promise<boolean>
 
   // Audio APIs
+  importAudio: (songPath: string, audioSourcePath: string) => Promise<{ filePath: string; filename: string } | null>
   readAudio: (songPath: string) => Promise<{ filePath: string; filename: string }[] | null>
 
   // Video APIs

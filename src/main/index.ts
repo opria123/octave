@@ -1,6 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron'
-import { join, resolve } from 'path'
-import { readdir, readFile, writeFile, stat, rename, copyFile, unlink } from 'fs/promises'
+import { join, resolve, basename } from 'path'
+import { readdir, readFile, writeFile, stat, rename, copyFile, unlink, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { execFile } from 'child_process'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -27,7 +27,8 @@ let allowedProjectPath: string | null = null
 function isPathAllowed(targetPath: string): boolean {
   if (!allowedProjectPath) return true // No project opened yet — allow (dialog-gated)
   const resolved = resolve(targetPath)
-  return resolved.startsWith(allowedProjectPath)
+  // Ensure the path is exactly or a child of the allowed folder (not just a prefix match)
+  return resolved === allowedProjectPath || resolved.startsWith(allowedProjectPath + '/') || resolved.startsWith(allowedProjectPath + '\\')
 }
 
 function createWindow(): void {
@@ -94,7 +95,9 @@ app.whenReady().then(() => {
     }
 
     const normalized = resolved.replace(/\\/g, '/')
-    const fileUrl = `file:///${normalized}`
+    // On macOS/Linux paths start with /, so file:// + /path = file:///path (correct)
+    // On Windows we need file:/// + C:/path
+    const fileUrl = normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`
     return net.fetch(fileUrl)
   })
 
@@ -194,11 +197,43 @@ ipcMain.handle('dialog:openFolder', async () => {
   return result.filePaths[0]
 })
 
+// Open audio file dialog
+ipcMain.handle('dialog:openAudio', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    title: 'Select Audio File',
+    filters: [
+      { name: 'Audio Files', extensions: ['ogg', 'mp3', 'opus', 'wav'] }
+    ]
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+})
+
 // Scan folder for song directories (folders containing song.ini)
 ipcMain.handle('folder:scan', async (_event, folderPath: string) => {
+  // Set allowedProjectPath so auto-reloaded folders also get security boundary
+  if (!allowedProjectPath) {
+    allowedProjectPath = resolve(folderPath)
+  }
   const songs: Array<{ id: string; path: string; name: string }> = []
 
   try {
+    // Check if the opened folder itself is a song (contains song.ini)
+    const selfIniPath = join(folderPath, 'song.ini')
+    try {
+      await stat(selfIniPath)
+      const folderName = folderPath.split(/[\\/]/).pop() || 'song'
+      songs.push({
+        id: folderName,
+        path: folderPath,
+        name: folderName
+      })
+    } catch {
+      // Not a song folder itself — scan children
+    }
+
+    // Also scan child directories for songs
     const entries = await readdir(folderPath, { withFileTypes: true })
 
     for (const entry of entries) {
@@ -223,6 +258,44 @@ ipcMain.handle('folder:scan', async (_event, folderPath: string) => {
   }
 
   return songs
+})
+
+// Create a new song folder with a default song.ini
+ipcMain.handle('song:createFolder', async (_event, parentPath: string, folderName: string, audioSourcePath?: string) => {
+  if (!isPathAllowed(parentPath)) return null
+  // Sanitize folder name
+  const safeName = folderName.replace(/[<>:"/\\|?*]/g, '_').trim()
+  if (!safeName) return null
+  const songPath = join(parentPath, safeName)
+  try {
+    await mkdir(songPath, { recursive: true })
+    // Write a minimal song.ini
+    const ini = `[song]\nname = ${safeName}\nartist = Unknown Artist\ncharter = OCTAVE\n`
+    await writeFile(join(songPath, 'song.ini'), ini, 'utf-8')
+    // Copy audio file into song folder if provided
+    if (audioSourcePath) {
+      const audioName = basename(audioSourcePath)
+      await copyFile(audioSourcePath, join(songPath, audioName))
+    }
+    // Update allowed path to include this new folder
+    allowedProjectPath = resolve(parentPath)
+    return { id: safeName, path: songPath, name: safeName }
+  } catch (error) {
+    console.error('Error creating song folder:', error)
+    return null
+  }
+})
+
+// Delete a song folder (moves to OS trash)
+ipcMain.handle('song:deleteFolder', async (_event, songPath: string) => {
+  if (!isPathAllowed(songPath)) return false
+  try {
+    await shell.trashItem(resolve(songPath))
+    return true
+  } catch (error) {
+    console.error('Error deleting song folder:', error)
+    return false
+  }
 })
 
 // Read song.ini file
@@ -446,6 +519,24 @@ ipcMain.handle('song:writeAlbumArt', async (_event, songPath: string, dataUrl: s
   }
 })
 
+// Import an audio file into an existing song folder
+ipcMain.handle('song:importAudio', async (_event, songPath: string, audioSourcePath: string) => {
+  if (!isPathAllowed(songPath)) return null
+  try {
+    const filename = basename(audioSourcePath)
+    const destPath = join(songPath, filename)
+    // Only copy if source isn't already in the song folder
+    const srcDir = audioSourcePath.substring(0, audioSourcePath.lastIndexOf(basename(audioSourcePath)) - 1)
+    if (srcDir !== songPath) {
+      await copyFile(audioSourcePath, destPath)
+    }
+    return { filePath: destPath, filename }
+  } catch (error) {
+    console.error('Error importing audio:', error)
+    return null
+  }
+})
+
 // Read audio files - returns all audio stems found in the song folder
 ipcMain.handle('song:readAudio', async (_event, songPath: string) => {
   if (!isPathAllowed(songPath)) return null
@@ -541,8 +632,8 @@ ipcMain.handle('video:import', async (_event, songPath: string, videoSourcePath:
     const destFilename = `video${ext}`
     const destPath = join(songPath, destFilename)
     // Only copy if source isn't already in the song folder
-    const srcDir = videoSourcePath.substring(0, videoSourcePath.lastIndexOf(join('').charAt(0) === '/' ? '/' : '\\'))
-    if (srcDir !== songPath) {
+    const srcDir = resolve(videoSourcePath, '..')
+    if (srcDir !== resolve(songPath)) {
       await copyFile(videoSourcePath, destPath)
     }
     return { filePath: destPath, filename: destFilename }

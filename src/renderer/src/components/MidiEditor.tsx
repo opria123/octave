@@ -1804,6 +1804,7 @@ export function MidiEditor(): React.JSX.Element {
   const [visibleInstruments, setVisibleInstruments] = useState<Set<Instrument>>(new Set(MIDI_EDITOR_CONFIG.instruments))
   const [collapsedInstruments, setCollapsedInstruments] = useState<Set<Instrument>>(new Set())
   const isUserScrolling = useRef(false)
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Get song store — use reactive selectors for data that changes during playback
   const songStore = activeSongId ? getSongStore(activeSongId) : null
@@ -2057,18 +2058,21 @@ export function MidiEditor(): React.JSX.Element {
     } else if (e.shiftKey) {
       // Shift+scroll = horizontal scroll (timeline)
       isUserScrolling.current = true
-      const newScrollX = Math.max(0, effectiveScrollX + e.deltaX + e.deltaY)
-      setScrollX(newScrollX)
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+      const hDelta = e.deltaX + e.deltaY
+      setScrollX((prev) => {
+        const newScrollX = Math.max(0, prev + hDelta)
+        if (songStore && !songStore.getState().isPlaying) {
+          const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
+          const newTick = Math.round(newScrollX / pixelsPerTick)
+          songStore.getState().setCurrentTick(newTick)
+        }
+        return newScrollX
+      })
       
-      if (songStore && !songStore.getState().isPlaying) {
-        const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
-        const newTick = Math.round(newScrollX / pixelsPerTick)
-        songStore.getState().setCurrentTick(newTick)
-      }
-      
-      setTimeout(() => {
+      scrollTimeoutRef.current = setTimeout(() => {
         isUserScrolling.current = false
-      }, 100)
+      }, 200)
     } else {
       // Default: deltaY = vertical, deltaX = horizontal
       const maxScrollY = Math.max(0, totalHeight - dimensions.height + 50)
@@ -2076,21 +2080,24 @@ export function MidiEditor(): React.JSX.Element {
       
       if (Math.abs(e.deltaX) > 0) {
         isUserScrolling.current = true
-        const newScrollX = Math.max(0, effectiveScrollX + e.deltaX)
-        setScrollX(newScrollX)
+        if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+        const hDelta = e.deltaX
+        setScrollX((prev) => {
+          const newScrollX = Math.max(0, prev + hDelta)
+          if (songStore && !songStore.getState().isPlaying) {
+            const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
+            const newTick = Math.round(newScrollX / pixelsPerTick)
+            songStore.getState().setCurrentTick(newTick)
+          }
+          return newScrollX
+        })
         
-        if (songStore && !songStore.getState().isPlaying) {
-          const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
-          const newTick = Math.round(newScrollX / pixelsPerTick)
-          songStore.getState().setCurrentTick(newTick)
-        }
-        
-        setTimeout(() => {
+        scrollTimeoutRef.current = setTimeout(() => {
           isUserScrolling.current = false
-        }, 100)
+        }, 200)
       }
     }
-  }, [effectiveScrollX, songStore, zoomLevel, totalHeight, dimensions.height])
+  }, [songStore, zoomLevel, totalHeight, dimensions.height])
 
   // Handle scroll on lane headers - vertical scroll
   const handleHeaderScroll = useCallback((e: React.WheelEvent) => {
@@ -2111,18 +2118,21 @@ export function MidiEditor(): React.JSX.Element {
     } else if (e.shiftKey) {
       // Shift+scroll = horizontal scroll (timeline)
       isUserScrolling.current = true
-      const newScrollX = Math.max(0, effectiveScrollX + e.deltaX + e.deltaY)
-      setScrollX(newScrollX)
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+      const hDelta = e.deltaX + e.deltaY
+      setScrollX((prev) => {
+        const newScrollX = Math.max(0, prev + hDelta)
+        if (songStore && !songStore.getState().isPlaying) {
+          const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
+          const newTick = Math.round(newScrollX / pixelsPerTick)
+          songStore.getState().setCurrentTick(newTick)
+        }
+        return newScrollX
+      })
       
-      if (songStore && !songStore.getState().isPlaying) {
-        const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
-        const newTick = Math.round(newScrollX / pixelsPerTick)
-        songStore.getState().setCurrentTick(newTick)
-      }
-      
-      setTimeout(() => {
+      scrollTimeoutRef.current = setTimeout(() => {
         isUserScrolling.current = false
-      }, 100)
+      }, 200)
     } else {
       // Default: deltaY = vertical, deltaX = horizontal
       const maxScroll = Math.max(0, totalHeight - dimensions.height + 50)
@@ -2130,21 +2140,24 @@ export function MidiEditor(): React.JSX.Element {
       
       if (Math.abs(e.deltaX) > 0) {
         isUserScrolling.current = true
-        const newScrollX = Math.max(0, effectiveScrollX + e.deltaX)
-        setScrollX(newScrollX)
+        if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+        const hDelta = e.deltaX
+        setScrollX((prev) => {
+          const newScrollX = Math.max(0, prev + hDelta)
+          if (songStore && !songStore.getState().isPlaying) {
+            const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
+            const newTick = Math.round(newScrollX / pixelsPerTick)
+            songStore.getState().setCurrentTick(newTick)
+          }
+          return newScrollX
+        })
         
-        if (songStore && !songStore.getState().isPlaying) {
-          const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
-          const newTick = Math.round(newScrollX / pixelsPerTick)
-          songStore.getState().setCurrentTick(newTick)
-        }
-        
-        setTimeout(() => {
+        scrollTimeoutRef.current = setTimeout(() => {
           isUserScrolling.current = false
-        }, 100)
+        }, 200)
       }
     }
-  }, [effectiveScrollX, songStore, zoomLevel, totalHeight, dimensions.height])
+  }, [songStore, zoomLevel, totalHeight, dimensions.height])
 
   // Handle note click - tool-aware, supports flag toggling with modifier toggles
   const handleNoteClick = useCallback(

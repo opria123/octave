@@ -10,7 +10,20 @@ const api = {
   scanFolder: (folderPath: string): Promise<Array<{ id: string; path: string; name: string }>> =>
     ipcRenderer.invoke('folder:scan', folderPath),
 
+  // Dialog APIs
+  openAudioDialog: (): Promise<string | null> =>
+    ipcRenderer.invoke('dialog:openAudio'),
+
   // Song APIs
+  createSongFolder: (parentPath: string, folderName: string, audioPath?: string): Promise<{ id: string; path: string; name: string } | null> =>
+    ipcRenderer.invoke('song:createFolder', parentPath, folderName, audioPath),
+
+  deleteSongFolder: (songPath: string): Promise<boolean> =>
+    ipcRenderer.invoke('song:deleteFolder', songPath),
+
+  importAudio: (songPath: string, audioSourcePath: string): Promise<{ filePath: string; filename: string } | null> =>
+    ipcRenderer.invoke('song:importAudio', songPath, audioSourcePath),
+
   readSongIni: (songPath: string): Promise<Record<string, string | number> | null> =>
     ipcRenderer.invoke('song:readIni', songPath),
 

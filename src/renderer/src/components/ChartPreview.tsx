@@ -1,6 +1,7 @@
 // Chart Preview - YARG-accurate 3D highway with FBX models and textures
 // Split into modules under ./chartPreview/ for maintainability
-import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
+import { useEffect, useState, useCallback, useRef, Suspense, Component } from 'react'
+import type { ReactNode, ErrorInfo } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { PerspectiveCamera } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
@@ -19,6 +20,46 @@ import {
   SnapSelector
 } from './chartPreviewModules/UIOverlays'
 import './ChartPreview.css'
+
+// Error boundary scoped to the 3D preview — prevents asset loading failures from crashing the entire app
+class PreviewErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: Error): { hasError: boolean; error: Error } {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error('[ChartPreview] Render error:', error, info.componentStack)
+  }
+
+  render(): ReactNode {
+    if (this.state.hasError) {
+      return (
+        <div className="empty-state">
+          <div className="empty-state-icon">⚠️</div>
+          <div className="empty-state-title">Preview Error</div>
+          <div className="empty-state-description">
+            {this.state.error?.message || 'Failed to render 3D preview'}
+          </div>
+          <button
+            style={{ marginTop: 12, padding: '6px 16px', cursor: 'pointer', background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: 4 }}
+            onClick={() => this.setState({ hasError: false, error: null })}
+          >
+            Retry
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 // -- Background Video (plays behind 3D highway like in the games) -----
 function BackgroundVideo({ songId }: { songId: string }): React.JSX.Element | null {
@@ -276,11 +317,11 @@ export function ChartPreview(): React.JSX.Element {
       </div>
       <div className="chart-preview-canvas" onWheel={handlePreviewWheel}>
         {activeSongId ? (
-          <>
+          <PreviewErrorBoundary>
             <BackgroundVideo songId={activeSongId} />
             <VocalTrackOverlay songId={activeSongId} />
             <HighwayWrapper songId={activeSongId} editTool={editTool} />
-          </>
+          </PreviewErrorBoundary>
         ) : (
           <div className="empty-state">
             <div className="empty-state-icon">??</div>
