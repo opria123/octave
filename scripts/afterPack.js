@@ -3,13 +3,17 @@ const path = require('path')
 const fs = require('fs')
 
 /**
- * afterSign hook: re-sign the entire .app bundle with a consistent ad-hoc
- * identity AFTER electron-builder's own signing step. This fixes the
- * "different Team IDs" crash on macOS Sequoia (15+) where the main binary
- * gets ad-hoc signed but Electron Framework retains its original Team ID.
+ * afterPack hook: re-sign all INNER components of the .app bundle with
+ * ad-hoc identity BEFORE electron-builder's own signing step runs.
  *
- * We sign innermost components first, then the outer app bundle, which is
- * the Apple-recommended approach (--deep is unreliable for nested bundles).
+ * This fixes the "different Team IDs" crash on macOS Sequoia (15+).
+ * The Electron Framework ships with Electron's team ID signature, but
+ * electron-builder only ad-hoc signs the main binary. By pre-signing
+ * all inner components with ad-hoc identity here, electron-builder's
+ * subsequent signing of the outer app results in consistent (empty)
+ * team IDs throughout the bundle.
+ *
+ * We intentionally do NOT sign the outer .app — electron-builder handles that.
  */
 exports.default = async function (context) {
   if (context.electronPlatformName !== 'darwin') return
@@ -19,60 +23,53 @@ exports.default = async function (context) {
     `${context.packager.appInfo.productFilename}.app`
   )
   const frameworksPath = path.join(appPath, 'Contents', 'Frameworks')
-  const entitlements = path.resolve('build', 'entitlements.mac.plist')
 
-  console.log('  • re-signing macOS app bundle (ad-hoc, component-by-component)')
-
-  // 1. Sign all .dylib files
-  const signGlob = (dir, pattern) => {
-    try {
-      const result = execSync(`find "${dir}" -name "${pattern}" -type f`, {
-        encoding: 'utf-8'
-      }).trim()
-      if (!result) return
-      for (const file of result.split('\n')) {
-        execSync(`codesign --force -s - "${file}"`, { stdio: 'inherit' })
-      }
-    } catch {
-      // No matches — ok
-    }
+  if (!fs.existsSync(frameworksPath)) {
+    console.log('  • no Frameworks directory found, skipping re-sign')
+    return
   }
 
-  signGlob(frameworksPath, '*.dylib')
+  console.log('  • re-signing inner components with ad-hoc identity')
 
-  // 2. Sign each .framework bundle (innermost first)
-  if (fs.existsSync(frameworksPath)) {
-    const entries = fs.readdirSync(frameworksPath)
-    for (const entry of entries) {
-      const full = path.join(frameworksPath, entry)
-      if (entry.endsWith('.framework') && fs.statSync(full).isDirectory()) {
-        console.log('    signing framework:', entry)
-        execSync(`codesign --force -s - "${full}"`, { stdio: 'inherit' })
-      }
-    }
-  }
-
-  // 3. Sign all helper apps inside Frameworks
-  signGlob(frameworksPath, '*.app')
-
-  // 4. Sign the outer .app bundle with entitlements
-  console.log('    signing app bundle:', appPath)
-  if (fs.existsSync(entitlements)) {
-    execSync(
-      `codesign --force -s - --entitlements "${entitlements}" "${appPath}"`,
-      { stdio: 'inherit' }
-    )
-  } else {
-    execSync(`codesign --force -s - "${appPath}"`, { stdio: 'inherit' })
-  }
-
-  // 5. Verify
+  // Find and sign all Mach-O binaries and bundles inside Frameworks.
+  // Use find to locate every code-signable item, sign innermost first.
   try {
-    execSync(`codesign --verify --deep --strict "${appPath}"`, {
-      stdio: 'inherit'
-    })
-    console.log('  ✓ codesign verification passed')
-  } catch (e) {
-    console.warn('  ⚠ codesign verification failed (may still work):', e.message)
+    // 1. Sign all plain executable/dylib files (innermost binaries)
+    const files = execSync(
+      `find "${frameworksPath}" \\( -name "*.dylib" -o -name "*.so" \\) -type f`,
+      { encoding: 'utf-8' }
+    ).trim()
+    if (files) {
+      for (const f of files.split('\n')) {
+        console.log('    sign file:', path.basename(f))
+        execSync(`codesign --force --sign - "${f}"`, { stdio: 'inherit' })
+      }
+    }
+  } catch { /* no dylibs found */ }
+
+  // 2. Sign all .app helper bundles inside Frameworks (these are directories)
+  try {
+    const apps = execSync(
+      `find "${frameworksPath}" -name "*.app" -type d -maxdepth 2`,
+      { encoding: 'utf-8' }
+    ).trim()
+    if (apps) {
+      for (const a of apps.split('\n')) {
+        console.log('    sign helper app:', path.basename(a))
+        execSync(`codesign --force --sign - "${a}"`, { stdio: 'inherit' })
+      }
+    }
+  } catch { /* no helper apps */ }
+
+  // 3. Sign all .framework bundles (these contain the Electron Framework)
+  const entries = fs.readdirSync(frameworksPath)
+  for (const entry of entries) {
+    const full = path.join(frameworksPath, entry)
+    if (entry.endsWith('.framework') && fs.statSync(full).isDirectory()) {
+      console.log('    sign framework:', entry)
+      execSync(`codesign --force --sign - "${full}"`, { stdio: 'inherit' })
+    }
   }
+
+  console.log('  ✓ inner components re-signed (electron-builder will sign outer app)')
 }
