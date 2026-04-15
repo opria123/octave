@@ -54,24 +54,40 @@ exports.default = async function (context) {
   }
 
   // Step 2: Re-sign from innermost to outermost.
+  // CRITICAL: sign every individual Mach-O binary first, then bundles.
+  // The framework contains executables (chrome_crashpad_handler etc.) that
+  // must be signed before the framework bundle itself can be signed.
+
+  // 2a. Sign ALL individual Mach-O files throughout the entire bundle
+  try {
+    const allFiles = execSync(
+      `find "${appPath}" -type f`,
+      { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
+    ).trim()
+
+    let signedFiles = 0
+    if (allFiles) {
+      for (const f of allFiles.split('\n')) {
+        try {
+          const fileInfo = execSync(`file "${f}"`, { encoding: 'utf-8' })
+          if (fileInfo.includes('Mach-O')) {
+            execSync(`codesign --force --sign - "${f}"`, { stdio: 'pipe' })
+            signedFiles++
+          }
+        } catch {
+          // skip non-signable files
+        }
+      }
+    }
+    console.log(`    signed ${signedFiles} individual Mach-O binaries`)
+  } catch (e) {
+    console.warn('    warning signing individual binaries:', e.message)
+  }
+
   const frameworksPath = path.join(appPath, 'Contents', 'Frameworks')
 
   if (fs.existsSync(frameworksPath)) {
-    // 2a. Sign all dylibs
-    try {
-      const dylibs = execSync(
-        `find "${frameworksPath}" -name "*.dylib" -type f`,
-        { encoding: 'utf-8' }
-      ).trim()
-      if (dylibs) {
-        for (const f of dylibs.split('\n')) {
-          execSync(`codesign --force --sign - "${f}"`, { stdio: 'pipe' })
-        }
-        console.log(`    signed ${dylibs.split('\n').length} dylibs`)
-      }
-    } catch { /* none found */ }
-
-    // 2b. Sign helper apps (directories)
+    // 2b. Sign helper apps (bundle directories)
     try {
       const apps = execSync(
         `find "${frameworksPath}" -name "*.app" -type d -maxdepth 2`,
