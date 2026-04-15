@@ -42,7 +42,7 @@ linux:
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-afterSign: scripts/afterPack.js
+afterPack: scripts/afterPack.js
 publish:
   provider: github
   owner: opria123
