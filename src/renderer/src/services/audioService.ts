@@ -185,7 +185,8 @@ export async function play(
   tempoEvents: TempoEvent[],
   onTimeUpdate: (tick: number) => void,
   onEnded?: () => void,
-  speed: number = 1.0
+  speed: number = 1.0,
+  audioOffsetMs: number = 0
 ): Promise<boolean> {
   const state = getAudioState(songId)
 
@@ -216,11 +217,15 @@ export async function play(
   // Stop any existing playback
   stopInternal(state)
 
-  // Calculate start offset in seconds using tempo map
-  const startOffset = Math.max(0, tickToSeconds(currentTick, tempoEvents))
+  // Timeline time at which playback starts (chart time)
+  const timelineStartSec = Math.max(0, tickToSeconds(currentTick, tempoEvents))
+  const audioOffsetSec = audioOffsetMs / 1000
+  // Audio source time mapped from timeline time: audio = timeline - offset
+  const sourceStartSec = timelineStartSec - audioOffsetSec
+  const sourceDelaySec = sourceStartSec < 0 ? (-sourceStartSec) / speed : 0
 
-  if (startOffset >= state.duration) {
-    console.warn('[Audio] Start offset beyond audio duration:', startOffset, '>=', state.duration)
+  if (sourceStartSec >= state.duration) {
+    console.warn('[Audio] Start offset beyond audio duration:', sourceStartSec, '>=', state.duration)
     return false
   }
 
@@ -243,7 +248,8 @@ export async function play(
     source.playbackRate.value = speed
     source.connect(state.gainNode)
     try {
-      source.start(0, Math.min(startOffset, buffer.duration))
+      const sourceOffsetForBuffer = Math.max(0, Math.min(sourceStartSec, buffer.duration))
+      source.start(sourceDelaySec, sourceOffsetForBuffer)
     } catch (err) {
       console.error('[Audio] Failed to start source:', err)
       return false
@@ -253,11 +259,11 @@ export async function play(
 
   state.sourceNodes = sourceNodes
   state.isPlaying = true
-  state.startOffset = startOffset
+  state.startOffset = timelineStartSec
   state.startTimestamp = ctx.currentTime
   state.speed = speed
 
-  console.log(`[Audio] Playing ${songId} (${sourceNodes.length} stems) from ${startOffset.toFixed(2)}s (tick ${currentTick})`)
+  console.log(`[Audio] Playing ${songId} (${sourceNodes.length} stems) at timeline ${timelineStartSec.toFixed(2)}s (tick ${currentTick}), audio offset ${audioOffsetMs}ms`)
 
   // Handle natural end on the longest stem
   const longestIdx = state.buffers.indexOf(
@@ -288,8 +294,8 @@ export async function play(
     if (now - lastUpdateTime >= 33) {
       lastUpdateTime = now
       const elapsed = ctx.currentTime - state.startTimestamp
-      const currentAudioTime = state.startOffset + elapsed * speed
-      const tick = secondsToTick(currentAudioTime, tempoEvents)
+      const currentTimelineTime = state.startOffset + elapsed * speed
+      const tick = secondsToTick(currentTimelineTime, tempoEvents)
       onTimeUpdate(tick)
     }
     state.rafId = requestAnimationFrame(updateLoop)
@@ -343,12 +349,15 @@ export function pause(songId: string): void {
 }
 
 // Seek to a position
-export function seek(songId: string, tick: number, tempoEvents: TempoEvent[]): void {
+export function seek(songId: string, tick: number, tempoEvents: TempoEvent[], audioOffsetMs: number = 0): void {
   const state = audioRegistry.get(songId)
   if (!state || !state.isLoaded || state.buffers.length === 0) return
 
   const ctx = getContext()
-  const seekTime = tickToSeconds(tick, tempoEvents)
+  const timelineSeekSec = tickToSeconds(tick, tempoEvents)
+  const audioOffsetSec = audioOffsetMs / 1000
+  const sourceSeekSec = timelineSeekSec - audioOffsetSec
+  const sourceDelaySec = sourceSeekSec < 0 ? (-sourceSeekSec) / state.speed : 0
 
   if (state.isPlaying) {
     // Stop all current sources
@@ -366,12 +375,13 @@ export function seek(songId: string, tick: number, tempoEvents: TempoEvent[]): v
       source.buffer = buffer
       source.playbackRate.value = state.speed
       source.connect(state.gainNode || ctx.destination)
-      source.start(0, Math.min(seekTime, buffer.duration))
+      const sourceOffsetForBuffer = Math.max(0, Math.min(sourceSeekSec, buffer.duration))
+      source.start(sourceDelaySec, sourceOffsetForBuffer)
       newSources.push(source)
     }
 
     state.sourceNodes = newSources
-    state.startOffset = seekTime
+    state.startOffset = timelineSeekSec
     state.startTimestamp = ctx.currentTime
   }
 }

@@ -100,6 +100,7 @@ export async function startPlayback(songId: string): Promise<void> {
   const tempoEvents = state.song.tempoEvents
   const startTick = state.currentTick
   const speed = useSettingsStore.getState().highwaySpeed
+  const audioOffsetMs = state.song.videoSync.offsetMs || 0
 
   // Mark as playing
   store.getState().setIsPlaying(true)
@@ -121,7 +122,8 @@ export async function startPlayback(songId: string): Promise<void> {
         cancelVisualRaf()
         getSongStore(songId).getState().setIsPlaying(false)
       },
-      speed
+      speed,
+      audioOffsetMs
     )
     if (!started) {
       // Audio failed — fall back to visual-only

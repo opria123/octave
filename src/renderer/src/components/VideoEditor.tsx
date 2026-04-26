@@ -78,13 +78,16 @@ function TimelineRuler({
 
 // ── Audio Waveform Track (real data) ──────────────────────────────────
 function AudioTrack({
-  songId, duration: _duration, scrollX, zoom, width
+  songId, duration: _duration, scrollX, zoom, width, audioOffsetMs, onMoveAudioOffset
 }: {
   songId: string; duration: number; scrollX: number; zoom: number; width: number
+  audioOffsetMs: number
+  onMoveAudioOffset: (newOffsetMs: number) => void
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [peaks, setPeaks] = useState<Float32Array | null>(null)
   const [audioReady, setAudioReady] = useState(false)
+  const [dragInfo, setDragInfo] = useState<{ startX: number; origOffsetMs: number } | null>(null)
 
   // Re-check for audio buffers periodically until loaded
   useEffect(() => {
@@ -122,15 +125,43 @@ function AudioTrack({
     ctx.fillStyle = '#1a1a2e'
     ctx.fillRect(0, 0, width, h)
     if (!peaks || peaks.length === 0) return
+    const pps = VIDEO_EDITOR_CONFIG.pixelsPerSecond * zoom
+    const offsetPx = (audioOffsetMs / 1000) * pps
     const centerY = h / 2
     ctx.fillStyle = '#4488FF'
     for (let x = 0; x < width; x++) {
-      const peakIdx = Math.floor((x + scrollX) / zoom)
+      const timelinePx = x + scrollX
+      const peakIdx = Math.floor((timelinePx - offsetPx) / zoom)
       if (peakIdx < 0 || peakIdx >= peaks.length) continue
       const amp = peaks[peakIdx] * (h / 2 - 2)
       ctx.fillRect(x, centerY - amp, 1, amp * 2)
     }
-  }, [peaks, scrollX, zoom, width])
+  }, [peaks, scrollX, zoom, width, audioOffsetMs])
+
+  const ppm = (VIDEO_EDITOR_CONFIG.pixelsPerSecond * zoom) / 1000
+  const audioDurationMs = (getAudioDuration(songId) || 0) * 1000
+  const audioClipX = audioOffsetMs * ppm - scrollX
+  const audioClipW = Math.max(8, audioDurationMs * ppm)
+
+  const handleAudioMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation()
+    setDragInfo({ startX: e.clientX, origOffsetMs: audioOffsetMs })
+  }, [audioOffsetMs])
+
+  useEffect(() => {
+    if (!dragInfo) return
+    const handleMove = (e: MouseEvent): void => {
+      const deltaMs = (e.clientX - dragInfo.startX) / ppm
+      onMoveAudioOffset(dragInfo.origOffsetMs + deltaMs)
+    }
+    const handleUp = (): void => setDragInfo(null)
+    window.addEventListener('mousemove', handleMove)
+    window.addEventListener('mouseup', handleUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMove)
+      window.removeEventListener('mouseup', handleUp)
+    }
+  }, [dragInfo, ppm, onMoveAudioOffset])
 
   const audioLoaded = getAudioBuffers(songId).length > 0
 
@@ -139,6 +170,17 @@ function AudioTrack({
       <div className="audio-track-label"><span>🎵</span><span>Audio</span></div>
       <div className="audio-track-timeline" style={{ width }}>
         <canvas ref={canvasRef} className="audio-waveform-canvas" />
+        {audioLoaded && (
+          <div
+            className={`audio-clip ${dragInfo ? 'dragging' : ''}`}
+            style={{ left: audioClipX, width: audioClipW }}
+            onMouseDown={handleAudioMouseDown}
+            onClick={(e) => e.stopPropagation()}
+            title="Drag to offset audio start"
+          >
+            <span className="audio-clip-name">Audio Offset: {(audioOffsetMs / 1000).toFixed(2)}s</span>
+          </div>
+        )}
         {!audioLoaded && (
           <div className="audio-track-empty"><span>No audio loaded</span></div>
         )}
@@ -195,6 +237,7 @@ function VideoTrack({
               className={`video-clip ${isSelected ? 'selected' : ''} ${dragInfo?.clipId === clip.id ? 'dragging' : ''}`}
               style={{ left: clipX, width: clipW }}
               onMouseDown={(e) => handleClipMouseDown(e, clip)}
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="video-clip-content">
                 <span className="video-clip-name">
@@ -580,14 +623,21 @@ export function VideoEditor(): React.JSX.Element {
     const newTick = secondsToTick(Math.max(0, seconds), state.song.tempoEvents)
     store.getState().setCurrentTick(newTick)
     if (state.isPlaying) {
-      audioService.seek(activeSongId, newTick, state.song.tempoEvents)
+      audioService.seek(activeSongId, newTick, state.song.tempoEvents, state.song.videoSync.offsetMs || 0)
     }
+  }, [activeSongId])
+
+  // Move audio timeline offset (ms)
+  const handleMoveAudioOffset = useCallback((newOffsetMs: number) => {
+    if (!activeSongId) return
+    const store = getSongStore(activeSongId)
+    store.getState().updateVideoSync({ offsetMs: Math.round(newOffsetMs) })
   }, [activeSongId])
 
   // Click on timeline to seek
   const handleTimelineClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement
-    if (target.closest('.video-clip') || target.closest('.video-playhead')) return
+    if (target.closest('.video-clip') || target.closest('.audio-clip') || target.closest('.video-playhead')) return
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     const clickX = e.clientX - rect.left - 80
     if (clickX < 0) return
@@ -678,6 +728,8 @@ export function VideoEditor(): React.JSX.Element {
             scrollX={scrollX}
             zoom={zoom}
             width={dimensions.width}
+            audioOffsetMs={videoSync.offsetMs || 0}
+            onMoveAudioOffset={handleMoveAudioOffset}
           />
           <VideoTrack
             videoPath={videoSync.videoPath}

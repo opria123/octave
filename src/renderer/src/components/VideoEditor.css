@@ -139,6 +139,35 @@
   height: 100%;
 }
 
+.audio-clip {
+  position: absolute;
+  top: 4px;
+  height: calc(100% - 8px);
+  background: linear-gradient(135deg, rgba(68, 136, 255, 0.25) 0%, rgba(34, 85, 170, 0.25) 100%);
+  border: 1px solid rgba(136, 187, 255, 0.9);
+  border-radius: 4px;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.audio-clip.dragging {
+  cursor: grabbing;
+  box-shadow: 0 0 10px rgba(136, 187, 255, 0.55);
+}
+
+.audio-clip-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #d6e8ff;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .audio-track-empty,
 .video-track-empty {
   display: flex;

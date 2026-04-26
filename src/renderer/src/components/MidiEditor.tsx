@@ -1950,7 +1950,6 @@ export function MidiEditor(): React.JSX.Element {
 
   // Derive effective scrollX: during playback, compute directly from currentTick
   // to avoid double re-render (tick change → effect → setScrollX → second render)
-  const prevTickRef = useRef(currentTick)
   const effectiveScrollX = useMemo(() => {
     if (isPlaying && !isUserScrolling.current) {
       // During playback: keep playhead at ~1/3 from left
@@ -1961,20 +1960,16 @@ export function MidiEditor(): React.JSX.Element {
     return scrollX
   }, [isPlaying, currentTick, scrollX, zoomLevel, dimensions.width])
 
-  // When playback stops, sync the scroll state to match the derived position
+  // When pausing, persist the current auto-scroll position so the view does not snap back.
+  const prevIsPlayingRef = useRef(isPlaying)
   useEffect(() => {
-    if (!isPlaying && prevTickRef.current !== currentTick && !isUserScrolling.current) {
+    if (prevIsPlayingRef.current && !isPlaying && !isUserScrolling.current) {
       const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
       const playheadX = currentTick * pixelsPerTick
-      const viewStart = scrollX
-      const viewEnd = scrollX + dimensions.width
-      const margin = dimensions.width * 0.15
-      if (playheadX < viewStart + margin || playheadX > viewEnd - margin) {
-        setScrollX(Math.max(0, playheadX - dimensions.width / 3))
-      }
+      setScrollX(Math.max(0, playheadX - dimensions.width / 3))
     }
-    prevTickRef.current = currentTick
-  }, [currentTick, isPlaying, scrollX, zoomLevel, dimensions.width])
+    prevIsPlayingRef.current = isPlaying
+  }, [currentTick, isPlaying, zoomLevel, dimensions.width])
 
   // Get lanes for each instrument
   const getLanesForInstrument = useCallback((instrument: Instrument) => {
