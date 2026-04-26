@@ -478,7 +478,7 @@ export function ProjectExplorer(): React.JSX.Element {
             <div className="empty-state-icon">📁</div>
             <div className="empty-state-title">{isLoading ? 'Loading...' : 'No Folder Open'}</div>
             <div className="empty-state-description">
-              Open a folder containing Clone Hero songs to get started
+              Open a folder containing songs to get started
             </div>
             <button className="explorer-open-button" onClick={handleOpenFolder}>
               Open Folder
