@@ -10,6 +10,8 @@ export function useKeyboardShortcuts(): void {
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase()
+
       // Get the active song store
       const songStore = activeSongId ? getSongStore(activeSongId) : null
 
@@ -17,7 +19,7 @@ export function useKeyboardShortcuts(): void {
       const isCtrlOrCmd = e.ctrlKey || e.metaKey
 
       // Undo (Ctrl+Z) - scoped to focused panel's song
-      if (isCtrlOrCmd && e.key === 'z' && !e.shiftKey) {
+      if (isCtrlOrCmd && key === 'z' && !e.shiftKey && !isInputElement(e.target as HTMLElement)) {
         e.preventDefault()
         if (songStore) {
           const temporal = songStore.temporal
@@ -27,7 +29,7 @@ export function useKeyboardShortcuts(): void {
       }
 
       // Redo (Ctrl+Y or Ctrl+Shift+Z) - scoped to focused panel's song
-      if (isCtrlOrCmd && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+      if (isCtrlOrCmd && (key === 'y' || (key === 'z' && e.shiftKey)) && !isInputElement(e.target as HTMLElement)) {
         e.preventDefault()
         if (songStore) {
           const temporal = songStore.temporal
@@ -37,7 +39,7 @@ export function useKeyboardShortcuts(): void {
       }
 
       // Copy (Ctrl+C)
-      if (isCtrlOrCmd && e.key === 'c' && !isInputElement(e.target as HTMLElement)) {
+      if (isCtrlOrCmd && key === 'c' && !isInputElement(e.target as HTMLElement)) {
         e.preventDefault()
         if (songStore) {
           songStore.getState().copySelectedNotes()
@@ -46,7 +48,7 @@ export function useKeyboardShortcuts(): void {
       }
 
       // Paste (Ctrl+V)
-      if (isCtrlOrCmd && e.key === 'v' && !isInputElement(e.target as HTMLElement)) {
+      if (isCtrlOrCmd && key === 'v' && !isInputElement(e.target as HTMLElement)) {
         e.preventDefault()
         if (songStore) {
           songStore.getState().pasteNotes()
@@ -55,7 +57,7 @@ export function useKeyboardShortcuts(): void {
       }
 
       // Save (Ctrl+S)
-      if (isCtrlOrCmd && e.key === 's') {
+      if (isCtrlOrCmd && key === 's') {
         e.preventDefault()
         if (songStore) {
           // Trigger manual save
@@ -67,7 +69,7 @@ export function useKeyboardShortcuts(): void {
       }
 
       // Create Star Power from selection (Ctrl+P)
-      if (isCtrlOrCmd && e.key === 'p' && !isInputElement(e.target as HTMLElement)) {
+      if (isCtrlOrCmd && key === 'p' && !isInputElement(e.target as HTMLElement)) {
         e.preventDefault()
         if (songStore) {
           songStore.getState().createStarPowerFromSelection()
@@ -76,7 +78,7 @@ export function useKeyboardShortcuts(): void {
       }
 
       // Create Solo from selection (Ctrl+L)
-      if (isCtrlOrCmd && e.key === 'l' && !isInputElement(e.target as HTMLElement)) {
+      if (isCtrlOrCmd && key === 'l' && !isInputElement(e.target as HTMLElement)) {
         e.preventDefault()
         if (songStore) {
           songStore.getState().createSoloFromSelection()
@@ -116,7 +118,7 @@ export function useKeyboardShortcuts(): void {
       }
 
       // Select all (Ctrl+A) - select all notes in current view
-      if (isCtrlOrCmd && e.key === 'a' && !isInputElement(e.target as HTMLElement)) {
+      if (isCtrlOrCmd && key === 'a' && !isInputElement(e.target as HTMLElement)) {
         e.preventDefault()
         if (songStore) {
           const state = songStore.getState()
@@ -141,7 +143,7 @@ export function useKeyboardShortcuts(): void {
       }
 
       // Zoom shortcuts
-      if (isCtrlOrCmd && (e.key === '=' || e.key === '+')) {
+      if (isCtrlOrCmd && (key === '=' || key === '+')) {
         e.preventDefault()
         if (songStore) {
           const state = songStore.getState()
@@ -150,7 +152,7 @@ export function useKeyboardShortcuts(): void {
         return
       }
 
-      if (isCtrlOrCmd && e.key === '-') {
+      if (isCtrlOrCmd && key === '-') {
         e.preventDefault()
         if (songStore) {
           const state = songStore.getState()
@@ -191,7 +193,7 @@ export function useKeyboardShortcuts(): void {
 
       // Tool switching (1/2/3) and modifier toggles
       if (!isCtrlOrCmd && !isInputElement(e.target as HTMLElement)) {
-        switch (e.key) {
+        switch (key) {
           case '1': useUIStore.getState().setEditTool('select'); return
           case '2': useUIStore.getState().setEditTool('place'); return
           case '3': useUIStore.getState().setEditTool('erase'); return
@@ -206,7 +208,7 @@ export function useKeyboardShortcuts(): void {
       }
 
       // Reset zoom (Ctrl+0)
-      if (isCtrlOrCmd && e.key === '0') {
+      if (isCtrlOrCmd && key === '0') {
         e.preventDefault()
         if (songStore) {
           songStore.getState().setZoomLevel(1)

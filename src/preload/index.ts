@@ -92,6 +92,15 @@ const api = {
     const handler = (_event: unknown, percent: number): void => callback(percent)
     ipcRenderer.on('video:export-progress', handler)
     return () => ipcRenderer.removeListener('video:export-progress', handler)
+  },
+
+  // App menu command events
+  onMenuCommand: (callback: (command: string, payload?: unknown) => void): (() => void) => {
+    const handler = (_event: unknown, data: { command: string; payload?: unknown }): void => {
+      callback(data.command, data.payload)
+    }
+    ipcRenderer.on('menu:command', handler)
+    return () => ipcRenderer.removeListener('menu:command', handler)
   }
 }
 

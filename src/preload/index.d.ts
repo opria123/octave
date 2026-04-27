@@ -44,6 +44,9 @@ interface ChartEditorAPI {
     offsetMs: number; trimStartMs: number; trimEndMs: number
   }) => Promise<{ success: boolean; error?: string }>
   onExportProgress: (callback: (percent: number) => void) => () => void
+
+  // App menu events
+  onMenuCommand: (callback: (command: string, payload?: unknown) => void) => () => void
 }
 
 declare global {

@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net, Menu, type MenuItemConstructorOptions } from 'electron'
 import { join, resolve, basename } from 'path'
 import { readdir, readFile, writeFile, stat, rename, copyFile, unlink, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
@@ -39,7 +39,7 @@ function createWindow(): void {
     minWidth: 1024,
     minHeight: 600,
     show: false,
-    autoHideMenuBar: true,
+    autoHideMenuBar: false,
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -49,6 +49,7 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
+    mainWindow.setMenuBarVisibility(true)
     mainWindow.show()
   })
 
@@ -64,6 +65,95 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+}
+
+function sendMenuCommand(command: string, payload?: unknown): void {
+  const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  if (!win) return
+  win.webContents.send('menu:command', { command, payload })
+}
+
+function createApplicationMenu(): void {
+  const template: MenuItemConstructorOptions[] = [
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => sendMenuCommand('file:new-song')
+        },
+        {
+          label: 'Open',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => sendMenuCommand('file:open-folder')
+        }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo', label: 'Undo' },
+        { role: 'redo', label: 'Redo' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'File Explorer',
+          type: 'checkbox',
+          checked: true,
+          click: (item) => sendMenuCommand('view:toggle-panel', { panel: 'explorer', visible: item.checked })
+        },
+        {
+          label: 'Preview',
+          type: 'checkbox',
+          checked: true,
+          click: (item) => sendMenuCommand('view:toggle-panel', { panel: 'preview', visible: item.checked })
+        },
+        {
+          label: 'Properties',
+          type: 'checkbox',
+          checked: true,
+          click: (item) => sendMenuCommand('view:toggle-panel', { panel: 'properties', visible: item.checked })
+        },
+        { type: 'separator' },
+        {
+          label: 'Piano Roll',
+          type: 'checkbox',
+          checked: true,
+          click: (item) => sendMenuCommand('view:toggle-panel', { panel: 'midi', visible: item.checked })
+        },
+        {
+          label: 'Video Editor',
+          type: 'checkbox',
+          checked: true,
+          click: (item) => sendMenuCommand('view:toggle-panel', { panel: 'video', visible: item.checked })
+        }
+      ]
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'GitHub Repository',
+          click: () => {
+            void shell.openExternal('https://github.com/opria123/octave')
+          }
+        },
+        {
+          label: 'Support',
+          click: () => {
+            void shell.openExternal('https://github.com/opria123/octave/issues')
+          }
+        }
+      ]
+    }
+  ]
+
+  const menu = Menu.buildFromTemplate(template)
+  Menu.setApplicationMenu(menu)
 }
 
 // Register custom protocol scheme for streaming local audio files
@@ -112,10 +202,17 @@ app.whenReady().then(() => {
   ipcMain.on('ping', () => console.log('pong'))
 
   createWindow()
+  createApplicationMenu()
 
   // Check for updates after window is ready (skip in dev)
   if (!is.dev) {
     autoUpdater.autoDownload = false
+    autoUpdater.on('checking-for-update', () => {
+      console.log('[Updater] Checking for updates...')
+    })
+    autoUpdater.on('update-not-available', () => {
+      console.log('[Updater] No updates available.')
+    })
     autoUpdater.on('update-available', (info) => {
       const win = BrowserWindow.getAllWindows()[0]
       if (!win) return
@@ -153,8 +250,19 @@ app.whenReady().then(() => {
           }
         })
     })
-    autoUpdater.checkForUpdates().catch(() => {
-      // Silently fail if offline or no releases yet
+    autoUpdater.on('error', (error) => {
+      console.error('[Updater] Failed:', error)
+      const win = BrowserWindow.getAllWindows()[0]
+      if (!win) return
+      void dialog.showMessageBox(win, {
+        type: 'warning',
+        title: 'Update Check Failed',
+        message: 'Could not check for updates.',
+        detail: String(error instanceof Error ? error.message : error)
+      })
+    })
+    autoUpdater.checkForUpdates().catch((error) => {
+      console.error('[Updater] checkForUpdates failed:', error)
     })
   }
 

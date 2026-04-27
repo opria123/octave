@@ -345,6 +345,18 @@ export function ProjectExplorer(): React.JSX.Element {
     }
   }
 
+  // Handle native menu commands for File actions
+  useEffect(() => {
+    return window.api.onMenuCommand((command) => {
+      if (command === 'file:open-folder') {
+        void handleOpenFolder()
+      }
+      if (command === 'file:new-song' && loadedFolderPath) {
+        setShowNewSongDialog(true)
+      }
+    })
+  }, [handleOpenFolder, loadedFolderPath])
+
   const handleCreateNewSong = async (): Promise<void> => {
     const name = newSongName.trim()
     if (!name || !loadedFolderPath) return
@@ -432,10 +444,10 @@ export function ProjectExplorer(): React.JSX.Element {
             🔊
           </button>
           <button className="icon-button" onClick={() => loadedFolderPath ? setShowNewSongDialog(true) : undefined} title="New Song" disabled={!loadedFolderPath}>
-            🎵
+            +
           </button>
           <button className="icon-button" onClick={handleOpenFolder} title="Open Folder">
-            +
+            📂
           </button>
         </div>
       </div>
