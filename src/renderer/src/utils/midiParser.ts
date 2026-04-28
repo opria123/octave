@@ -627,12 +627,16 @@ const CHART_GUITAR_LANES: Record<number, GuitarLane> = {
   0: 'green', 1: 'red', 2: 'yellow', 3: 'blue', 4: 'orange', 7: 'open'
 }
 
-// .chart drum lanes: 0=kick, 1=snare, 2=yellow(cymbal/tom), 3=blue(cymbal/tom), 4=green(cymbal/tom), 5=kick(2x)
+// .chart drum lanes: 0=kick, 1=snare, 2=yellow(cymbal/tom), 3=blue(cymbal/tom), 4=green(cymbal/tom)
+// Double-kick is commonly authored as lane 32 (instrument-plus) in ExpertDrums.
+// We also accept legacy lane 5 as a compatibility fallback.
 // Note 66 = cymbal modifier flag (present = cymbal, absent = tom for lanes 2-4)
 // In .chart drums, lanes 2/3/4 default to tom unless flagged with 66
 const CHART_DRUM_LANES: Record<number, DrumLane> = {
-  0: 'kick', 1: 'snare', 2: 'yellowTom', 3: 'blueTom', 4: 'greenTom', 5: 'kick'
+  0: 'kick', 1: 'snare', 2: 'yellowTom', 3: 'blueTom', 4: 'greenTom'
 }
+
+const CHART_DRUM_DOUBLE_KICK_LANES = new Set<number>([32, 5])
 
 // Cymbal versions of lanes 2/3/4 (activated by note 66)
 const CHART_DRUM_CYMBAL_LANES: Record<number, DrumLane> = {
@@ -791,7 +795,7 @@ export function parseChartFile(chartText: string): ParsedMidiData {
     const { instrument, difficulty, type } = sectionInfo
 
     // Collect all note events and cymbal flags at each tick for drums
-    const tickNotes = new Map<number, { lane: number; duration: number }[]>()
+    const tickNotes = new Map<number, { lane: number; duration: number; isDoubleKick: boolean }[]>()
     const cymbalTicks = new Set<number>()
 
     for (const line of section.lines) {
@@ -807,8 +811,14 @@ export function parseChartFile(chartText: string): ParsedMidiData {
           continue
         }
 
+        if (type === 'drums' && CHART_DRUM_DOUBLE_KICK_LANES.has(lane)) {
+          if (!tickNotes.has(tick)) tickNotes.set(tick, [])
+          tickNotes.get(tick)!.push({ lane: 0, duration, isDoubleKick: true })
+          continue
+        }
+
         if (!tickNotes.has(tick)) tickNotes.set(tick, [])
-        tickNotes.get(tick)!.push({ lane, duration })
+        tickNotes.get(tick)!.push({ lane, duration, isDoubleKick: false })
         continue
       }
 
@@ -829,7 +839,7 @@ export function parseChartFile(chartText: string): ParsedMidiData {
     for (const [tick, noteEvents] of tickNotes) {
       const hasCymbal = cymbalTicks.has(tick)
 
-      for (const { lane: laneNum, duration } of noteEvents) {
+      for (const { lane: laneNum, duration, isDoubleKick } of noteEvents) {
         let lane: DrumLane | GuitarLane | undefined
 
         if (type === 'guitar') {
@@ -853,7 +863,7 @@ export function parseChartFile(chartText: string): ParsedMidiData {
           difficulty,
           lane,
           velocity: 100,
-          ...(type === 'drums' && laneNum === 5 ? { flags: { isDoubleKick: true } } : {})
+          ...(type === 'drums' && isDoubleKick ? { flags: { isDoubleKick: true } } : {})
         })
       }
     }
@@ -1020,7 +1030,7 @@ export function serializeChartFile(
       if (isDrums) {
         const isDoubleKick = String(note.lane) === 'kick' && !!note.flags?.isDoubleKick
         const drumInfo = isDoubleKick
-          ? { lane: 5, cymbal: false }
+          ? { lane: 32, cymbal: false }
           : CHART_DRUM_LANE_NUM[note.lane as string]
         if (!drumInfo) continue
         entries.push({ tick, text: `${tick} = N ${drumInfo.lane} ${duration}` })
