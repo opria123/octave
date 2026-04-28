@@ -233,6 +233,18 @@ function NoteEditor({
           )}
           {note.instrument === 'drums' && (
             <>
+              {(String(note.lane) === 'kick' || note.flags?.isDoubleKick) && (
+                <label className="property-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={note.flags?.isDoubleKick || false}
+                    onChange={(e) =>
+                      onUpdate({ flags: { ...note.flags, isDoubleKick: e.target.checked } })
+                    }
+                  />
+                  <span>Double Bass (2x)</span>
+                </label>
+              )}
               <label className="property-checkbox">
                 <input
                   type="checkbox"
@@ -304,6 +316,18 @@ function MultiNoteEditor({
   const cymbalState = hasDrums ? flagState((n) => n.flags?.isCymbal) : null
   const accentState = flagState((n) => n.flags?.isAccent)
   const ghostState = hasDrums ? flagState((n) => n.flags?.isGhost) : null
+  const kickDrumNotes = notes.filter((n) => n.instrument === 'drums' && String(n.lane) === 'kick')
+  const hasKickDrums = kickDrumNotes.length > 0
+  const doubleBassState = hasKickDrums
+    ? (() => {
+      const values = kickDrumNotes.map((n) => n.flags?.isDoubleKick === true)
+      const allTrue = values.every((v) => v === true)
+      const allFalse = values.every((v) => v === false)
+      if (allTrue) return true
+      if (allFalse) return false
+      return null
+    })()
+    : null
   const hopoState = hasGuitarBass ? flagState((n) => n.flags?.isHOPO) : null
   const tapState = hasGuitarBass ? flagState((n) => n.flags?.isTap) : null
 
@@ -317,6 +341,17 @@ function MultiNoteEditor({
       <div className="property-section">
         <div className="property-section-title">Flags</div>
         <div className="property-flags">
+          {hasDrums && (
+            <label className="property-checkbox">
+              <input
+                type="checkbox"
+                checked={doubleBassState === true}
+                ref={(el) => { if (el) el.indeterminate = doubleBassState === null }}
+                onChange={(e) => onUpdateAll({ flags: { isDoubleKick: e.target.checked } })}
+              />
+              <span>Double Bass (2x)</span>
+            </label>
+          )}
           {hasDrums && (
             <label className="property-checkbox">
               <input
@@ -935,9 +970,13 @@ export function PropertyPanel(): React.JSX.Element {
 
   const handleBulkFlagUpdate = (updates: Partial<Note>): void => {
     const store = songStore.getState()
+    const hasDoubleKickChange = Object.prototype.hasOwnProperty.call(updates.flags || {}, 'isDoubleKick')
     for (const noteId of selectedNoteIds) {
       const note = store.song.notes.find((n) => n.id === noteId)
       if (note && updates.flags) {
+        if (hasDoubleKickChange && (note.instrument !== 'drums' || String(note.lane) !== 'kick')) {
+          continue
+        }
         store.updateNote(noteId, { flags: { ...note.flags, ...updates.flags } })
       }
     }

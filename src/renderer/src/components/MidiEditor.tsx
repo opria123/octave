@@ -26,6 +26,15 @@ function buildNoteFlags(instrument: Instrument, mods: NoteModifiers): NoteFlags 
   return Object.keys(flags).length > 0 ? flags : undefined
 }
 
+const DOUBLE_KICK_EDITOR_LANE = 'doubleKick'
+
+function getEditorLaneForNote(note: Note): string {
+  if (note.instrument === 'drums' && String(note.lane) === 'kick' && note.flags?.isDoubleKick) {
+    return DOUBLE_KICK_EDITOR_LANE
+  }
+  return String(note.lane)
+}
+
 const STRUM_GEM_WIDTH = 16 // Fixed pixel width for strum (non-sustained) notes
 const SUSTAIN_HANDLE_WIDTH = 6 // Pixel width of the right-edge resize handle
 
@@ -37,7 +46,7 @@ const MIDI_EDITOR_CONFIG = {
   instrumentHeaderHeight: 28,
   pixelsPerTick: 0.1,
   snapDivisions: [1, 2, 4, 8, 12, 16, 24, 32],
-  drumLanes: ['kick', 'snare', 'yellowTom', 'yellowCymbal', 'blueTom', 'blueCymbal', 'greenTom', 'greenCymbal'] as DrumLane[],
+  drumLanes: ['kick', DOUBLE_KICK_EDITOR_LANE, 'snare', 'yellowTom', 'yellowCymbal', 'blueTom', 'blueCymbal', 'greenTom', 'greenCymbal'] as string[],
   guitarLanes: ['open', 'green', 'red', 'yellow', 'blue', 'orange'] as GuitarLane[],
   proGuitarLanes: ['1', '2', '3', '4', '5', '6'] as string[], // Strings high E to low E
   instruments: ['drums', 'guitar', 'bass', 'keys', 'proKeys', 'proGuitar', 'proBass', 'vocals'] as Instrument[],
@@ -59,6 +68,7 @@ const MIDI_EDITOR_CONFIG = {
   } as Record<string, string>,
   laneColors: {
     kick: '#FF4444',
+    doubleKick: '#FF66AA',
     snare: '#FFAA44',
     yellowTom: '#FFFF44',
     yellowCymbal: '#FFFF88',
@@ -736,7 +746,7 @@ function Notes({
     const isDrums = instrument === 'drums'
     const result: { note: Note; x: number; y: number; w: number; h: number; isSustain: boolean }[] = []
     for (const note of notes) {
-      const laneIndex = lanes.indexOf(String(note.lane))
+      const laneIndex = lanes.indexOf(getEditorLaneForNote(note))
       if (laneIndex === -1) continue
       const x = note.tick * pixelsPerTick - scrollX
       const isSustain = !isDrums && note.duration >= sustainThreshold
@@ -787,7 +797,7 @@ function Notes({
 
     for (const { note, x, y, w, h, isSustain } of visibleNotes) {
       const isSelected = selectedSet.has(note.id)
-      const color = MIDI_EDITOR_CONFIG.laneColors[String(note.lane)] || '#888888'
+      const color = MIDI_EDITOR_CONFIG.laneColors[getEditorLaneForNote(note)] || '#888888'
 
       if (isSustain) {
         // Sustain: gem head + thinner tail
@@ -1566,7 +1576,9 @@ function NoteModifierToggles(): React.JSX.Element {
           className={`modifier-toggle-button ${mods[btn.key] ? 'active' : ''}`}
           style={mods[btn.key] ? { backgroundColor: btn.activeColor, color: '#000' } : undefined}
           onClick={() => toggle(btn.key)}
-          title={`${btn.label} (${btn.shortcut})`}
+          title={btn.key === 'openOrKick'
+            ? `${btn.label} (${btn.shortcut}) - Hold Shift while placing a kick for 2x`
+            : `${btn.label} (${btn.shortcut})`}
         >
           <span>{btn.label}</span>
           <kbd>{btn.shortcut}</kbd>
@@ -1618,6 +1630,7 @@ function MidiShortcutHelpButton(): React.JSX.Element {
             <div className="shortcut-help-section-title">Click Modifiers</div>
             <div className="shortcut-row"><div className="shortcut-keys"><kbd>Ctrl</kbd><span className="shortcut-plus">+</span><kbd>Click</kbd></div><span className="shortcut-desc">Multi-select</span></div>
             <div className="shortcut-row"><div className="shortcut-keys"><kbd>Click</kbd><span className="shortcut-plus">+</span><kbd>Drag</kbd></div><span className="shortcut-desc">Box select / Sustain</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>Shift</kbd><span className="shortcut-plus">+</span><kbd>Kick Place</kbd></div><span className="shortcut-desc">Mark kick as Double Bass (2x)</span></div>
           </div>
           <div className="shortcut-help-section">
             <div className="shortcut-help-section-title">Pro Guitar/Bass</div>
@@ -2268,7 +2281,7 @@ export function MidiEditor(): React.JSX.Element {
               selectedIds.has(n.id) &&
               n.instrument === instrument &&
               n.difficulty === activeDifficulty &&
-              String(n.lane) === lane &&
+              getEditorLaneForNote(n) === lane &&
               clickTick >= n.tick - hitPadTicks && clickTick <= n.tick + n.duration + hitPadTicks
           )
           if (hitNote) {
@@ -2313,7 +2326,7 @@ export function MidiEditor(): React.JSX.Element {
             (n) =>
               n.instrument === instrument &&
               n.difficulty === activeDifficulty &&
-              String(n.lane) === lane &&
+              getEditorLaneForNote(n) === lane &&
               Math.abs(n.tick - clickTick) <= snapTicks / 2
           )
           if (target) {
@@ -2393,7 +2406,45 @@ export function MidiEditor(): React.JSX.Element {
           if (instrument === 'drums') finalLane = 'kick'
           else finalLane = 'open'
         }
+        const shiftPlace = !!e.shiftKey
+        let finalFlags = { ...(flags || {}) }
+        if (instrument === 'drums') {
+          const clickedDoubleKickLane = lane === DOUBLE_KICK_EDITOR_LANE
+          const clickedKickLane = lane === 'kick'
+          const kickPlacement = mods.openOrKick || clickedKickLane || clickedDoubleKickLane
+          if (kickPlacement) {
+            finalLane = 'kick'
+            const wantsDoubleKick = clickedDoubleKickLane || ((mods.openOrKick || clickedKickLane) && shiftPlace)
+            if (wantsDoubleKick) finalFlags.isDoubleKick = true
+            else delete finalFlags.isDoubleKick
+          }
+        }
+        const normalizedFlags = Object.keys(finalFlags).length > 0 ? finalFlags : undefined
         const isProGtr = instrument === 'proGuitar' || instrument === 'proBass'
+        const existingNotes = songStore.getState().song.notes
+        const sameTickLane = existingNotes.find(
+          (n) =>
+            n.instrument === instrument
+            && n.difficulty === activeDifficulty
+            && n.tick === tick
+            && String(n.lane) === finalLane
+        )
+        if (sameTickLane) {
+          if (instrument === 'drums' && finalLane === 'kick') {
+            const existingDouble = !!sameTickLane.flags?.isDoubleKick
+            const placingDouble = !!normalizedFlags?.isDoubleKick
+            if (existingDouble !== placingDouble) {
+              songStore.getState().updateNote(sameTickLane.id, {
+                flags: {
+                  ...sameTickLane.flags,
+                  isDoubleKick: placingDouble || undefined
+                }
+              })
+            }
+          }
+          songStore.getState().selectNote(sameTickLane.id)
+          return
+        }
         songStore.getState().addNote({
           tick,
           duration: instrument === 'drums' ? 0 : 0, // Start at 0, drag extends
@@ -2401,7 +2452,7 @@ export function MidiEditor(): React.JSX.Element {
           difficulty: activeDifficulty,
           lane: finalLane as DrumLane | GuitarLane,
           velocity: 100,
-          ...(flags ? { flags } : {}),
+          ...(normalizedFlags ? { flags: normalizedFlags } : {}),
           ...(isProGtr ? { string: parseInt(finalLane, 10) as 1|2|3|4|5|6, fret: 0 } : {})
         })
         // Start sustain drag for non-drum instruments
@@ -2483,7 +2534,7 @@ export function MidiEditor(): React.JSX.Element {
           if (hitNote) {
             const originals = (songStore.getState().song.vocalNotes || [])
               .filter((n) => selectedIds.has(n.id))
-              .map((n) => ({ id: n.id, tick: n.tick, lane: n.lane as string | number }))
+              .map((n) => ({ id: n.id, tick: n.tick, lane: getEditorLaneForNote(n) as string | number }))
             const snapshot = songStore.getState().song
             songStore.temporal.getState().pause()
             gridDragRef.current = {
@@ -2836,7 +2887,7 @@ export function MidiEditor(): React.JSX.Element {
                   !erased.has(n.id) &&
                   n.instrument === drag.instrument &&
                   n.difficulty === state.activeDifficulty &&
-                  String(n.lane) === lane &&
+                  getEditorLaneForNote(n) === lane &&
                   n.tick + n.duration >= sweepMin &&
                   n.tick <= sweepMax
               )
@@ -2908,7 +2959,33 @@ export function MidiEditor(): React.JSX.Element {
             const origLaneIdx = drag.lanes.indexOf(String(orig.lane))
             if (origLaneIdx >= 0) {
               const newLaneIdx = Math.max(0, Math.min(drag.lanes.length - 1, origLaneIdx + laneDelta))
-              state.updateNote(orig.id, { tick: newTick, lane: drag.lanes[newLaneIdx] as Note['lane'] })
+              const targetLane = drag.lanes[newLaneIdx]
+              if (drag.instrument === 'drums') {
+                if (targetLane === DOUBLE_KICK_EDITOR_LANE) {
+                  const existing = state.song.notes.find((n) => n.id === orig.id)
+                  state.updateNote(orig.id, {
+                    tick: newTick,
+                    lane: 'kick',
+                    flags: { ...(existing?.flags || {}), isDoubleKick: true }
+                  })
+                } else if (targetLane === 'kick') {
+                  const existing = state.song.notes.find((n) => n.id === orig.id)
+                  state.updateNote(orig.id, {
+                    tick: newTick,
+                    lane: 'kick',
+                    flags: { ...(existing?.flags || {}), isDoubleKick: undefined }
+                  })
+                } else {
+                  const existing = state.song.notes.find((n) => n.id === orig.id)
+                  state.updateNote(orig.id, {
+                    tick: newTick,
+                    lane: targetLane as Note['lane'],
+                    flags: { ...(existing?.flags || {}), isDoubleKick: undefined }
+                  })
+                }
+              } else {
+                state.updateNote(orig.id, { tick: newTick, lane: targetLane as Note['lane'] })
+              }
             }
           }
         }
@@ -3286,7 +3363,7 @@ export function MidiEditor(): React.JSX.Element {
                               className="midi-lane-color"
                               style={{ backgroundColor: MIDI_EDITOR_CONFIG.laneColors[lane] }}
                             />
-                            <span className="midi-lane-name">{lane}</span>
+                            <span className="midi-lane-name">{lane === DOUBLE_KICK_EDITOR_LANE ? 'kick 2x' : lane}</span>
                           </div>
                         ))
                       )}

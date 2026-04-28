@@ -39,6 +39,32 @@ function getFretTexture(fret: number): THREE.CanvasTexture {
   return tex
 }
 
+let doubleKickBadgeTexture: THREE.CanvasTexture | null = null
+function getDoubleKickBadgeTexture(): THREE.CanvasTexture {
+  if (doubleKickBadgeTexture) return doubleKickBadgeTexture
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 64
+  const ctx = canvas.getContext('2d')!
+  ctx.clearRect(0, 0, 128, 64)
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
+  ctx.beginPath()
+  ctx.roundRect(8, 10, 112, 44, 12)
+  ctx.fill()
+  ctx.strokeStyle = '#FF66AA'
+  ctx.lineWidth = 4
+  ctx.beginPath()
+  ctx.roundRect(8, 10, 112, 44, 12)
+  ctx.stroke()
+  ctx.fillStyle = '#FFFFFF'
+  ctx.font = 'bold 34px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('2x', 64, 33)
+  doubleKickBadgeTexture = new THREE.CanvasTexture(canvas)
+  return doubleKickBadgeTexture
+}
+
 export function NoteGem({
   position,
   color,
@@ -158,7 +184,8 @@ export function KickNoteBar({
   assets,
   isSelected = false,
   sustainLength = 0,
-  isSustainActive = false
+  isSustainActive = false,
+  showDoubleKickBadge = false
 }: {
   z: number
   color: string
@@ -166,6 +193,7 @@ export function KickNoteBar({
   isSelected?: boolean
   sustainLength?: number
   isSustainActive?: boolean
+  showDoubleKickBadge?: boolean
 }): React.JSX.Element {
   // Sustain trail: narrower translucent bar extending behind (or forward when active)
   const hasSustain = sustainLength > 0
@@ -203,6 +231,11 @@ export function KickNoteBar({
           <boxGeometry args={[3.4, 0.02, 0.22]} />
           <meshBasicMaterial color="#FFFFFF" transparent opacity={0.5} toneMapped={false} />
         </mesh>
+      )}
+      {showDoubleKickBadge && (
+        <sprite position={[1.9, 0.26, 0]} scale={[0.72, 0.36, 1]}>
+          <spriteMaterial map={getDoubleKickBadgeTexture()} transparent depthWrite={false} sizeAttenuation />
+        </sprite>
       )}
     </group>
   )

@@ -38,6 +38,7 @@ export interface NoteFlags {
   isAccent?: boolean // Accented hit for drums
   isGhost?: boolean // Ghost note for drums
   isCymbal?: boolean // Cymbal vs tom for drums
+  isDoubleKick?: boolean // Double-bass callout for kick notes
 }
 
 // Harmony parts for vocals

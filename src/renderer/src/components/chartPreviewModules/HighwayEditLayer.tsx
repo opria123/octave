@@ -390,6 +390,9 @@ export function HighwayEditLayer({
         } else {
           noteLane = getLaneString(lane, isKick)
         }
+        const shiftPlace = !!native?.shiftKey
+        const isKickPlacement = instrument === 'drums' && String(noteLane) === 'kick'
+        const wantsDoubleKick = isKickPlacement && shiftPlace && (mods.openOrKick || isKick)
         const existingNotes = store.getState().song.notes
         const duplicate = existingNotes.find(
           (n) =>
@@ -397,12 +400,39 @@ export function HighwayEditLayer({
             n.difficulty === difficulty &&
             n.tick === tick &&
             String(n.lane) === String(noteLane)
+            && (!isKickPlacement || !!n.flags?.isDoubleKick === wantsDoubleKick)
         )
         if (duplicate) {
           store.getState().selectNote(duplicate.id)
           return
         }
-        const flags = buildNoteFlags(instrument, mods)
+        const existingKickAtTick = isKickPlacement
+          ? existingNotes.find(
+            (n) =>
+              n.instrument === instrument
+              && n.difficulty === difficulty
+              && n.tick === tick
+              && String(n.lane) === 'kick'
+          )
+          : undefined
+        if (existingKickAtTick) {
+          store.getState().updateNote(existingKickAtTick.id, {
+            flags: {
+              ...existingKickAtTick.flags,
+              isDoubleKick: wantsDoubleKick || undefined
+            }
+          })
+          store.getState().selectNote(existingKickAtTick.id)
+          return
+        }
+        const baseFlags = buildNoteFlags(instrument, mods)
+        const flags = isKickPlacement
+          ? {
+            ...(baseFlags || {}),
+            isDoubleKick: wantsDoubleKick || undefined
+          }
+          : baseFlags
+        const normalizedFlags = flags && Object.keys(flags).length > 0 ? flags : undefined
         // Pro guitar/bass: add string and fret info
         const isProGtr = instrument === 'proGuitar' || instrument === 'proBass'
         // Snapshot before placement so the entire place+sustain drag is one undo entry
@@ -415,7 +445,7 @@ export function HighwayEditLayer({
           difficulty,
           lane: noteLane as Note['lane'],
           velocity: 100,
-          ...(flags ? { flags } : {}),
+          ...(normalizedFlags ? { flags: normalizedFlags } : {}),
           ...(isProGtr ? { string: noteLane as ProGuitarString, fret: 0 } : {})
         })
         // For non-drum instruments, start sustain drag

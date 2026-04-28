@@ -75,6 +75,10 @@ const DRUM_NOTE_OFFSETS: Record<Difficulty, number> = {
   easy: 60
 }
 
+// Expert+ / double-bass kicks are encoded as the kick lane note minus 1.
+// The game-critical expert note is 95, but we also round-trip the same pattern
+// for the lower difficulties to stay compatible with common chart editors.
+
 const DRUM_LANES: DrumLane[] = ['kick', 'snare', 'yellowCymbal', 'blueCymbal', 'greenCymbal']
 
 // Tom marker notes (110/111/112 convert default cymbals → toms)
@@ -275,6 +279,29 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
         }
       } else {
         // Drums
+        for (const diff of ['expert', 'hard', 'medium', 'easy'] as Difficulty[]) {
+          const offset = DRUM_NOTE_OFFSETS[diff]
+          if (noteNumber === offset - 1) {
+            difficulty = diff
+            lane = 'kick'
+            break
+          }
+        }
+
+        if (difficulty && lane) {
+          notes.push({
+            id: uuidv4(),
+            tick,
+            duration: 0,
+            instrument,
+            difficulty,
+            lane,
+            velocity,
+            flags: { isDoubleKick: true }
+          })
+          continue
+        }
+
         for (const diff of ['expert', 'hard', 'medium', 'easy'] as Difficulty[]) {
           const offset = DRUM_NOTE_OFFSETS[diff]
           const laneIndex = noteNumber - offset
@@ -825,7 +852,8 @@ export function parseChartFile(chartText: string): ParsedMidiData {
           instrument,
           difficulty,
           lane,
-          velocity: 100
+          velocity: 100,
+          ...(type === 'drums' && laneNum === 5 ? { flags: { isDoubleKick: true } } : {})
         })
       }
     }
@@ -990,7 +1018,10 @@ export function serializeChartFile(
       const duration = scaleTick(note.duration)
 
       if (isDrums) {
-        const drumInfo = CHART_DRUM_LANE_NUM[note.lane as string]
+        const isDoubleKick = String(note.lane) === 'kick' && !!note.flags?.isDoubleKick
+        const drumInfo = isDoubleKick
+          ? { lane: 5, cymbal: false }
+          : CHART_DRUM_LANE_NUM[note.lane as string]
         if (!drumInfo) continue
         entries.push({ tick, text: `${tick} = N ${drumInfo.lane} ${duration}` })
         if (drumInfo.cymbal) {
@@ -1135,7 +1166,8 @@ export function serializeMidiBase64(
         laneIndex = GUITAR_LANE_INDEX[lane] ?? 0
       }
 
-      const midiNoteNumber = diffOffset + laneIndex
+      const isDoubleKick = isDrums && (note.lane as DrumLane) === 'kick' && !!note.flags?.isDoubleKick
+      const midiNoteNumber = diffOffset + laneIndex - (isDoubleKick ? 1 : 0)
       track.addNote({
         midi: midiNoteNumber,
         ticks: note.tick,

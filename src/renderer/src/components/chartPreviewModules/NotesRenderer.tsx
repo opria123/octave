@@ -181,6 +181,7 @@ export function NotesRenderer({
                 isSelected={isSelected}
                 sustainLength={isSustain ? totalSustainLength : 0}
                 isSustainActive={isSustainActive}
+                showDoubleKickBadge={!!note.flags?.isDoubleKick}
               />
             </group>
           )
