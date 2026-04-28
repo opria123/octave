@@ -94,6 +94,23 @@ const api = {
     return () => ipcRenderer.removeListener('video:export-progress', handler)
   },
 
+  // App updater events
+  onUpdaterStatus: (callback: (status: {
+    state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error'
+    version?: string
+    percent?: number
+    message?: string
+  }) => void): (() => void) => {
+    const handler = (_event: unknown, status: {
+      state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error'
+      version?: string
+      percent?: number
+      message?: string
+    }): void => callback(status)
+    ipcRenderer.on('updater:status', handler)
+    return () => ipcRenderer.removeListener('updater:status', handler)
+  },
+
   // App menu command events
   onMenuCommand: (callback: (command: string, payload?: unknown) => void): (() => void) => {
     const handler = (_event: unknown, data: { command: string; payload?: unknown }): void => {

@@ -45,6 +45,14 @@ interface ChartEditorAPI {
   }) => Promise<{ success: boolean; error?: string }>
   onExportProgress: (callback: (percent: number) => void) => () => void
 
+  // App updater events
+  onUpdaterStatus: (callback: (status: {
+    state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error'
+    version?: string
+    percent?: number
+    message?: string
+  }) => void) => () => void
+
   // App menu events
   onMenuCommand: (callback: (command: string, payload?: unknown) => void) => () => void
 }

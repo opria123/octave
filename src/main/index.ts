@@ -2,9 +2,9 @@ import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net, Menu, type M
 import { join, resolve, basename } from 'path'
 import { readdir, readFile, writeFile, stat, rename, copyFile, unlink, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
-import { execFile } from 'child_process'
+import { execFile, spawn } from 'child_process'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { autoUpdater } from 'electron-updater'
+import { autoUpdater, type UpdateDownloadedEvent } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
 import ffmpeg from 'fluent-ffmpeg'
 
@@ -22,6 +22,114 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 // Track the currently opened project folder for path validation
 let allowedProjectPath: string | null = null
+
+type UpdaterState = {
+  state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error'
+  version?: string
+  percent?: number
+  message?: string
+}
+
+const RELEASES_URL = 'https://github.com/opria123/octave/releases/latest'
+
+function broadcastUpdaterState(payload: UpdaterState): void {
+  const windows = BrowserWindow.getAllWindows()
+  for (const win of windows) {
+    win.webContents.send('updater:status', payload)
+  }
+}
+
+function getMainWindow(): BrowserWindow | undefined {
+  return BrowserWindow.getAllWindows()[0]
+}
+
+async function isMacAutoInstallSupported(): Promise<boolean> {
+  if (process.platform !== 'darwin') return true
+
+  const appBundlePath = resolve(process.execPath, '../..')
+
+  return new Promise((resolveSupport) => {
+    execFile('codesign', ['-dv', '--verbose=4', appBundlePath], (error, _stdout, stderr) => {
+      if (error) {
+        console.warn('[Updater] Could not inspect macOS signature. Assuming manual update flow.', error)
+        resolveSupport(false)
+        return
+      }
+
+      const details = String(stderr ?? '')
+      const isAdHoc = details.includes('Signature=adhoc')
+      const hasAuthority = /Authority=/i.test(details)
+      resolveSupport(!isAdHoc && hasAuthority)
+    })
+  })
+}
+
+async function handleMacCustomInstall(downloadedFile: string, version: string): Promise<void> {
+  const win = getMainWindow()
+  if (!win) return
+
+  const { response } = await dialog.showMessageBox(win, {
+    type: 'info',
+    title: 'Update Ready',
+    message: `OCTAVE v${version} is ready to install`,
+    detail: 'The app will close and restart to apply the update. You may be prompted for your administrator password.',
+    buttons: ['Restart Now', 'Later'],
+    defaultId: 0,
+    cancelId: 1
+  })
+
+  if (response !== 0) return
+
+  const currentAppBundle = resolve(process.execPath, '../../..')  // /Applications/OCTAVE.app
+  const tempDir = join(app.getPath('temp'), 'octave-update-' + version + '-' + Date.now())
+  const scriptPath = join(app.getPath('temp'), 'octave-update-' + Date.now() + '.sh')
+
+  const lines = [
+    '#!/bin/bash',
+    'sleep 2',
+    '',
+    "TEMP_DIR='" + tempDir + "'",
+    "DOWNLOADED='" + downloadedFile + "'",
+    "CURRENT_APP='" + currentAppBundle + "'",
+    "SELF='" + scriptPath + "'",
+    '',
+    'mkdir -p "$TEMP_DIR"',
+    'unzip -q -o "$DOWNLOADED" -d "$TEMP_DIR"',
+    '',
+    'NEW_APP=$(find "$TEMP_DIR" -maxdepth 2 -name "*.app" -type d | head -1)',
+    'if [ -z "$NEW_APP" ]; then',
+    '  open "$CURRENT_APP"',
+    '  rm -rf "$TEMP_DIR"',
+    '  rm -f "$SELF"',
+    '  exit 1',
+    'fi',
+    '',
+    '# Replace app bundle — try directly first, fall back to admin prompt',
+    'if rm -rf "$CURRENT_APP" 2>/dev/null && cp -R "$NEW_APP" "$CURRENT_APP" 2>/dev/null; then',
+    '  true',
+    'else',
+    '  osascript -e "do shell script \\"rm -rf \'$CURRENT_APP\' && cp -R \'$NEW_APP\' \'$CURRENT_APP\'\\" with administrator privileges" 2>/dev/null || true',
+    'fi',
+    '',
+    '# Clear Gatekeeper quarantine flag',
+    'xattr -dr com.apple.quarantine "$CURRENT_APP" 2>/dev/null || true',
+    '# Re-sign with ad-hoc identity so macOS will launch the updated binary',
+    'codesign --force --deep --sign - "$CURRENT_APP" 2>/dev/null || true',
+    '',
+    'open "$CURRENT_APP"',
+    '',
+    'rm -rf "$TEMP_DIR"',
+    'rm -f "$SELF"',
+    ''
+  ]
+
+  await writeFile(scriptPath, lines.join('\n'), { mode: 0o755 })
+
+  const child = spawn('bash', [scriptPath], { detached: true, stdio: 'ignore' })
+  child.unref()
+
+  app.quit()
+}
 
 /** Validate that a path is within the allowed project folder */
 function isPathAllowed(targetPath: string): boolean {
@@ -206,16 +314,31 @@ app.whenReady().then(() => {
 
   // Check for updates after window is ready (skip in dev)
   if (!is.dev) {
+    let macAutoInstallSupported = true
+    if (process.platform === 'darwin') {
+      void isMacAutoInstallSupported().then((supported) => {
+        macAutoInstallSupported = supported
+        if (!supported) {
+          console.warn('[Updater] macOS auto-install disabled: app is unsigned/ad-hoc signed.')
+        }
+      })
+    }
+
     autoUpdater.autoDownload = false
     autoUpdater.on('checking-for-update', () => {
       console.log('[Updater] Checking for updates...')
+      broadcastUpdaterState({ state: 'checking' })
     })
     autoUpdater.on('update-not-available', () => {
       console.log('[Updater] No updates available.')
+      const win = getMainWindow()
+      win?.setProgressBar(-1)
+      broadcastUpdaterState({ state: 'not-available' })
     })
     autoUpdater.on('update-available', (info) => {
-      const win = BrowserWindow.getAllWindows()[0]
+      const win = getMainWindow()
       if (!win) return
+      broadcastUpdaterState({ state: 'available', version: info.version })
       dialog
         .showMessageBox(win, {
           type: 'info',
@@ -228,13 +351,37 @@ app.whenReady().then(() => {
         })
         .then(({ response }) => {
           if (response === 0) {
-            autoUpdater.downloadUpdate()
+            win.setProgressBar(0)
+            broadcastUpdaterState({ state: 'downloading', version: info.version, percent: 0 })
+            autoUpdater.downloadUpdate().catch((error) => {
+              console.error('[Updater] downloadUpdate failed:', error)
+            })
           }
         })
     })
-    autoUpdater.on('update-downloaded', () => {
-      const win = BrowserWindow.getAllWindows()[0]
+    autoUpdater.on('download-progress', (progress) => {
+      const win = getMainWindow()
+      const clamped = Math.max(0, Math.min(100, progress.percent))
+      if (win) {
+        win.setProgressBar(clamped / 100)
+      }
+      broadcastUpdaterState({
+        state: 'downloading',
+        percent: clamped,
+        message: `${Math.round(clamped)}%`
+      })
+    })
+    autoUpdater.on('update-downloaded', (event: UpdateDownloadedEvent) => {
+      const win = getMainWindow()
       if (!win) return
+      win.setProgressBar(-1)
+      broadcastUpdaterState({ state: 'downloaded', percent: 100 })
+
+      if (process.platform === 'darwin' && !macAutoInstallSupported) {
+        void handleMacCustomInstall(event.downloadedFile, event.version)
+        return
+      }
+
       dialog
         .showMessageBox(win, {
           type: 'info',
@@ -252,13 +399,31 @@ app.whenReady().then(() => {
     })
     autoUpdater.on('error', (error) => {
       console.error('[Updater] Failed:', error)
-      const win = BrowserWindow.getAllWindows()[0]
+      const win = getMainWindow()
+      win?.setProgressBar(-1)
+
+      const rawMessage = String(error instanceof Error ? error.message : error)
+      const isMacSignatureFailure =
+        process.platform === 'darwin'
+        && /code signature|did not pass validation|code requirement/i.test(rawMessage)
+
+      broadcastUpdaterState({
+        state: 'error',
+        message: isMacSignatureFailure
+          ? 'macOS update install failed: code-signature validation. Use manual DMG install.'
+          : rawMessage
+      })
+
       if (!win) return
       void dialog.showMessageBox(win, {
         type: 'warning',
-        title: 'Update Check Failed',
-        message: 'Could not check for updates.',
-        detail: String(error instanceof Error ? error.message : error)
+        title: isMacSignatureFailure ? 'Update Install Failed' : 'Update Check Failed',
+        message: isMacSignatureFailure
+          ? 'macOS could not validate the downloaded app update.'
+          : 'Could not check for updates.',
+        detail: isMacSignatureFailure
+          ? `${rawMessage}\n\nThis happens with unsigned or ad-hoc signed builds. Please install the latest DMG manually from:\n${RELEASES_URL}`
+          : rawMessage
       })
     })
     autoUpdater.checkForUpdates().catch((error) => {

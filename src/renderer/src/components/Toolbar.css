@@ -230,3 +230,76 @@
 .toolbar-toggle-label {
   user-select: none;
 }
+
+/* Update status indicator */
+.toolbar-updater {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  min-width: 0;
+  flex-shrink: 1;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-updater--checking,
+.toolbar-updater--not-available {
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.toolbar-updater--available {
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+  background: var(--accent-color-transparent);
+}
+
+.toolbar-updater--downloading {
+  color: var(--text-primary);
+  border-color: var(--border-color);
+  background: var(--bg-secondary);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 4px 10px;
+}
+
+.toolbar-updater--downloaded {
+  color: var(--success-color);
+  border-color: var(--success-color);
+  background: rgba(68, 204, 102, 0.1);
+}
+
+.toolbar-updater--error {
+  color: var(--warning-color);
+  border-color: var(--warning-color);
+  background: rgba(255, 170, 68, 0.1);
+  cursor: help;
+}
+
+.toolbar-updater-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+.toolbar-updater-bar {
+  width: 140px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-hover);
+  overflow: hidden;
+}
+
+.toolbar-updater-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent-color);
+  transition: width 0.2s ease;
+}

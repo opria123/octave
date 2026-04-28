@@ -252,6 +252,32 @@ export function Toolbar(): React.JSX.Element {
     }
   }
 
+  // Updater state
+  type UpdaterStatusState = {
+    state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error'
+    version?: string
+    percent?: number
+    message?: string
+  }
+  const [updaterStatus, setUpdaterStatus] = useState<UpdaterStatusState>({ state: 'idle' })
+  const updaterDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (!window.api.onUpdaterStatus) return
+    const cleanup = window.api.onUpdaterStatus((status) => {
+      setUpdaterStatus(status)
+      // Auto-dismiss non-active states after a few seconds
+      if (updaterDismissTimer.current) clearTimeout(updaterDismissTimer.current)
+      if (status.state === 'not-available') {
+        updaterDismissTimer.current = setTimeout(() => setUpdaterStatus({ state: 'idle' }), 4000)
+      }
+    })
+    return () => {
+      cleanup()
+      if (updaterDismissTimer.current) clearTimeout(updaterDismissTimer.current)
+    }
+  }, [])
+
   // Guard against overlapping play/pause calls
   const playPauseBusy = useRef(false)
 
@@ -388,6 +414,38 @@ export function Toolbar(): React.JSX.Element {
           <span className="toolbar-no-song">No song loaded</span>
         )}
       </div>
+
+      {/* Update status indicator */}
+      {updaterStatus.state !== 'idle' && (
+        <div className={`toolbar-updater toolbar-updater--${updaterStatus.state}`}>
+          {updaterStatus.state === 'checking' && (
+            <span className="toolbar-updater-label">Checking for updates…</span>
+          )}
+          {updaterStatus.state === 'not-available' && (
+            <span className="toolbar-updater-label">Up to date</span>
+          )}
+          {updaterStatus.state === 'available' && (
+            <span className="toolbar-updater-label">⬇ Update v{updaterStatus.version} available…</span>
+          )}
+          {updaterStatus.state === 'downloading' && (
+            <>
+              <span className="toolbar-updater-label">Downloading update {updaterStatus.message ?? ''}</span>
+              <div className="toolbar-updater-bar">
+                <div
+                  className="toolbar-updater-bar-fill"
+                  style={{ width: `${updaterStatus.percent ?? 0}%` }}
+                />
+              </div>
+            </>
+          )}
+          {updaterStatus.state === 'downloaded' && (
+            <span className="toolbar-updater-label">✔ Update ready — see prompt</span>
+          )}
+          {updaterStatus.state === 'error' && (
+            <span className="toolbar-updater-label" title={updaterStatus.message}>⚠ Update error</span>
+          )}
+        </div>
+      )}
 
       {/* Spacer */}
       <div className="toolbar-spacer" />
