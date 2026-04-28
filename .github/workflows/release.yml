@@ -112,6 +112,7 @@ jobs:
             dist/*.AppImage
             dist/*.deb
             dist/*.zip
+            dist/latest*.yml
           if-no-files-found: warn
 
   release:
