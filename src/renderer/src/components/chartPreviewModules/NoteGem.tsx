@@ -156,15 +156,36 @@ export function KickNoteBar({
   z,
   color,
   assets,
-  isSelected = false
+  isSelected = false,
+  sustainLength = 0,
+  isSustainActive = false
 }: {
   z: number
   color: string
   assets: HighwayAssets | null
   isSelected?: boolean
+  sustainLength?: number
+  isSustainActive?: boolean
 }): React.JSX.Element {
+  // Sustain trail: narrower translucent bar extending behind (or forward when active)
+  const hasSustain = sustainLength > 0
+  const sustainBarWidth = 0.8 // fraction of track width
+  const sustainScaleX = (TRACK_WIDTH * sustainBarWidth) / 3.27
+  // Trail extends from bar center toward back of highway (negative Z direction in world space)
+  const trailZ = isSustainActive ? -sustainLength / 2 : -sustainLength / 2 - 0.075
+
   return (
     <group position={[0, 0.01, z]} scale={[TRACK_WIDTH / 3.27, 1, 1]}>
+      {/* Sustain trail */}
+      {hasSustain && (
+        <group scale={[sustainScaleX / (TRACK_WIDTH / 3.27), 1, 1]} position={[0, 0, trailZ]}>
+          <mesh>
+            <boxGeometry args={[3.27, 0.04, sustainLength]} />
+            <meshBasicMaterial color={color} transparent opacity={0.3} toneMapped={false} />
+          </mesh>
+        </group>
+      )}
+      {/* Bar head */}
       <mesh geometry={assets?.kickGeo ?? undefined}>
         {!assets?.kickGeo && <boxGeometry args={[3.27, 0.06, 0.15]} />}
         <meshStandardMaterial

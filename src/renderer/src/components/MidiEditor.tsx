@@ -1,5 +1,5 @@
 // MIDI Editor - Piano roll style note editor
-import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
+import { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from 'react'
 import { useProjectStore, getSongStore, useSettingsStore, useUIStore } from '../stores'
 import type { Note, NoteFlags, NoteModifiers, Instrument, DrumLane, GuitarLane, Difficulty, EditingTool, StarPowerPhrase, SoloSection, VocalNote, VocalPhrase, HarmonyPart, TempoEvent } from '../types'
 import { PRO_KEYS_MIN, PRO_KEYS_MAX, SUSTAIN_THRESHOLD_MID, SUSTAIN_THRESHOLD_CHART } from '../types'
@@ -1961,8 +1961,9 @@ export function MidiEditor(): React.JSX.Element {
   }, [isPlaying, currentTick, scrollX, zoomLevel, dimensions.width])
 
   // When pausing, persist the current auto-scroll position so the view does not snap back.
+  // useLayoutEffect runs before the browser paints, preventing a flash frame with the old scrollX.
   const prevIsPlayingRef = useRef(isPlaying)
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (prevIsPlayingRef.current && !isPlaying && !isUserScrolling.current) {
       const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
       const playheadX = currentTick * pixelsPerTick

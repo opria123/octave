@@ -49,7 +49,7 @@ function GhostNote({
   // Open/kick override
   const showKick = isKick || noteModifiers.openOrKick
 
-  if (isDrum && showKick) {
+  if (showKick) {
     return (
       <group position={position} scale={[TRACK_WIDTH / 3.27, 1, 1]}>
         <mesh geometry={assets?.kickGeo ?? undefined}>
@@ -285,7 +285,8 @@ export function HighwayEditLayer({
       const z = STRIKE_LINE_POS - (tick - currentTick) * pixelsPerTick
       const isSpMode = mods.starPower && editTool === 'place'
       const isSoloMode = mods.solo && editTool === 'place'
-      const isFullWidth = isSpMode || isSoloMode
+      const isOpenStrum = mods.openOrKick && instrumentType !== 'drums'
+      const isFullWidth = isSpMode || isSoloMode || isOpenStrum
       const x = isFullWidth ? offsetX : effectiveKick ? offsetX : offsetX + getFretX(lane, laneCount)
       const color = isSpMode ? '#00CCFF'
         : isSoloMode ? '#FFD700'

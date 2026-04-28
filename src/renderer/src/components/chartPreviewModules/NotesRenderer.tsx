@@ -126,9 +126,10 @@ export function NotesRenderer({
       if (note.tick <= currentTick && !hitNotesRef.current.has(note.id)) {
         hitNotesRef.current.add(note.id)
         const isKick = instrument === 'drums' && String(note.lane) === 'kick'
-        const laneIndex = isKick ? -1 : getLaneIndex(note)
-        const x = isKick ? 0 : getFretX(laneIndex, laneCount)
-        const color = isKick ? DRUM_KICK_COLOR : (colors[laneIndex % colors.length] || '#FFFFFF')
+        const isOpen = (instrument === 'guitar' || instrument === 'bass' || instrument === 'keys') && String(note.lane) === 'open'
+        const laneIndex = (isKick || isOpen) ? -1 : getLaneIndex(note)
+        const x = (isKick || isOpen) ? 0 : getFretX(laneIndex, laneCount)
+        const color = isKick ? DRUM_KICK_COLOR : isOpen ? '#CC44FF' : (colors[laneIndex % colors.length] || '#FFFFFF')
         const endTick = note.tick + note.duration
         onNoteHit(note.id, laneIndex, color, x, endTick)
       }
@@ -147,6 +148,7 @@ export function NotesRenderer({
     <group position={[offsetX, 0, 0]}>
       {visibleNotes.map((note) => {
         const isKick = instrument === 'drums' && String(note.lane) === 'kick'
+        const isOpen = (instrument === 'guitar' || instrument === 'bass' || instrument === 'keys') && String(note.lane) === 'open'
         const laneIndex = getLaneIndex(note)
         const x = getFretX(laneIndex, laneCount)
         const z = STRIKE_LINE_POS - (note.tick - currentTick) * pixelsPerTick
@@ -168,15 +170,17 @@ export function NotesRenderer({
         // Skip notes too far ahead
         if (z > STRIKE_LINE_POS + 1 && !isSustainActive) return null
 
-        if (isKick) {
-          if (isHeadHit) return null // kicks have no sustain, just hide
+        if (isKick || isOpen) {
+          if (isHeadHit) return null // no sustain, just hide
           return (
             <group key={note.id} onClick={(e) => { e.stopPropagation?.(); onNoteClick(note.id, (e as unknown as { nativeEvent?: MouseEvent }).nativeEvent) }}>
               <KickNoteBar
                 z={z}
-                color={DRUM_KICK_COLOR}
+                color={isOpen ? '#CC44FF' : DRUM_KICK_COLOR}
                 assets={assets}
                 isSelected={isSelected}
+                sustainLength={isSustain ? totalSustainLength : 0}
+                isSustainActive={isSustainActive}
               />
             </group>
           )
