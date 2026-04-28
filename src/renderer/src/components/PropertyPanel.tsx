@@ -511,6 +511,95 @@ function VocalNoteEditor({
   )
 }
 
+// Editable row for a single tempo change event
+function TempoChangeRow({
+  event,
+  tempoEvents,
+  onUpdateBpm,
+  onMove,
+  onDelete
+}: {
+  event: TempoEvent
+  tempoEvents: TempoEvent[]
+  onUpdateBpm: (tick: number, bpm: number) => void
+  onMove: (oldTick: number, newTick: number, bpm: number) => void
+  onDelete: (tick: number) => void
+}): React.JSX.Element {
+  const [draftTick, setDraftTick] = useState<string>(String(event.tick))
+
+  // Keep draft in sync if external change moves this event
+  useEffect(() => { setDraftTick(String(event.tick)) }, [event.tick])
+
+  const commitTick = (): void => {
+    const parsed = parseInt(draftTick)
+    if (!isNaN(parsed) && parsed > 0 && parsed !== event.tick) {
+      onMove(event.tick, parsed, event.bpm)
+    } else {
+      setDraftTick(String(event.tick)) // revert invalid
+    }
+  }
+
+  const measure = Math.floor(event.tick / 1920) + 1
+  const beat = Math.floor((event.tick % 1920) / 480) + 1
+  const secs = tickToSeconds(event.tick, tempoEvents)
+  const mins = Math.floor(secs / 60)
+  const remSecs = secs - mins * 60
+  const timeStr = `${mins}:${remSecs < 10 ? '0' : ''}${remSecs.toFixed(1)}`
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '52px 44px 1fr 34px 18px',
+      alignItems: 'center', gap: 4, padding: '3px 6px',
+      borderBottom: '1px solid #2a2a3e', fontSize: 12
+    }}>
+      {/* Tick input */}
+      <input
+        type="number"
+        style={{
+          background: '#1a1a2e', border: '1px solid #555', borderRadius: 3,
+          color: '#FF8C00', padding: '2px 4px', fontSize: 11,
+          fontFamily: 'monospace', fontWeight: 600, width: '100%', minWidth: 0
+        }}
+        title="Tick position — edit to move this tempo change"
+        value={draftTick}
+        min={1}
+        onChange={(e) => setDraftTick(e.target.value)}
+        onBlur={commitTick}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur() } else if (e.key === 'Escape') { setDraftTick(String(event.tick)); e.currentTarget.blur() } }}
+      />
+      {/* Time display */}
+      <span style={{ color: '#999', fontSize: 10, fontFamily: 'monospace', textAlign: 'right' }}
+        title={`Measure ${measure}, Beat ${beat}`}>
+        {timeStr}
+      </span>
+      {/* BPM input */}
+      <input
+        type="number"
+        style={{
+          background: '#1a1a2e', border: '1px solid #444', borderRadius: 3,
+          color: '#eee', padding: '2px 4px', fontSize: 12, width: '100%', minWidth: 0
+        }}
+        value={event.bpm}
+        onChange={(e) => {
+          const v = parseFloat(e.target.value)
+          if (v > 0 && v <= 999) onUpdateBpm(event.tick, v)
+        }}
+        min={1} max={999} step={0.01}
+      />
+      <span style={{ color: '#888', fontSize: 11 }}>BPM</span>
+      <button
+        style={{
+          background: 'none', border: 'none', color: '#f66', cursor: 'pointer',
+          fontSize: 14, padding: '0 2px', lineHeight: 1
+        }}
+        title="Delete tempo change"
+        onClick={() => onDelete(event.tick)}
+      >✕</button>
+    </div>
+  )
+}
+
 // Song metadata editor
 function MetadataEditor({
   metadata,
@@ -522,6 +611,7 @@ function MetadataEditor({
   tempoEvents,
   onAddTempoEvent,
   onUpdateTempoEvent,
+  onMoveTempoEvent,
   onDeleteTempoEvent,
   currentTick
 }: {
@@ -534,6 +624,7 @@ function MetadataEditor({
   tempoEvents: TempoEvent[]
   onAddTempoEvent: (tick: number, bpm: number) => void
   onUpdateTempoEvent: (tick: number, bpm: number) => void
+  onMoveTempoEvent: (oldTick: number, newTick: number, bpm: number) => void
   onDeleteTempoEvent: (tick: number) => void
   currentTick: number
 }): React.JSX.Element {
@@ -638,52 +729,16 @@ function MetadataEditor({
           <div style={{ marginTop: 8, marginBottom: 8 }}>
             <label className="property-label" style={{ marginBottom: 4, display: 'block' }}>Tempo Changes</label>
             <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid #333', borderRadius: 4 }}>
-              {tempoEvents.slice(1).map((te) => {
-                const measure = Math.floor(te.tick / 1920) + 1
-                const beat = Math.floor((te.tick % 1920) / 480) + 1
-                const secs = tickToSeconds(te.tick, tempoEvents)
-                const mins = Math.floor(secs / 60)
-                const remSecs = secs - mins * 60
-                const timeStr = `${mins}:${remSecs < 10 ? '0' : ''}${remSecs.toFixed(1)}`
-                return (
-                  <div
-                    key={te.tick}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px',
-                      borderBottom: '1px solid #2a2a3e', fontSize: 12
-                    }}
-                  >
-                    <span style={{ color: '#FF8C00', fontWeight: 600, minWidth: 55, fontFamily: 'monospace' }}>
-                      M{measure}.{beat}
-                    </span>
-                    <span style={{ color: '#999', fontSize: 10, fontFamily: 'monospace', minWidth: 45 }}>
-                      {timeStr}
-                    </span>
-                    <input
-                      type="number"
-                      style={{
-                        flex: 1, background: '#1a1a2e', border: '1px solid #444', borderRadius: 3,
-                        color: '#eee', padding: '2px 4px', fontSize: 12, minWidth: 0
-                      }}
-                      value={te.bpm}
-                      onChange={(e) => {
-                        const v = parseFloat(e.target.value)
-                        if (v > 0 && v <= 999) onUpdateTempoEvent(te.tick, v)
-                      }}
-                      min={1} max={999} step={0.01}
-                    />
-                    <span style={{ color: '#888', fontSize: 11 }}>BPM</span>
-                    <button
-                      style={{
-                        background: 'none', border: 'none', color: '#f66', cursor: 'pointer',
-                        fontSize: 14, padding: '0 2px', lineHeight: 1
-                      }}
-                      title="Delete tempo change"
-                      onClick={() => onDeleteTempoEvent(te.tick)}
-                    >✕</button>
-                  </div>
-                )
-              })}
+              {tempoEvents.slice(1).map((te) => (
+                <TempoChangeRow
+                  key={te.tick}
+                  event={te}
+                  tempoEvents={tempoEvents}
+                  onUpdateBpm={onUpdateTempoEvent}
+                  onMove={onMoveTempoEvent}
+                  onDelete={onDeleteTempoEvent}
+                />
+              ))}
             </div>
           </div>
         )}
@@ -962,6 +1017,7 @@ export function PropertyPanel(): React.JSX.Element {
             tempoEvents={tempoEvents}
             onAddTempoEvent={(tick, bpm) => songStore.getState().addTempoEvent({ tick, bpm })}
             onUpdateTempoEvent={(tick, bpm) => songStore.getState().updateTempoEvent(tick, bpm)}
+            onMoveTempoEvent={(oldTick, newTick, bpm) => songStore.getState().moveTempoEvent(oldTick, newTick, bpm)}
             onDeleteTempoEvent={(tick) => songStore.getState().deleteTempoEvent(tick)}
             currentTick={currentTick}
           />

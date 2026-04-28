@@ -59,6 +59,7 @@ interface SongStoreState extends SongEditorState {
   // Tempo/time signature actions
   addTempoEvent: (event: Omit<TempoEvent, 'tick'> & { tick: number }) => void
   updateTempoEvent: (tick: number, bpm: number) => void
+  moveTempoEvent: (oldTick: number, newTick: number, bpm: number) => void
   deleteTempoEvent: (tick: number) => void
   addTimeSignature: (event: TimeSignature) => void
   updateTimeSignature: (tick: number, updates: Partial<TimeSignature>) => void
@@ -354,6 +355,18 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
         },
         isDirty: true
       })),
+
+    moveTempoEvent: (oldTick, newTick, bpm) =>
+      set((state) => {
+        if (oldTick === 0) return state // Can't move the initial tempo event
+        const without = state.song.tempoEvents.filter((e) => e.tick !== oldTick)
+        const existingIdx = without.findIndex((e) => e.tick === newTick)
+        const updated =
+          existingIdx >= 0
+            ? without.map((e, i) => (i === existingIdx ? { tick: newTick, bpm } : e))
+            : [...without, { tick: newTick, bpm }].sort((a, b) => a.tick - b.tick)
+        return { song: { ...state.song, tempoEvents: updated }, isDirty: true }
+      }),
 
     deleteTempoEvent: (tick) =>
       set((state) => ({
