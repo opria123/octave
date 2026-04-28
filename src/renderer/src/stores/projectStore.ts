@@ -118,9 +118,26 @@ export const useUIStore = create<UIStore>()((set) => ({
   setFocusedPanel: (panel) => set({ focusedPanel: panel }),
   setEditTool: (tool) => set({ editTool: tool }),
   toggleModifier: (key) =>
-    set((state) => ({
-      noteModifiers: { ...state.noteModifiers, [key]: !state.noteModifiers[key] }
-    })),
+    set((state) => {
+      const nextValue = !state.noteModifiers[key]
+      if (!nextValue) {
+        return {
+          noteModifiers: { ...state.noteModifiers, [key]: false }
+        }
+      }
+
+      return {
+        noteModifiers: {
+          cymbalOrTap: false,
+          ghostOrHopo: false,
+          accent: false,
+          openOrKick: false,
+          starPower: false,
+          solo: false,
+          [key]: true
+        }
+      }
+    }),
   clearModifiers: () => set({ noteModifiers: { ...defaultModifiers } }),
   togglePreviewFullscreen: () => set((state) => ({ isPreviewFullscreen: !state.isPreviewFullscreen }))
 }))
