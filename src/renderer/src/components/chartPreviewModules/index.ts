@@ -17,3 +17,5 @@ export {
 export * from './constants'
 export * from './types'
 export * from './fbxUtils'
+export * from './venuePlayback'
+export * from './venueSemantics'

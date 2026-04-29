@@ -2,6 +2,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { ProjectState, AppSettings, UIState, NoteModifiers } from '../types'
+import { cloneDefaultHotkeys } from '../utils/hotkeys'
 
 interface ProjectStore extends ProjectState {
   // Actions
@@ -55,7 +56,9 @@ const defaultSettings: AppSettings = {
   volume: 0.8,
   pianoRollZoom: 2.0,
   snapDivision: 4,
-  lastOpenedFolder: undefined
+  lastOpenedFolder: undefined,
+  leftyFlip: false,
+  hotkeys: cloneDefaultHotkeys()
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -83,11 +86,13 @@ interface UIStore extends UIState {
   setRightPanelWidth: (width: number) => void
   setBottomPanelHeight: (height: number) => void
   setBottomPanelTab: (tab: 'midi' | 'video') => void
+  setSelectedVenueEvent: (event: UIState['selectedVenueEvent']) => void
   setFocusedPanel: (panel: UIState['focusedPanel']) => void
   setEditTool: (tool: UIState['editTool']) => void
   toggleModifier: (key: keyof NoteModifiers) => void
   clearModifiers: () => void
   togglePreviewFullscreen: () => void
+  setSettingsModalOpen: (open: boolean) => void
 }
 
 const defaultModifiers: NoteModifiers = {
@@ -96,7 +101,8 @@ const defaultModifiers: NoteModifiers = {
   accent: false,
   openOrKick: false,
   starPower: false,
-  solo: false
+  solo: false,
+  talkie: false
 }
 
 export const useUIStore = create<UIStore>()((set) => ({
@@ -105,16 +111,19 @@ export const useUIStore = create<UIStore>()((set) => ({
   rightPanelWidth: 300,
   bottomPanelHeight: 200,
   bottomPanelTab: 'midi',
+  selectedVenueEvent: null,
   focusedPanel: null,
   editTool: 'select',
   noteModifiers: { ...defaultModifiers },
   isPreviewFullscreen: false,
+  isSettingsModalOpen: false,
 
   // Actions
   setLeftPanelWidth: (width) => set({ leftPanelWidth: width }),
   setRightPanelWidth: (width) => set({ rightPanelWidth: width }),
   setBottomPanelHeight: (height) => set({ bottomPanelHeight: height }),
   setBottomPanelTab: (tab) => set({ bottomPanelTab: tab }),
+  setSelectedVenueEvent: (event) => set({ selectedVenueEvent: event }),
   setFocusedPanel: (panel) => set({ focusedPanel: panel }),
   setEditTool: (tool) => set({ editTool: tool }),
   toggleModifier: (key) =>
@@ -134,10 +143,12 @@ export const useUIStore = create<UIStore>()((set) => ({
           openOrKick: false,
           starPower: false,
           solo: false,
+          talkie: false,
           [key]: true
         }
       }
     }),
   clearModifiers: () => set({ noteModifiers: { ...defaultModifiers } }),
-  togglePreviewFullscreen: () => set((state) => ({ isPreviewFullscreen: !state.isPreviewFullscreen }))
+  togglePreviewFullscreen: () => set((state) => ({ isPreviewFullscreen: !state.isPreviewFullscreen })),
+  setSettingsModalOpen: (open) => set({ isSettingsModalOpen: open })
 }))

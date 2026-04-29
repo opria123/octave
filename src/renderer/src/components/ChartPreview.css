@@ -83,7 +83,7 @@
   padding: 0 10px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
@@ -115,11 +115,11 @@
 }
 
 .preview-snap-selector select {
-  padding: 3px 6px;
+  padding: 5px 10px;
   font-size: 11px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: 999px;
   color: var(--text-primary);
   cursor: pointer;
 }
@@ -131,7 +131,7 @@
 }
 
 .difficulty-button {
-  padding: 4px 8px;
+  padding: 5px 10px;
   font-size: 11px;
   font-weight: 500;
   color: var(--text-secondary);
@@ -142,11 +142,11 @@
 }
 
 .difficulty-button:first-child {
-  border-radius: 4px 0 0 4px;
+  border-radius: 999px 0 0 999px;
 }
 
 .difficulty-button:last-child {
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 999px 999px 0;
 }
 
 .difficulty-button:not(:last-child) {
@@ -315,6 +315,51 @@
   position: relative;
   overflow: hidden;
   background: linear-gradient(90deg, rgba(20, 40, 60, 0.3) 0%, transparent 5%, transparent 95%, rgba(20, 40, 60, 0.3) 100%);
+}
+
+.venue-state-overlay {
+  position: absolute;
+  top: 64px;
+  right: 12px;
+  z-index: 11;
+  min-width: 240px;
+  max-width: 360px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(120, 145, 185, 0.5);
+  background: linear-gradient(180deg, rgba(9, 13, 22, 0.92) 0%, rgba(7, 11, 18, 0.9) 100%);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(3px);
+}
+
+.venue-state-title {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #9cc8ff;
+}
+
+.venue-state-row {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+
+.venue-state-row span {
+  color: #8b9cb5;
+}
+
+.venue-state-row strong {
+  color: #e5edff;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .vocal-strikeline {

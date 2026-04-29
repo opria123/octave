@@ -1,4 +1,4 @@
-// Bottom Panel - Tabbed panel with MIDI editor and Video editor
+// Bottom Panel - Tabbed panel with MIDI editor and timeline
 import { useUIStore } from '../stores'
 import { MidiEditor } from './MidiEditor'
 import { VideoEditor } from './VideoEditor'
@@ -16,7 +16,7 @@ export function BottomPanel({ showMidi = true, showVideo = true }: { showMidi?: 
         <div className="empty-state" style={{ height: '100%' }}>
           <div className="empty-state-icon">🧰</div>
           <div className="empty-state-title">Bottom Panels Hidden</div>
-          <div className="empty-state-description">Use View menu to re-enable Piano Roll or Video Editor.</div>
+          <div className="empty-state-description">Use View menu to re-enable Piano Roll or Timeline.</div>
         </div>
       </div>
     )
@@ -39,7 +39,7 @@ export function BottomPanel({ showMidi = true, showVideo = true }: { showMidi?: 
             className={`panel-tab ${effectiveTab === 'video' ? 'active' : ''}`}
             onClick={() => setBottomPanelTab('video')}
           >
-            🎬 Video Editor
+            🎬 Timeline
           </button>
         )}
       </div>

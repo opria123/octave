@@ -105,7 +105,7 @@ export function AnimatedHighwayScene({
   const snapDivision = useStore(store, (s) => s.snapDivision)
   const isPlaying = useStore(store, (s) => s.isPlaying)
   const assets = useContext(HighwayAssetsContext)
-  const { highwaySpeed: _highwaySpeed } = useSettingsStore()
+  const { highwaySpeed: _highwaySpeed, leftyFlip } = useSettingsStore()
 
   const pixelsPerTick = BASE_PIXELS_PER_TICK
 
@@ -219,7 +219,7 @@ export function AnimatedHighwayScene({
   const startX = -naturalWidth / 2 + TRACK_WIDTH / 2
 
   return (
-    <group scale={[layoutScale, 1, 1]}>
+    <group scale={[leftyFlip ? -layoutScale : layoutScale, 1, 1]} renderOrder={20}>
       {instrumentArray.map((instrument, index) => {
         const offsetX = startX + index * (TRACK_WIDTH + highwayGap)
         const instrumentType = instrument === 'drums' ? 'drums'

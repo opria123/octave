@@ -1,0 +1,39 @@
+Default Venue Asset Attributions
+
+These bundled default assets are used as a base venue pack.
+
+1) stage.glb
+   Source: KhronosGroup/glTF-Sample-Assets
+   Model: ABeautifulGame
+   URL: https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/ABeautifulGame
+   License: Apache-2.0
+
+2) bass.glb
+   Source: KhronosGroup/glTF-Sample-Models
+   Model: CesiumMan
+   URL: https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/CesiumMan
+   License: CC-BY-4.0
+
+3) drums.glb
+   Source: KhronosGroup/glTF-Sample-Models
+   Model: Fox
+   URL: https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/Fox
+   License: CC-BY-4.0
+
+4) guitar.glb
+   Source: google/model-viewer shared assets
+   Model: RobotExpressive
+   URL: https://github.com/google/model-viewer/tree/master/packages/shared-assets/models
+   License: Apache-2.0 (repository), asset-specific licensing per upstream model source
+
+5) vocals.glb
+   Source: google/model-viewer shared assets
+   Model: Astronaut
+   URL: https://github.com/google/model-viewer/tree/master/packages/shared-assets/models
+   License: Apache-2.0 (repository), asset-specific licensing per upstream model source
+
+6) keys.glb
+   Source: google/model-viewer shared assets
+   Model: Horse
+   URL: https://github.com/google/model-viewer/tree/master/packages/shared-assets/models
+   License: Apache-2.0 (repository), asset-specific licensing per upstream model source

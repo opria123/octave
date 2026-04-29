@@ -9,6 +9,7 @@ interface ChartEditorAPI {
 
   // Dialog APIs
   openAudioDialog: () => Promise<string | null>
+  openLyricsFileDialog: () => Promise<{ filePath: string; content: string } | null>
 
   // Song APIs
   createSongFolder: (parentPath: string, folderName: string, audioPath?: string) => Promise<{ id: string; path: string; name: string } | null>
@@ -26,6 +27,10 @@ interface ChartEditorAPI {
   // Audio APIs
   importAudio: (songPath: string, audioSourcePath: string) => Promise<{ filePath: string; filename: string } | null>
   readAudio: (songPath: string) => Promise<{ filePath: string; filename: string }[] | null>
+  readAudioJson: (songPath: string) => Promise<Record<string, unknown> | null>
+  writeAudioJson: (songPath: string, data: unknown) => Promise<boolean>
+  readVenueJson: (songPath: string) => Promise<Record<string, unknown> | null>
+  writeVenueJson: (songPath: string, data: unknown) => Promise<boolean>
 
   // Video APIs
   openVideoDialog: () => Promise<string | null>

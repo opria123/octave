@@ -1,9 +1,273 @@
 // Property Panel - Right panel showing selected note/song properties
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useProjectStore, getSongStore } from '../stores'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useProjectStore, useUIStore, getSongStore } from '../stores'
 import { tickToSeconds } from '../services/audioService'
-import type { Note, VocalNote, SongMetadata, TempoEvent } from '../types'
+import type {
+  Note,
+  VocalNote,
+  SongMetadata,
+  TempoEvent,
+  TimeSignature,
+  SongSection,
+  VenueTrackData,
+  VenueLightingEvent,
+  VenuePostProcessingEvent,
+  VenueStageEvent,
+  VenueCameraCutEvent,
+  VenuePerformerEvent,
+  SelectedVenueEventRef
+} from '../types'
 import './PropertyPanel.css'
+
+const VENUE_MIN_DURATION_TICKS = 60
+
+const LIGHTING_PRESETS = [
+  'verse', 'chorus', 'dischord', 'manual_cool', 'manual_warm', 'stomp',
+  'blackout_fast', 'blackout_slow', 'blackout_spot', 'bre',
+  'flare_fast', 'flare_slow', 'frenzy', 'harmony', 'intro',
+  'loop_cool', 'loop_warm', 'searchlights',
+  'silhouettes', 'silhouettes_spot',
+  'strobe_fast', 'strobe_slow', 'sweep'
+]
+
+const POST_PROCESSING_PRESETS = [
+  'ProFilm_a.pp', 'ProFilm_b.pp', 'ProFilm_mirror_a.pp', 'ProFilm_psychedelic_blue_red.pp',
+  'bloom.pp', 'bright.pp',
+  'clean_trails.pp', 'video_trails.pp', 'flicker_trails.pp', 'desat_posterize_trails.pp', 'space_woosh.pp',
+  'contrast_a.pp', 'desat_blue.pp',
+  'film_16mm.pp', 'film_b+w.pp', 'film_blue_filter.pp',
+  'film_contrast.pp', 'film_contrast_blue.pp', 'film_contrast_green.pp', 'film_contrast_red.pp',
+  'film_sepia_ink.pp', 'film_silvertone.pp',
+  'horror_movie_special.pp', 'photo_negative.pp', 'photocopy.pp', 'posterize.pp',
+  'shitty_tv.pp',
+  'video_a.pp', 'video_bw.pp', 'video_security.pp'
+]
+
+const STAGE_PRESETS = ['FogOn', 'FogOff', 'bonusfx', 'bonusfx_optional', 'first', 'next', 'prev']
+
+const CAMERA_CUT_PRESETS = [
+  'coop_g_behind', 'coop_g_near', 'coop_g_closeup_hand', 'coop_g_closeup_head',
+  'coop_b_behind', 'coop_b_near', 'coop_b_closeup_hand', 'coop_b_closeup_head',
+  'coop_d_behind', 'coop_d_near', 'coop_d_closeup_hand', 'coop_d_closeup_head',
+  'coop_v_behind', 'coop_v_near', 'coop_v_closeup',
+  'coop_k_behind', 'coop_k_near', 'coop_k_closeup_hand', 'coop_k_closeup_head',
+  'coop_gv_behind', 'coop_gv_near', 'coop_gk_behind', 'coop_gk_near',
+  'coop_bg_behind', 'coop_bg_near', 'coop_bd_near',
+  'coop_bv_behind', 'coop_bv_near', 'coop_bk_behind', 'coop_bk_near',
+  'coop_dg_near', 'coop_dv_near',
+  'coop_kv_behind', 'coop_kv_near',
+  'coop_front_behind', 'coop_front_near',
+  'coop_all_behind', 'coop_all_far', 'coop_all_near',
+  'directed_all', 'directed_all_cam', 'directed_all_lt', 'directed_all_yeah',
+  'directed_bre', 'directed_brej', 'directed_crowd',
+  'directed_guitar', 'directed_guitar_np', 'directed_guitar_cls',
+  'directed_guitar_cam_pr', 'directed_guitar_cam_pt', 'directed_crowd_g',
+  'directed_bass', 'directed_bass_np', 'directed_bass_cam', 'directed_bass_cls', 'directed_crowd_b',
+  'directed_drums', 'directed_drums_lt', 'directed_drums_np', 'directed_drums_pnt', 'directed_drums_kd',
+  'directed_vocals', 'directed_vocals_np', 'directed_vocals_cls',
+  'directed_vocals_cam_pr', 'directed_vocals_cam_pt',
+  'directed_stagedive', 'directed_crowdsurf',
+  'directed_keys', 'directed_keys_np', 'directed_keys_cam',
+  'directed_duo_guitar', 'directed_duo_bass', 'directed_duo_drums', 'directed_duo_kv',
+  'directed_duo_gb', 'directed_duo_kg', 'directed_duo_kb'
+]
+
+const PERFORMER_TYPE_PRESETS = ['spotlight', 'singalong']
+const PERFORMER_TARGET_PRESETS = ['guitar', 'bass', 'drums', 'vocals', 'keys']
+
+function uniqueOptions(options: string[], value?: string): string[] {
+  return value && !options.includes(value) ? [...options, value] : options
+}
+
+function formatVenueLabel(value: string): string {
+  return value
+    .replace(/\[|\]/g, '')
+    .replace(/\.pp$/i, '')
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .trim()
+}
+
+function getVenueLaneLabel(lane: SelectedVenueEventRef['lane']): string {
+  switch (lane) {
+    case 'lighting': return 'Lighting'
+    case 'postProcessing': return 'Post FX'
+    case 'stage': return 'Stage FX'
+    case 'cameraCuts': return 'Camera Cut'
+    case 'performer': return 'Performer'
+    default: return lane
+  }
+}
+
+function VenueEventEditor({
+  selectedRef,
+  eventData,
+  onUpdate,
+  onDelete
+}: {
+  selectedRef: SelectedVenueEventRef
+  eventData: VenueLightingEvent | VenuePostProcessingEvent | VenueStageEvent | VenueCameraCutEvent | VenuePerformerEvent
+  onUpdate: (updates: Partial<VenueLightingEvent | VenuePostProcessingEvent | VenueStageEvent | VenueCameraCutEvent | VenuePerformerEvent>) => void
+  onDelete: () => void
+}): React.JSX.Element {
+  const laneLabel = getVenueLaneLabel(selectedRef.lane)
+
+  return (
+    <div className="note-editor">
+      <div className="property-section">
+        <div className="property-section-title">Venue Event</div>
+
+        <div className="property-group">
+          <label className="property-label">Lane</label>
+          <input className="property-input" value={laneLabel} readOnly />
+        </div>
+
+        <div className="property-group">
+          <label className="property-label">Tick</label>
+          <input
+            type="number"
+            className="property-input"
+            value={eventData.tick}
+            min={0}
+            onChange={(e) => onUpdate({ tick: Math.max(0, Number(e.target.value) || 0) })}
+          />
+        </div>
+
+        {selectedRef.lane === 'lighting' && (
+          <div className="property-group">
+            <label className="property-label">Cue</label>
+            <select
+              className="property-select"
+              value={(eventData as VenueLightingEvent).type}
+              onChange={(e) => onUpdate({ type: e.target.value })}
+            >
+              {uniqueOptions(LIGHTING_PRESETS, (eventData as VenueLightingEvent).type).map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {selectedRef.lane === 'postProcessing' && (
+          <div className="property-group">
+            <label className="property-label">Effect</label>
+            <select
+              className="property-select"
+              value={(eventData as VenuePostProcessingEvent).type}
+              onChange={(e) => onUpdate({ type: e.target.value })}
+            >
+              {uniqueOptions(POST_PROCESSING_PRESETS, (eventData as VenuePostProcessingEvent).type).map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {selectedRef.lane === 'stage' && (
+          <>
+            <div className="property-group">
+              <label className="property-label">Stage FX</label>
+              <select
+                className="property-select"
+                value={(eventData as VenueStageEvent).effect}
+                onChange={(e) => onUpdate({ effect: e.target.value })}
+              >
+                {uniqueOptions(STAGE_PRESETS, (eventData as VenueStageEvent).effect).map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+            <div className="property-group">
+              <label className="property-label">Duration</label>
+              <input
+                type="number"
+                className="property-input"
+                value={(eventData as VenueStageEvent).duration ?? 0}
+                min={VENUE_MIN_DURATION_TICKS}
+                onChange={(e) => onUpdate({ duration: Math.max(VENUE_MIN_DURATION_TICKS, Number(e.target.value) || VENUE_MIN_DURATION_TICKS) })}
+              />
+            </div>
+          </>
+        )}
+
+        {selectedRef.lane === 'cameraCuts' && (
+          <div className="property-group">
+            <label className="property-label">Cut</label>
+            <select
+              className="property-select"
+              value={(eventData as VenueCameraCutEvent).subject}
+              onChange={(e) => onUpdate({ subject: e.target.value })}
+            >
+              {uniqueOptions(CAMERA_CUT_PRESETS, (eventData as VenueCameraCutEvent).subject).map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {selectedRef.lane === 'performer' && (
+          <>
+            <div className="property-group">
+              <label className="property-label">Type</label>
+              <select
+                className="property-select"
+                value={(eventData as VenuePerformerEvent).type}
+                onChange={(e) => onUpdate({ type: e.target.value })}
+              >
+                {uniqueOptions(PERFORMER_TYPE_PRESETS, (eventData as VenuePerformerEvent).type).map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+            <div className="property-group">
+              <label className="property-label">Performer</label>
+              <select
+                className="property-select"
+                value={(eventData as VenuePerformerEvent).performer ?? ''}
+                onChange={(e) => onUpdate({ performer: e.target.value })}
+              >
+                {uniqueOptions(PERFORMER_TARGET_PRESETS, (eventData as VenuePerformerEvent).performer).map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+            <div className="property-group">
+              <label className="property-label">Duration</label>
+              <input
+                type="number"
+                className="property-input"
+                value={(eventData as VenuePerformerEvent).duration}
+                min={VENUE_MIN_DURATION_TICKS}
+                onChange={(e) => onUpdate({ duration: Math.max(VENUE_MIN_DURATION_TICKS, Number(e.target.value) || VENUE_MIN_DURATION_TICKS) })}
+              />
+            </div>
+          </>
+        )}
+
+        <div className="property-group">
+          <label className="property-label">Preview</label>
+          <input className="property-input" readOnly value={formatVenueLabel(
+            selectedRef.lane === 'lighting'
+              ? (eventData as VenueLightingEvent).type
+              : selectedRef.lane === 'postProcessing'
+                ? (eventData as VenuePostProcessingEvent).type
+                : selectedRef.lane === 'stage'
+                  ? (eventData as VenueStageEvent).effect
+                  : selectedRef.lane === 'cameraCuts'
+                    ? (eventData as VenueCameraCutEvent).subject
+                    : `${(eventData as VenuePerformerEvent).type} ${(eventData as VenuePerformerEvent).performer ?? ''}`
+          )} />
+        </div>
+      </div>
+
+      <div className="property-actions">
+        <button className="property-button property-button-danger" onClick={onDelete}>
+          Delete {laneLabel}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 // Album art component with drag/drop
 function AlbumArt({
@@ -584,7 +848,7 @@ function TempoChangeRow({
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '52px 44px 1fr 34px 18px',
+      gridTemplateColumns: '52px 44px 1fr 34px 22px 22px 18px',
       alignItems: 'center', gap: 4, padding: '3px 6px',
       borderBottom: '1px solid #2a2a3e', fontSize: 12
     }}>
@@ -623,12 +887,130 @@ function TempoChangeRow({
         min={1} max={999} step={0.01}
       />
       <span style={{ color: '#888', fontSize: 11 }}>BPM</span>
+      {/* ± BPM nudge buttons — click = ±1, Ctrl+click = ±0.1 */}
+      <button
+        title="Decrease BPM (Ctrl: -0.1)"
+        style={{ background: '#2a2a3e', border: '1px solid #444', borderRadius: 3, color: '#ccc', cursor: 'pointer', fontSize: 12, padding: '0 5px', lineHeight: '18px' }}
+        onClick={(e) => { const delta = e.ctrlKey || e.metaKey ? 0.1 : 1; const v = Math.max(1, Math.round((event.bpm - delta) * 100) / 100); onUpdateBpm(event.tick, v) }}
+      >-</button>
+      <button
+        title="Increase BPM (Ctrl: +0.1)"
+        style={{ background: '#2a2a3e', border: '1px solid #444', borderRadius: 3, color: '#ccc', cursor: 'pointer', fontSize: 12, padding: '0 5px', lineHeight: '18px' }}
+        onClick={(e) => { const delta = e.ctrlKey || e.metaKey ? 0.1 : 1; const v = Math.min(999, Math.round((event.bpm + delta) * 100) / 100); onUpdateBpm(event.tick, v) }}
+      >+</button>
       <button
         style={{
           background: 'none', border: 'none', color: '#f66', cursor: 'pointer',
           fontSize: 14, padding: '0 2px', lineHeight: 1
         }}
         title="Delete tempo change"
+        onClick={() => onDelete(event.tick)}
+      >✕</button>
+    </div>
+  )
+}
+
+// Editable row for a single time signature event
+function TimeSignatureRow({
+  event,
+  tempoEvents,
+  onUpdate,
+  onMove,
+  onDelete
+}: {
+  event: TimeSignature
+  tempoEvents: TempoEvent[]
+  onUpdate: (tick: number, updates: Partial<TimeSignature>) => void
+  onMove: (oldTick: number, newTick: number, event: TimeSignature) => void
+  onDelete: (tick: number) => void
+}): React.JSX.Element {
+  const [draftTick, setDraftTick] = useState<string>(String(event.tick))
+
+  useEffect(() => { setDraftTick(String(event.tick)) }, [event.tick])
+
+  const commitTick = (): void => {
+    const parsed = parseInt(draftTick)
+    if (!isNaN(parsed) && parsed >= 0 && parsed !== event.tick) {
+      onMove(event.tick, parsed, event)
+    } else {
+      setDraftTick(String(event.tick))
+    }
+  }
+
+  const measure = Math.floor(event.tick / 1920) + 1
+  const beat = Math.floor((event.tick % 1920) / 480) + 1
+  const secs = tickToSeconds(event.tick, tempoEvents)
+  const mins = Math.floor(secs / 60)
+  const remSecs = secs - mins * 60
+  const timeStr = `${mins}:${remSecs < 10 ? '0' : ''}${remSecs.toFixed(1)}`
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '52px 44px 36px 18px 36px 18px',
+      alignItems: 'center',
+      gap: 4,
+      padding: '3px 6px',
+      borderBottom: '1px solid #2a2a3e',
+      fontSize: 12
+    }}>
+      <input
+        type="number"
+        style={{
+          background: '#1a1a2e', border: '1px solid #555', borderRadius: 3,
+          color: '#8dd0ff', padding: '2px 4px', fontSize: 11,
+          fontFamily: 'monospace', fontWeight: 600, width: '100%', minWidth: 0
+        }}
+        title="Tick position — edit to move this time signature change"
+        value={draftTick}
+        min={0}
+        onChange={(e) => setDraftTick(e.target.value)}
+        onBlur={commitTick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          else if (e.key === 'Escape') { setDraftTick(String(event.tick)); e.currentTarget.blur() }
+        }}
+      />
+      <span style={{ color: '#999', fontSize: 10, fontFamily: 'monospace', textAlign: 'right' }}
+        title={`Measure ${measure}, Beat ${beat}`}>
+        {timeStr}
+      </span>
+      <input
+        type="number"
+        style={{
+          background: '#1a1a2e', border: '1px solid #444', borderRadius: 3,
+          color: '#eee', padding: '2px 4px', fontSize: 12, width: '100%', minWidth: 0
+        }}
+        value={event.numerator}
+        min={1}
+        max={32}
+        onChange={(e) => {
+          const v = parseInt(e.target.value)
+          if (!isNaN(v) && v >= 1 && v <= 32) onUpdate(event.tick, { numerator: v })
+        }}
+      />
+      <span style={{ color: '#888', fontSize: 12, textAlign: 'center' }}>/</span>
+      <input
+        type="number"
+        style={{
+          background: '#1a1a2e', border: '1px solid #444', borderRadius: 3,
+          color: '#eee', padding: '2px 4px', fontSize: 12, width: '100%', minWidth: 0
+        }}
+        value={event.denominator}
+        min={1}
+        max={32}
+        step={1}
+        onChange={(e) => {
+          const v = parseInt(e.target.value)
+          if (!isNaN(v) && v >= 1 && v <= 32) onUpdate(event.tick, { denominator: v })
+        }}
+      />
+      <button
+        style={{
+          background: 'none', border: 'none', color: '#f66', cursor: 'pointer',
+          fontSize: 14, padding: '0 2px', lineHeight: 1
+        }}
+        title="Delete time signature change"
         onClick={() => onDelete(event.tick)}
       >✕</button>
     </div>
@@ -648,6 +1030,16 @@ function MetadataEditor({
   onUpdateTempoEvent,
   onMoveTempoEvent,
   onDeleteTempoEvent,
+  timeSignatures,
+  onAddTimeSignature,
+  onUpdateTimeSignature,
+  onMoveTimeSignature,
+  onDeleteTimeSignature,
+  songSections,
+  onAddSongSection,
+  onUpdateSongSection,
+  onMoveSongSection,
+  onDeleteSongSection,
   currentTick
 }: {
   metadata: SongMetadata
@@ -661,9 +1053,21 @@ function MetadataEditor({
   onUpdateTempoEvent: (tick: number, bpm: number) => void
   onMoveTempoEvent: (oldTick: number, newTick: number, bpm: number) => void
   onDeleteTempoEvent: (tick: number) => void
+  timeSignatures: TimeSignature[]
+  onAddTimeSignature: (event: TimeSignature) => void
+  onUpdateTimeSignature: (tick: number, updates: Partial<TimeSignature>) => void
+  onMoveTimeSignature: (oldTick: number, newTick: number, event: TimeSignature) => void
+  onDeleteTimeSignature: (tick: number) => void
+  songSections: SongSection[]
+  onAddSongSection: (section: Omit<SongSection, 'id'>) => void
+  onUpdateSongSection: (id: string, updates: Partial<SongSection>) => void
+  onMoveSongSection: (id: string, newTick: number) => void
+  onDeleteSongSection: (id: string) => void
   currentTick: number
 }): React.JSX.Element {
   const [newTempoBpm, setNewTempoBpm] = useState('')
+  const [newTimeSigNum, setNewTimeSigNum] = useState('4')
+  const [newTimeSigDen, setNewTimeSigDen] = useState('4')
   return (
     <div className="metadata-editor">
       {/* Album Art at top */}
@@ -810,6 +1214,169 @@ function MetadataEditor({
       </div>
 
       <div className="property-section">
+        <div className="property-section-title">Time Signature</div>
+
+        <div className="property-group">
+          <label className="property-label">Initial Time Signature</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              type="number"
+              className="property-input"
+              value={timeSignatures[0]?.numerator ?? 4}
+              onChange={(e) => {
+                const v = parseInt(e.target.value)
+                if (!isNaN(v) && v >= 1 && v <= 32) onUpdateTimeSignature(0, { numerator: v })
+              }}
+              min={1}
+              max={32}
+              style={{ width: 80 }}
+            />
+            <span style={{ color: '#999' }}>/</span>
+            <input
+              type="number"
+              className="property-input"
+              value={timeSignatures[0]?.denominator ?? 4}
+              onChange={(e) => {
+                const v = parseInt(e.target.value)
+                if (!isNaN(v) && v >= 1 && v <= 32) onUpdateTimeSignature(0, { denominator: v })
+              }}
+              min={1}
+              max={32}
+              style={{ width: 80 }}
+            />
+          </div>
+        </div>
+
+        {timeSignatures.length > 1 && (
+          <div style={{ marginTop: 8, marginBottom: 8 }}>
+            <label className="property-label" style={{ marginBottom: 4, display: 'block' }}>Signature Changes</label>
+            <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid #333', borderRadius: 4 }}>
+              {timeSignatures.slice(1).map((ts) => (
+                <TimeSignatureRow
+                  key={ts.tick}
+                  event={ts}
+                  tempoEvents={tempoEvents}
+                  onUpdate={onUpdateTimeSignature}
+                  onMove={onMoveTimeSignature}
+                  onDelete={onDeleteTimeSignature}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 4 }}>
+          <input
+            type="number"
+            placeholder="Num"
+            style={{
+              width: 70, background: '#1a1a2e', border: '1px solid #444', borderRadius: 4,
+              color: '#eee', padding: '4px 6px', fontSize: 12
+            }}
+            value={newTimeSigNum}
+            onChange={(e) => setNewTimeSigNum(e.target.value)}
+            min={1}
+            max={32}
+          />
+          <span style={{ color: '#888' }}>/</span>
+          <input
+            type="number"
+            placeholder="Den"
+            style={{
+              width: 70, background: '#1a1a2e', border: '1px solid #444', borderRadius: 4,
+              color: '#eee', padding: '4px 6px', fontSize: 12
+            }}
+            value={newTimeSigDen}
+            onChange={(e) => setNewTimeSigDen(e.target.value)}
+            min={1}
+            max={32}
+          />
+          <button
+            style={{
+              background: '#8dd0ff', border: 'none', borderRadius: 4, color: '#081018',
+              padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap'
+            }}
+            title={`Add time signature change at current playhead position (tick ${currentTick})`}
+            onClick={() => {
+              const num = parseInt(newTimeSigNum)
+              const den = parseInt(newTimeSigDen)
+              if (!isNaN(num) && !isNaN(den) && num >= 1 && num <= 32 && den >= 1 && den <= 32 && currentTick > 0) {
+                onAddTimeSignature({ tick: currentTick, numerator: num, denominator: den })
+              }
+            }}
+          >+ At Playhead</button>
+        </div>
+        <div className="difficulty-hint">Add time signature changes at the current playhead position</div>
+      </div>
+
+      <div className="property-section">
+        <div className="property-section-title">Song Sections</div>
+
+        {songSections.length > 0 ? (
+          <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #333', borderRadius: 4 }}>
+            {songSections.map((section) => (
+              <div
+                key={section.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '64px 1fr 18px',
+                  gap: 4,
+                  alignItems: 'center',
+                  padding: '4px 6px',
+                  borderBottom: '1px solid #2a2a3e'
+                }}
+              >
+                <input
+                  type="number"
+                  value={section.tick}
+                  min={0}
+                  style={{
+                    background: '#1a1a2e', border: '1px solid #555', borderRadius: 3,
+                    color: '#9cd89a', padding: '2px 4px', fontSize: 11,
+                    fontFamily: 'monospace', fontWeight: 600
+                  }}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value)
+                    if (!isNaN(v) && v >= 0) onMoveSongSection(section.id, v)
+                  }}
+                />
+                <input
+                  type="text"
+                  value={section.name}
+                  className="property-input"
+                  style={{ padding: '4px 6px', fontSize: 12 }}
+                  onChange={(e) => onUpdateSongSection(section.id, { name: e.target.value })}
+                  placeholder="Section name"
+                />
+                <button
+                  style={{
+                    background: 'none', border: 'none', color: '#f66', cursor: 'pointer',
+                    fontSize: 14, padding: '0 2px', lineHeight: 1
+                  }}
+                  title="Delete section"
+                  onClick={() => onDeleteSongSection(section.id)}
+                >x</button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="difficulty-hint">No sections yet</div>
+        )}
+
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 8 }}>
+          <button
+            style={{
+              background: '#9cd89a', border: 'none', borderRadius: 4, color: '#071008',
+              padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600
+            }}
+            title={`Add section at current playhead position (tick ${currentTick})`}
+            onClick={() => onAddSongSection({ tick: currentTick, name: 'section' })}
+          >+ At Playhead</button>
+        </div>
+        <div className="difficulty-hint">Use labels like intro, verse, chorus, solo, outro</div>
+      </div>
+
+      <div className="property-section">
         <div className="property-section-title">Difficulty Ratings</div>
 
         <div className="property-row">
@@ -899,12 +1466,25 @@ function MetadataEditor({
 // Main Property Panel component
 export function PropertyPanel(): React.JSX.Element {
   const { activeSongId } = useProjectStore()
+  const bottomPanelTab = useUIStore((state) => state.bottomPanelTab)
+  const selectedVenueEvent = useUIStore((state) => state.selectedVenueEvent)
+  const setSelectedVenueEvent = useUIStore((state) => state.setSelectedVenueEvent)
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([])
   const [selectedVocalNoteIds, setSelectedVocalNoteIds] = useState<string[]>([])
   const [notes, setNotes] = useState<Note[]>([])
   const [vocalNotes, setVocalNotes] = useState<VocalNote[]>([])
   const [metadata, setMetadata] = useState<SongMetadata | null>(null)
   const [tempoEvents, setTempoEvents] = useState<{ tick: number; bpm: number }[]>([])
+  const [timeSignatures, setTimeSignatures] = useState<TimeSignature[]>([])
+  const [songSections, setSongSections] = useState<SongSection[]>([])
+  const [venueTrack, setVenueTrack] = useState<VenueTrackData>({
+    autoGenerated: false,
+    lighting: [],
+    postProcessing: [],
+    stage: [],
+    performer: [],
+    cameraCuts: []
+  })
   const [folderPath, setFolderPath] = useState('')
   const [currentTick, setCurrentTick] = useState(0)
 
@@ -922,6 +1502,9 @@ export function PropertyPanel(): React.JSX.Element {
     setVocalNotes(init.song.vocalNotes || [])
     setMetadata(init.song.metadata)
     setTempoEvents(init.song.tempoEvents)
+    setTimeSignatures(init.song.timeSignatures || [{ tick: 0, numerator: 4, denominator: 4 }])
+    setSongSections(init.song.songSections || [])
+    setVenueTrack(init.song.venueTrack)
     setFolderPath(init.song.folderPath)
     setCurrentTick(init.currentTick)
 
@@ -932,11 +1515,32 @@ export function PropertyPanel(): React.JSX.Element {
       if (state.song.vocalNotes !== prev.song.vocalNotes) setVocalNotes(state.song.vocalNotes || [])
       if (state.song.metadata !== prev.song.metadata) setMetadata(state.song.metadata)
       if (state.song.tempoEvents !== prev.song.tempoEvents) setTempoEvents(state.song.tempoEvents)
+      if (state.song.timeSignatures !== prev.song.timeSignatures) setTimeSignatures(state.song.timeSignatures || [{ tick: 0, numerator: 4, denominator: 4 }])
+      if (state.song.songSections !== prev.song.songSections) setSongSections(state.song.songSections || [])
+      if (state.song.venueTrack !== prev.song.venueTrack) setVenueTrack(state.song.venueTrack)
       if (state.song.folderPath !== prev.song.folderPath) setFolderPath(state.song.folderPath)
       if (state.currentTick !== prev.currentTick) setCurrentTick(state.currentTick)
     })
     return unsub
   }, [activeSongId])
+
+  const selectedVenueEventData = useMemo(() => {
+    if (!selectedVenueEvent) return null
+    switch (selectedVenueEvent.lane) {
+      case 'lighting':
+        return venueTrack.lighting.find((event) => event.id === selectedVenueEvent.id) ?? null
+      case 'postProcessing':
+        return venueTrack.postProcessing.find((event) => event.id === selectedVenueEvent.id) ?? null
+      case 'stage':
+        return venueTrack.stage.find((event) => event.id === selectedVenueEvent.id) ?? null
+      case 'cameraCuts':
+        return venueTrack.cameraCuts.find((event) => event.id === selectedVenueEvent.id) ?? null
+      case 'performer':
+        return venueTrack.performer.find((event) => event.id === selectedVenueEvent.id) ?? null
+      default:
+        return null
+    }
+  }, [selectedVenueEvent, venueTrack])
 
   if (!activeSongId) {
     return (
@@ -998,6 +1602,25 @@ export function PropertyPanel(): React.JSX.Element {
     songStore.getState().updateMetadata(updates)
   }
 
+  const handleVenueUpdate = (updates: Partial<VenueLightingEvent | VenuePostProcessingEvent | VenueStageEvent | VenueCameraCutEvent | VenuePerformerEvent>): void => {
+    if (!selectedVenueEvent) return
+    const lane = selectedVenueEvent.lane
+    const laneEvents = songStore.getState().song.venueTrack[lane] as Array<VenueLightingEvent | VenuePostProcessingEvent | VenueStageEvent | VenueCameraCutEvent | VenuePerformerEvent>
+    const nextLane = laneEvents
+      .map((event) => (event.id === selectedVenueEvent.id ? { ...event, ...updates } : event))
+      .sort((a, b) => a.tick - b.tick)
+    songStore.getState().updateVenueTrack({ [lane]: nextLane } as Partial<VenueTrackData>)
+  }
+
+  const handleVenueDelete = (): void => {
+    if (!selectedVenueEvent) return
+    const lane = selectedVenueEvent.lane
+    const laneEvents = songStore.getState().song.venueTrack[lane] as Array<VenueLightingEvent | VenuePostProcessingEvent | VenueStageEvent | VenueCameraCutEvent | VenuePerformerEvent>
+    const nextLane = laneEvents.filter((event) => event.id !== selectedVenueEvent.id)
+    songStore.getState().updateVenueTrack({ [lane]: nextLane } as Partial<VenueTrackData>)
+    setSelectedVenueEvent(null)
+  }
+
   const handleBpmUpdate = (newBpm: number): void => {
     songStore.getState().updateTempoEvent(0, newBpm)
   }
@@ -1024,6 +1647,13 @@ export function PropertyPanel(): React.JSX.Element {
           <div className="empty-state">
             <div className="empty-state-description">Loading...</div>
           </div>
+        ) : bottomPanelTab === 'video' && selectedVenueEvent && selectedVenueEventData ? (
+          <VenueEventEditor
+            selectedRef={selectedVenueEvent}
+            eventData={selectedVenueEventData}
+            onUpdate={handleVenueUpdate}
+            onDelete={handleVenueDelete}
+          />
         ) : selectedVocalNotes.length === 1 ? (
           // Single vocal note selected
           <VocalNoteEditor
@@ -1058,6 +1688,20 @@ export function PropertyPanel(): React.JSX.Element {
             onUpdateTempoEvent={(tick, bpm) => songStore.getState().updateTempoEvent(tick, bpm)}
             onMoveTempoEvent={(oldTick, newTick, bpm) => songStore.getState().moveTempoEvent(oldTick, newTick, bpm)}
             onDeleteTempoEvent={(tick) => songStore.getState().deleteTempoEvent(tick)}
+            timeSignatures={timeSignatures}
+            onAddTimeSignature={(event) => songStore.getState().addTimeSignature(event)}
+            onUpdateTimeSignature={(tick, updates) => songStore.getState().updateTimeSignature(tick, updates)}
+            onMoveTimeSignature={(oldTick, newTick, event) => {
+              if (oldTick === 0) return
+              songStore.getState().deleteTimeSignature(oldTick)
+              songStore.getState().addTimeSignature({ ...event, tick: newTick })
+            }}
+            onDeleteTimeSignature={(tick) => songStore.getState().deleteTimeSignature(tick)}
+            songSections={songSections}
+            onAddSongSection={(section) => songStore.getState().addSongSection(section)}
+            onUpdateSongSection={(id, updates) => songStore.getState().updateSongSection(id, updates)}
+            onMoveSongSection={(id, newTick) => songStore.getState().moveSongSection(id, newTick)}
+            onDeleteSongSection={(id) => songStore.getState().deleteSongSection(id)}
             currentTick={currentTick}
           />
         ) : selectedNotes.length === 1 ? (

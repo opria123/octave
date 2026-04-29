@@ -1,9 +1,9 @@
-// MIDI Editor - Piano roll style note editor
+﻿// MIDI Editor - Piano roll style note editor
 import { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from 'react'
 import { useProjectStore, getSongStore, useSettingsStore, useUIStore } from '../stores'
-import type { Note, NoteFlags, NoteModifiers, Instrument, DrumLane, GuitarLane, Difficulty, EditingTool, StarPowerPhrase, SoloSection, VocalNote, VocalPhrase, HarmonyPart, TempoEvent } from '../types'
+import type { Note, NoteFlags, NoteModifiers, Instrument, DrumLane, GuitarLane, Difficulty, EditingTool, StarPowerPhrase, SoloSection, LaneMarker, LaneMarkerType, VocalNote, VocalPhrase, HarmonyPart,TempoEvent } from '../types'
 import { PRO_KEYS_MIN, PRO_KEYS_MAX, SUSTAIN_THRESHOLD_MID, SUSTAIN_THRESHOLD_CHART } from '../types'
-import { playPitchPreview, stopPitchPreview } from '../services/audioService'
+import { playPitchPreview, stopPitchPreview, getAudioDuration, onAudioLoaded } from '../services/audioService'
 import './MidiEditor.css'
 
 // Build note flags from UI toggle modifiers
@@ -98,6 +98,28 @@ function midiNoteName(midi: number): string {
   return `${NOTE_NAMES[midi % 12]}${Math.floor(midi / 12) - 1}`
 }
 
+function formatLaneLabel(lane: string): string {
+  const labels: Record<string, string> = {
+    kick: 'Kick',
+    doubleKick: 'Kick 2x',
+    snare: 'Snare',
+    yellowTom: 'Yellow Tom',
+    yellowCymbal: 'Yellow Cymbal',
+    blueTom: 'Blue Tom',
+    blueCymbal: 'Blue Cymbal',
+    greenTom: 'Green Tom',
+    greenCymbal: 'Green Cymbal',
+    green: 'Green',
+    red: 'Red',
+    yellow: 'Yellow',
+    blue: 'Blue',
+    orange: 'Orange',
+    open: 'Open'
+  }
+
+  return labels[lane] || lane
+}
+
 // Generate vocal pitch lane labels (high to low for piano roll layout)
 const VOCAL_PITCH_LANES: string[] = []
 for (let p = MIDI_EDITOR_CONFIG.vocalPitchMax; p >= MIDI_EDITOR_CONFIG.vocalPitchMin; p--) {
@@ -152,7 +174,7 @@ function Grid({
 
     const w = canvas.clientWidth
     const h = canvas.clientHeight
-    if (w === 0 || h === 0) return // not laid out yet — ResizeObserver will trigger redraw
+    if (w === 0 || h === 0) return // not laid out yet â€” ResizeObserver will trigger redraw
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h }
     else ctx.clearRect(0, 0, w, h)
 
@@ -675,6 +697,171 @@ function SoloLane({
   )
 }
 
+// Lane marker colors and labels
+const LANE_MARKER_COLORS: Record<string, string> = {
+  drumRoll: 'rgba(255,140,0,0.55)',
+  trill: 'rgba(0,200,255,0.55)',
+  tremolo: 'rgba(255,220,0,0.55)',
+  bre: 'rgba(220,50,50,0.65)',
+  discoFlip: 'rgba(180,60,220,0.55)'
+}
+const LANE_MARKER_LABELS: Record<string, string> = {
+  drumRoll: 'Drum Roll', trill: 'Trill', tremolo: 'Tremolo', bre: 'BRE', discoFlip: 'Disco Flip'
+}
+function LaneMarkerLane({
+  markers,
+  instrument,
+  scrollX,
+  zoomLevel,
+  songStore,
+  editTool,
+  snapDivision
+}: {
+  markers: LaneMarker[]
+  instrument: Instrument
+  scrollX: number
+  zoomLevel: number
+  songStore: ReturnType<typeof getSongStore> | null
+  editTool: EditingTool
+  snapDivision: number
+}): React.JSX.Element {
+  const height = MIDI_EDITOR_CONFIG.spRowHeight
+  const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
+  const isDrum = instrument === 'drums'
+  const defaultType: LaneMarkerType = isDrum ? 'drumRoll' : 'trill'
+  const [activeType, setActiveType] = useState<LaneMarkerType>(defaultType)
+  const dragRef = useRef<{
+    mode: 'move' | 'resize-end'
+    markerId: string
+    startMouseX: number
+    originalTick: number
+    originalDuration: number
+  } | null>(null)
+
+  const instrumentMarkers = useMemo(
+    () => markers.filter((m) => m.instrument === instrument),
+    [markers, instrument]
+  )
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!songStore) return
+      const rect = e.currentTarget.getBoundingClientRect()
+      const mx = e.clientX - rect.left + scrollX
+      const clickTick = mx / pixelsPerTick
+
+      for (const marker of instrumentMarkers) {
+        const mX = marker.tick * pixelsPerTick - scrollX
+        const mW = marker.duration * pixelsPerTick
+        const localMx = e.clientX - rect.left
+        if (localMx >= mX && localMx <= mX + mW) {
+          if (editTool === 'erase') {
+            songStore.getState().deleteLaneMarker(marker.id)
+            return
+          }
+          if (localMx >= mX + mW - SP_HANDLE_WIDTH) {
+            dragRef.current = { mode: 'resize-end', markerId: marker.id, startMouseX: e.clientX, originalTick: marker.tick, originalDuration: marker.duration }
+          } else {
+            dragRef.current = { mode: 'move', markerId: marker.id, startMouseX: e.clientX, originalTick: marker.tick, originalDuration: marker.duration }
+          }
+          e.stopPropagation()
+          return
+        }
+      }
+
+      if (editTool === 'place') {
+        const snapTicks = 480 / snapDivision
+        const tick = Math.round(snapToGrid(clickTick, snapDivision, 480) / snapTicks) * snapTicks
+        songStore.getState().addLaneMarker({ tick, duration: 480, instrument, type: activeType })
+        const latest = songStore.getState().song.laneMarkers
+        const created = latest[latest.length - 1]
+        if (created) {
+          dragRef.current = { mode: 'resize-end', markerId: created.id, startMouseX: e.clientX, originalTick: created.tick, originalDuration: created.duration }
+        }
+        e.stopPropagation()
+      }
+    },
+    [songStore, scrollX, pixelsPerTick, instrumentMarkers, editTool, instrument, snapDivision, activeType]
+  )
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent): void => {
+      if (!dragRef.current || !songStore) return
+      const drag = dragRef.current
+      const dx = e.clientX - drag.startMouseX
+      const dtick = dx / pixelsPerTick
+      const snapTicks = 480 / snapDivision
+      if (drag.mode === 'move') {
+        const newTick = Math.max(0, Math.round((drag.originalTick + dtick) / snapTicks) * snapTicks)
+        songStore.getState().updateLaneMarker(drag.markerId, { tick: newTick })
+      } else {
+        const newDuration = Math.max(snapTicks, Math.round((drag.originalDuration + dtick) / snapTicks) * snapTicks)
+        songStore.getState().updateLaneMarker(drag.markerId, { duration: newDuration })
+      }
+    }
+    const handleMouseUp = (): void => { dragRef.current = null }
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [songStore, pixelsPerTick, snapDivision])
+
+  const availableTypes: LaneMarkerType[] = isDrum
+    ? ['drumRoll', 'bre', 'discoFlip']
+    : ['trill', 'tremolo', 'bre']
+
+  return (
+    <div style={{ position: 'relative', flex: 1, height, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Type selector tabs */}
+      <div style={{ display: 'flex', height: 12, gap: 2, paddingLeft: 2, paddingTop: 1, flexShrink: 0 }}>
+        {availableTypes.map((t) => (
+          <button
+            key={t}
+            onClick={() => setActiveType(t)}
+            style={{
+              fontSize: 8, padding: '0 3px', height: 10, border: 'none', borderRadius: 2, cursor: 'pointer',
+              backgroundColor: activeType === t ? LANE_MARKER_COLORS[t] : 'rgba(255,255,255,0.08)',
+              color: activeType === t ? '#fff' : 'rgba(255,255,255,0.5)'
+            }}
+          >{LANE_MARKER_LABELS[t]}</button>
+        ))}
+      </div>
+      {/* Marker canvas area */}
+      <div
+        className="midi-sp-lane"
+        style={{ flex: 1, cursor: editTool === 'place' ? 'crosshair' : editTool === 'erase' ? 'pointer' : 'default', position: 'relative', overflow: 'hidden' }}
+        onMouseDown={handleMouseDown}
+      >
+        {instrumentMarkers.map((marker) => {
+          const x = marker.tick * pixelsPerTick - scrollX
+          const w = Math.max(marker.duration * pixelsPerTick, 4)
+          return (
+            <div
+              key={marker.id}
+              style={{
+                position: 'absolute',
+                left: x, top: 1, width: w, height: height - 14,
+                backgroundColor: LANE_MARKER_COLORS[marker.type] || 'rgba(255,255,255,0.3)',
+                borderRadius: 2,
+                border: '1px solid rgba(255,255,255,0.3)',
+                pointerEvents: 'none'
+              }}
+            >
+              {w > 30 && (
+                <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', fontSize: 8, color: '#fff', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+                  {LANE_MARKER_LABELS[marker.type]}
+                </span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // Notes component - renders notes on a Canvas overlay (not DOM divs)
 function Notes({
   notes,
@@ -768,7 +955,7 @@ function Notes({
 
     const w = canvas.clientWidth
     const h = canvas.clientHeight
-    if (w === 0 || h === 0) return // not laid out yet — ResizeObserver will trigger redraw
+    if (w === 0 || h === 0) return // not laid out yet â€” ResizeObserver will trigger redraw
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h }
     else ctx.clearRect(0, 0, w, h)
 
@@ -1074,19 +1261,25 @@ function VocalNotes({
   // Build visible note rects
   const visibleNotes = useMemo(() => {
     const cullWidth = Math.max(canvasWidth, width)
+    const totalHeight = pitchRange * rowHeight
     const result: { note: VocalNote; x: number; y: number; w: number; h: number }[] = []
     for (const note of partNotes) {
       const x = note.tick * pixelsPerTick - scrollX
       const w = Math.max(note.duration * pixelsPerTick, 12)
       if (x + w < 0 || x > cullWidth) continue
-      const pitch = typeof note.lane === 'number' ? note.lane : 60
-      const pitchIdx = pitchMax - Math.min(Math.max(pitch, pitchMin), pitchMax) // High pitches at top
-      const y = pitchIdx * rowHeight + 1
-      const h = rowHeight - 2
-      result.push({ note, x, y, w, h })
+      if (note.isPitchless) {
+        // Talkie: spans full pitch area height
+        result.push({ note, x, y: 0, w, h: totalHeight })
+      } else {
+        const pitch = typeof note.lane === 'number' ? note.lane : 60
+        const pitchIdx = pitchMax - Math.min(Math.max(pitch, pitchMin), pitchMax) // High pitches at top
+        const y = pitchIdx * rowHeight + 1
+        const h = rowHeight - 2
+        result.push({ note, x, y, w, h })
+      }
     }
     return result
-  }, [partNotes, pixelsPerTick, scrollX, width, canvasWidth, pitchMax, pitchMin, rowHeight])
+  }, [partNotes, pixelsPerTick, scrollX, width, canvasWidth, pitchMax, pitchMin, rowHeight, pitchRange])
 
   // Draw
   useEffect(() => {
@@ -1178,8 +1371,54 @@ function VocalNotes({
       ctx.globalAlpha = 1.0
     }
 
+    // Draw talkies first as full-height translucent gray bars (behind other notes)
+    for (const { note, x, w: nw } of visibleNotes) {
+      if (!note.isPitchless) continue
+      const isSelected = selectedSet.has(note.id)
+      // Full-height translucent gray bar
+      ctx.fillStyle = 'rgba(160,160,160,0.22)'
+      ctx.fillRect(x, 0, nw, totalHeight)
+      // Diagonal hatch lines
+      ctx.save()
+      ctx.rect(x, 0, nw, totalHeight)
+      ctx.clip()
+      ctx.strokeStyle = 'rgba(200,200,200,0.18)'
+      ctx.lineWidth = 1
+      for (let hx = x - totalHeight; hx < x + nw + totalHeight; hx += 10) {
+        ctx.beginPath()
+        ctx.moveTo(hx, 0)
+        ctx.lineTo(hx + totalHeight, totalHeight)
+        ctx.stroke()
+      }
+      ctx.restore()
+      // Border
+      ctx.strokeStyle = isSelected ? '#FFFFFF' : 'rgba(200,200,200,0.5)'
+      ctx.lineWidth = isSelected ? 2 : 1
+      ctx.strokeRect(x, 0, nw, totalHeight)
+      // "TALKIE" label if wide enough
+      if (nw > 45) {
+        ctx.fillStyle = 'rgba(255,255,255,0.7)'
+        ctx.font = 'bold 10px sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText('TALKIE', x + nw / 2, totalHeight / 2)
+      }
+
+      if (note.lyric) {
+        ctx.fillStyle = '#FFFFFF'
+        ctx.font = 'bold 11px sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(note.lyric, x + nw / 2, totalHeight / 2, Math.max(nw - 8, 24))
+      }
+
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'alphabetic'
+    }
+
     // Draw notes
     for (const { note, x, y, w: nw, h: nh } of visibleNotes) {
+      if (note.isPitchless) continue // already drawn as talkie above
       const isSelected = selectedSet.has(note.id)
       const isPercussion = note.isPercussion
 
@@ -1225,7 +1464,7 @@ function VocalNotes({
 
       ctx.globalAlpha = 1.0
 
-      // Lyric text — drawn above the note bar for visibility
+      // Lyric text â€” drawn above the note bar for visibility
       if (note.lyric) {
         ctx.fillStyle = '#FFFFFF'
         ctx.font = 'bold 11px sans-serif'
@@ -1531,10 +1770,11 @@ function ProKeysNotes({
 function MidiEditToolSelector(): React.JSX.Element {
   const editTool = useUIStore((s) => s.editTool)
   const setEditTool = useUIStore((s) => s.setEditTool)
+  const hotkeys = useSettingsStore((s) => s.hotkeys)
   const tools: { id: EditingTool; label: string; icon: string; shortcut: string }[] = [
-    { id: 'select', label: 'Select', icon: '🖱️', shortcut: '1' },
-    { id: 'place', label: 'Place', icon: '✏️', shortcut: '2' },
-    { id: 'erase', label: 'Erase', icon: '🗑️', shortcut: '3' }
+    { id: 'select', label: 'Select', icon: '🖱️', shortcut: hotkeys.toolSelect },
+    { id: 'place', label: 'Place', icon: '✏️', shortcut: hotkeys.toolPlace },
+    { id: 'erase', label: 'Erase', icon: '🗑️', shortcut: hotkeys.toolErase }
   ]
 
   return (
@@ -1558,14 +1798,16 @@ function MidiEditToolSelector(): React.JSX.Element {
 function NoteModifierToggles(): React.JSX.Element {
   const mods = useUIStore((s) => s.noteModifiers)
   const toggle = useUIStore((s) => s.toggleModifier)
+  const hotkeys = useSettingsStore((s) => s.hotkeys)
 
   const buttons: { key: keyof typeof mods; label: string; shortcut: string; activeColor: string }[] = [
-    { key: 'cymbalOrTap', label: 'Cymbal/Tap', shortcut: 'S', activeColor: '#FFD700' },
-    { key: 'ghostOrHopo', label: 'Ghost/HOPO', shortcut: 'G', activeColor: '#88BBFF' },
-    { key: 'accent', label: 'Accent', shortcut: 'F', activeColor: '#FF6666' },
-    { key: 'openOrKick', label: 'Open/Kick', shortcut: 'O', activeColor: '#CC44FF' },
-    { key: 'starPower', label: 'Star Power', shortcut: 'P', activeColor: '#00CED1' },
-    { key: 'solo', label: 'Solo', shortcut: 'L', activeColor: '#FFD700' }
+    { key: 'cymbalOrTap', label: 'Cymbal/Tap', shortcut: hotkeys.toggleCymbalOrTap, activeColor: '#FFD700' },
+    { key: 'ghostOrHopo', label: 'Ghost/HOPO', shortcut: hotkeys.toggleGhostOrHopo, activeColor: '#88BBFF' },
+    { key: 'accent', label: 'Accent', shortcut: hotkeys.toggleAccent, activeColor: '#FF6666' },
+    { key: 'openOrKick', label: 'Open/Kick', shortcut: hotkeys.toggleOpenOrKick, activeColor: '#CC44FF' },
+    { key: 'starPower', label: 'Star Power', shortcut: hotkeys.toggleStarPower, activeColor: '#00CED1' },
+    { key: 'solo', label: 'Solo', shortcut: hotkeys.toggleSolo, activeColor: '#FFD700' },
+    { key: 'talkie', label: 'Talkie', shortcut: hotkeys.toggleTalkie, activeColor: '#888888' }
   ]
 
   return (
@@ -1594,6 +1836,7 @@ function MidiShortcutHelpButton(): React.JSX.Element {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const [panelStyle, setPanelStyle] = useState<{ top: number; left: number; maxHeight: number } | null>(null)
+  const hotkeys = useSettingsStore((s) => s.hotkeys)
 
   useEffect(() => {
     if (!open) return
@@ -1673,25 +1916,27 @@ function MidiShortcutHelpButton(): React.JSX.Element {
           <div className="shortcut-help-title">Keyboard Shortcuts</div>
           <div className="shortcut-help-section">
             <div className="shortcut-help-section-title">Tools</div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>1</kbd></div><span className="shortcut-desc">Select tool</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>2</kbd></div><span className="shortcut-desc">Place tool</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>3</kbd></div><span className="shortcut-desc">Erase tool</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toolSelect}</kbd></div><span className="shortcut-desc">Select tool</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toolPlace}</kbd></div><span className="shortcut-desc">Place tool</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toolErase}</kbd></div><span className="shortcut-desc">Erase tool</span></div>
           </div>
           <div className="shortcut-help-section">
             <div className="shortcut-help-section-title">Note Modifiers (toggle)</div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>S</kbd></div><span className="shortcut-desc">Cymbal / Tap</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>G</kbd></div><span className="shortcut-desc">Ghost / HOPO</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>F</kbd></div><span className="shortcut-desc">Accent</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>O</kbd></div><span className="shortcut-desc">Open / Kick</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>P</kbd></div><span className="shortcut-desc">Star Power mode</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toggleCymbalOrTap}</kbd></div><span className="shortcut-desc">Cymbal / Tap</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toggleGhostOrHopo}</kbd></div><span className="shortcut-desc">Ghost / HOPO</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toggleAccent}</kbd></div><span className="shortcut-desc">Accent</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toggleOpenOrKick}</kbd></div><span className="shortcut-desc">Open / Kick</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toggleStarPower}</kbd></div><span className="shortcut-desc">Star Power mode</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toggleSolo}</kbd></div><span className="shortcut-desc">Solo section mode</span></div>
           </div>
           <div className="shortcut-help-section">
             <div className="shortcut-help-section-title">Editing</div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>Ctrl</kbd><span className="shortcut-plus">+</span><kbd>C</kbd></div><span className="shortcut-desc">Copy</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>Ctrl</kbd><span className="shortcut-plus">+</span><kbd>V</kbd></div><span className="shortcut-desc">Paste at playhead</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>Ctrl</kbd><span className="shortcut-plus">+</span><kbd>Z</kbd></div><span className="shortcut-desc">Undo</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>Del</kbd></div><span className="shortcut-desc">Delete selected</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>Ctrl</kbd><span className="shortcut-plus">+</span><kbd>P</kbd></div><span className="shortcut-desc">Star Power from selection</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.copy}</kbd></div><span className="shortcut-desc">Copy</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.paste}</kbd></div><span className="shortcut-desc">Paste at playhead</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.undo}</kbd></div><span className="shortcut-desc">Undo</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.redo}</kbd></div><span className="shortcut-desc">Redo</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.deleteSelection}</kbd></div><span className="shortcut-desc">Delete selected</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.createStarPower}</kbd></div><span className="shortcut-desc">Star Power from selection</span></div>
             <div className="shortcut-row"><div className="shortcut-keys"><kbd>Esc</kbd></div><span className="shortcut-desc">Clear selection</span></div>
           </div>
           <div className="shortcut-help-section">
@@ -1703,7 +1948,7 @@ function MidiShortcutHelpButton(): React.JSX.Element {
           <div className="shortcut-help-section">
             <div className="shortcut-help-section-title">Pro Guitar/Bass</div>
             <div className="shortcut-row"><div className="shortcut-keys"><kbd>Dbl-click</kbd></div><span className="shortcut-desc">Edit fret number inline</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>↑</kbd> / <kbd>↓</kbd></div><span className="shortcut-desc">Fret +1 / −1</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>Up</kbd> / <kbd>Down</kbd></div><span className="shortcut-desc">Fret +1 / -1</span></div>
           </div>
         </div>
       )}
@@ -1887,7 +2132,7 @@ export function MidiEditor(): React.JSX.Element {
   const isUserScrolling = useRef(false)
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Get song store — use reactive selectors for data that changes during playback
+  // Get song store â€” use reactive selectors for data that changes during playback
   const songStore = activeSongId ? getSongStore(activeSongId) : null
   const editTool = useUIStore((s) => s.editTool)
   const [notes, setNotes] = useState<Note[]>([])
@@ -1895,6 +2140,7 @@ export function MidiEditor(): React.JSX.Element {
   const gridCursor = editTool === 'place' ? 'crosshair' : editTool === 'erase' ? eraserCursor : 'default'
   const [starPowerPhrases, setStarPowerPhrases] = useState<StarPowerPhrase[]>([])
   const [soloSections, setSoloSections] = useState<SoloSection[]>([])
+  const [laneMarkers, setLaneMarkers] = useState<LaneMarker[]>([])
   const [vocalNotes, setVocalNotes] = useState<VocalNote[]>([])
   const [vocalPhrases, setVocalPhrases] = useState<VocalPhrase[]>([])
   const [activeHarmonyPart, setActiveHarmonyPart] = useState<HarmonyPart>(0)
@@ -1907,6 +2153,32 @@ export function MidiEditor(): React.JSX.Element {
   const [currentTick, setCurrentTick] = useState(0)
   const [activeDifficulty, setActiveDifficulty] = useState<Difficulty>('expert')
   const [tempoEvents, setTempoEvents] = useState<TempoEvent[]>([{ tick: 0, bpm: 120 }])
+  const [audioDuration, setAudioDuration] = useState<number>(() => activeSongId ? getAudioDuration(activeSongId) : 0)
+
+  // Keep audioDuration in sync when audio loads or song changes
+  useEffect(() => {
+    if (!activeSongId) { setAudioDuration(0); return }
+    setAudioDuration(getAudioDuration(activeSongId))
+    return onAudioLoaded(activeSongId, (dur) => setAudioDuration(dur))
+  }, [activeSongId])
+
+  // Compute max scroll X to prevent infinite scroll past content end.
+  // This must be declared before any auto-scroll hooks that clamp against it.
+  const maxScrollX = useMemo(() => {
+    const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
+    const allTicks = [
+      ...notes.map((n) => n.tick + n.duration),
+      ...vocalNotes.map((n) => n.tick + n.duration),
+      ...starPowerPhrases.map((p) => p.tick + p.duration),
+      ...soloSections.map((s) => s.tick + s.duration),
+    ]
+    const lastNoteTick = allTicks.length > 0 ? Math.max(...allTicks) : 0
+    const bpm = tempoEvents[0]?.bpm ?? 120
+    const audioDurationTick = audioDuration > 0 ? (audioDuration * bpm * 480) / 60 : 0
+    const lastTick = Math.max(lastNoteTick, audioDurationTick)
+    const paddingTicks = (5 * bpm * 480) / 60
+    return Math.max(0, (lastTick + paddingTicks) * pixelsPerTick - dimensions.width * 0.5)
+  }, [notes, vocalNotes, starPowerPhrases, soloSections, zoomLevel, audioDuration, tempoEvents, dimensions.width])
 
   // Compute sustain threshold based on source format (doesn't change per song)
   const sustainThreshold = useMemo(() => {
@@ -1941,6 +2213,7 @@ export function MidiEditor(): React.JSX.Element {
     setNotes(init.song.notes)
     setStarPowerPhrases(init.song.starPowerPhrases || [])
     setSoloSections(init.song.soloSections || [])
+    setLaneMarkers(init.song.laneMarkers || [])
     setVocalNotes(init.song.vocalNotes || [])
     setVocalPhrases(init.song.vocalPhrases || [])
     setActiveHarmonyPart(init.activeHarmonyPart)
@@ -1959,6 +2232,7 @@ export function MidiEditor(): React.JSX.Element {
       }
       if (state.song.starPowerPhrases !== prev.song.starPowerPhrases) setStarPowerPhrases(state.song.starPowerPhrases || [])
       if (state.song.soloSections !== prev.song.soloSections) setSoloSections(state.song.soloSections || [])
+      if (state.song.laneMarkers !== prev.song.laneMarkers) setLaneMarkers(state.song.laneMarkers || [])
       if (state.song.vocalNotes !== prev.song.vocalNotes) setVocalNotes(state.song.vocalNotes || [])
       if (state.song.vocalPhrases !== prev.song.vocalPhrases) setVocalPhrases(state.song.vocalPhrases || [])
       if (state.activeHarmonyPart !== prev.activeHarmonyPart) setActiveHarmonyPart(state.activeHarmonyPart)
@@ -2024,22 +2298,26 @@ export function MidiEditor(): React.JSX.Element {
     const firstNoteX = minTick * pixelsPerTick
     // Only auto-scroll if first note is off-screen
     if (firstNoteX > dimensions.width) {
-      setScrollX(Math.max(0, firstNoteX - dimensions.width / 6))
+      setScrollX(Math.min(maxScrollX, Math.max(0, firstNoteX - dimensions.width / 6)))
     }
     hasAutoScrolledRef.current = activeSongId
-  }, [activeSongId, notes, activeDifficulty, zoomLevel, dimensions.width, isPlaying])
+  }, [activeSongId, notes, activeDifficulty, zoomLevel, dimensions.width, isPlaying, maxScrollX])
 
   // Derive effective scrollX: during playback, compute directly from currentTick
-  // to avoid double re-render (tick change → effect → setScrollX → second render)
+  // to avoid double re-render (tick change â†’ effect â†’ setScrollX â†’ second render)
   const effectiveScrollX = useMemo(() => {
     if (isPlaying && !isUserScrolling.current) {
       // During playback: keep playhead at ~1/3 from left
       const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
       const playheadX = currentTick * pixelsPerTick
-      return Math.max(0, playheadX - dimensions.width / 3)
+      return Math.min(maxScrollX, Math.max(0, playheadX - dimensions.width / 3))
     }
-    return scrollX
-  }, [isPlaying, currentTick, scrollX, zoomLevel, dimensions.width])
+    return Math.min(scrollX, maxScrollX)
+  }, [isPlaying, currentTick, scrollX, zoomLevel, dimensions.width, maxScrollX])
+
+  useEffect(() => {
+    setScrollX((prev) => Math.min(prev, maxScrollX))
+  }, [maxScrollX])
 
   // When pausing, persist the current auto-scroll position so the view does not snap back.
   // useLayoutEffect runs before the browser paints, preventing a flash frame with the old scrollX.
@@ -2048,10 +2326,10 @@ export function MidiEditor(): React.JSX.Element {
     if (prevIsPlayingRef.current && !isPlaying && !isUserScrolling.current) {
       const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
       const playheadX = currentTick * pixelsPerTick
-      setScrollX(Math.max(0, playheadX - dimensions.width / 3))
+      setScrollX(Math.min(maxScrollX, Math.max(0, playheadX - dimensions.width / 3)))
     }
     prevIsPlayingRef.current = isPlaying
-  }, [currentTick, isPlaying, zoomLevel, dimensions.width])
+  }, [currentTick, isPlaying, zoomLevel, dimensions.width, maxScrollX])
 
   // Get lanes for each instrument
   const getLanesForInstrument = useCallback((instrument: Instrument) => {
@@ -2078,7 +2356,7 @@ export function MidiEditor(): React.JSX.Element {
     return displayedInstruments.reduce((total, inst) => {
       const lanes = getLanesForInstrument(inst)
       const rh = getRowHeight(inst)
-      return total + MIDI_EDITOR_CONFIG.instrumentHeaderHeight + MIDI_EDITOR_CONFIG.spRowHeight * 2 + lanes.length * rh
+      return total + MIDI_EDITOR_CONFIG.instrumentHeaderHeight + MIDI_EDITOR_CONFIG.spRowHeight * (inst === 'vocals' ? 2 : 3) + lanes.length * rh
     }, 0)
   }, [displayedInstruments, getLanesForInstrument, getRowHeight])
 
@@ -2138,7 +2416,7 @@ export function MidiEditor(): React.JSX.Element {
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
       const hDelta = e.deltaX + e.deltaY
       setScrollX((prev) => {
-        const newScrollX = Math.max(0, prev + hDelta)
+        const newScrollX = Math.min(maxScrollX, Math.max(0, prev + hDelta))
         if (songStore && !songStore.getState().isPlaying) {
           const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
           const newTick = Math.round(newScrollX / pixelsPerTick)
@@ -2160,7 +2438,7 @@ export function MidiEditor(): React.JSX.Element {
         if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
         const hDelta = e.deltaX
         setScrollX((prev) => {
-          const newScrollX = Math.max(0, prev + hDelta)
+          const newScrollX = Math.min(maxScrollX, Math.max(0, prev + hDelta))
           if (songStore && !songStore.getState().isPlaying) {
             const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
             const newTick = Math.round(newScrollX / pixelsPerTick)
@@ -2174,7 +2452,7 @@ export function MidiEditor(): React.JSX.Element {
         }, 200)
       }
     }
-  }, [songStore, zoomLevel, totalHeight, dimensions.height])
+  }, [songStore, zoomLevel, totalHeight, dimensions.height, maxScrollX])
 
   // Handle scroll on lane headers - vertical scroll
   const handleHeaderScroll = useCallback((e: React.WheelEvent) => {
@@ -2198,7 +2476,7 @@ export function MidiEditor(): React.JSX.Element {
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
       const hDelta = e.deltaX + e.deltaY
       setScrollX((prev) => {
-        const newScrollX = Math.max(0, prev + hDelta)
+        const newScrollX = Math.min(maxScrollX, Math.max(0, prev + hDelta))
         if (songStore && !songStore.getState().isPlaying) {
           const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
           const newTick = Math.round(newScrollX / pixelsPerTick)
@@ -2220,7 +2498,7 @@ export function MidiEditor(): React.JSX.Element {
         if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
         const hDelta = e.deltaX
         setScrollX((prev) => {
-          const newScrollX = Math.max(0, prev + hDelta)
+          const newScrollX = Math.min(maxScrollX, Math.max(0, prev + hDelta))
           if (songStore && !songStore.getState().isPlaying) {
             const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
             const newTick = Math.round(newScrollX / pixelsPerTick)
@@ -2234,7 +2512,7 @@ export function MidiEditor(): React.JSX.Element {
         }, 200)
       }
     }
-  }, [songStore, zoomLevel, totalHeight, dimensions.height])
+  }, [songStore, zoomLevel, totalHeight, dimensions.height, maxScrollX])
 
   // Handle note click - tool-aware, supports flag toggling with modifier toggles
   const handleNoteClick = useCallback(
@@ -2339,7 +2617,7 @@ export function MidiEditor(): React.JSX.Element {
       const lane = lanes[laneIndex]
 
       if (tool === 'select') {
-        // Check if clicking on an already-selected note — start move instead of box-select
+        // Check if clicking on an already-selected note â€” start move instead of box-select
         const selectedIds = new Set(songStore.getState().selectedNoteIds)
         if (selectedIds.size > 0 && lane) {
           // Use generous hit padding so short notes are easy to grab
@@ -2586,7 +2864,7 @@ export function MidiEditor(): React.JSX.Element {
       if (pitch < MIDI_EDITOR_CONFIG.vocalPitchMin || pitch > MIDI_EDITOR_CONFIG.vocalPitchMax) return
 
       if (tool === 'select') {
-        // Check if clicking on an already-selected vocal note — start move
+        // Check if clicking on an already-selected vocal note â€” start move
         const selectedIds = new Set(songStore.getState().selectedVocalNoteIds || [])
         if (selectedIds.size > 0) {
           const hp = songStore.getState().activeHarmonyPart
@@ -2662,6 +2940,7 @@ export function MidiEditor(): React.JSX.Element {
       // Place tool: add vocal note at pitch
       if (tick >= 0) {
         const harmonyPart = songStore.getState().activeHarmonyPart
+        const mods = useUIStore.getState().noteModifiers
         // Track existing IDs before adding (addVocalNote sorts, so last element won't be the new one)
         const prevIds = new Set((songStore.getState().song.vocalNotes || []).map((n) => n.id))
         songStore.getState().addVocalNote({
@@ -2669,13 +2948,13 @@ export function MidiEditor(): React.JSX.Element {
           duration: 480 / snapDivision,
           instrument: 'vocals',
           difficulty: 'expert',
-          lane: pitch,
+          lane: mods.talkie ? 60 : pitch,
           velocity: 100,
           harmonyPart,
           lyric: '',
           isSlide: false,
           isPercussion: false,
-          isPitchless: false
+          isPitchless: !!mods.talkie
         })
 
         // Play pitch preview so charter can hear the note
@@ -2720,7 +2999,7 @@ export function MidiEditor(): React.JSX.Element {
       if (pitch < MIDI_EDITOR_CONFIG.proKeysPitchMin || pitch > MIDI_EDITOR_CONFIG.proKeysPitchMax) return
 
       if (tool === 'select') {
-        // Check if clicking on an already-selected proKeys note — start move
+        // Check if clicking on an already-selected proKeys note â€” start move
         const selectedIds = new Set(songStore.getState().selectedNoteIds)
         if (selectedIds.size > 0) {
           // Use generous hit padding so short notes are easy to grab
@@ -3102,7 +3381,7 @@ export function MidiEditor(): React.JSX.Element {
     return (
       <div className="midi-editor">
         <div className="empty-state">
-          <div className="empty-state-icon">🎹</div>
+          <div className="empty-state-icon">PR</div>
           <div className="empty-state-title">No Song Selected</div>
           <div className="empty-state-description">
             Select a song to edit its notes in the piano roll
@@ -3131,7 +3410,7 @@ export function MidiEditor(): React.JSX.Element {
           <span>{Math.round(zoomLevel * 100)}%</span>
           <button onClick={() => setZoomLevel((z) => z * 1.25)}>+</button>
         </div>
-        {/* Pro Guitar/Bass fret property editor — shown when pro notes are selected */}
+        {/* Pro Guitar/Bass fret property editor â€” shown when pro notes are selected */}
         {(() => {
           if (!songStore || selectedNoteIds.length === 0) return null
           const selNotes = notes.filter((n) => selectedNoteIds.includes(n.id))
@@ -3152,7 +3431,7 @@ export function MidiEditor(): React.JSX.Element {
                 min={0}
                 max={22}
                 value={allSame ? frets[0] : ''}
-                placeholder={allSame ? undefined : '—'}
+                placeholder={allSame ? undefined : '--'}
                 onChange={(e) => {
                   const val = parseInt(e.target.value, 10)
                   if (isNaN(val)) return
@@ -3200,7 +3479,7 @@ export function MidiEditor(): React.JSX.Element {
             const noteAreaHeight = lanes.length * laneRowHeight
             const sectionHeight = isCollapsed
               ? MIDI_EDITOR_CONFIG.instrumentHeaderHeight
-              : MIDI_EDITOR_CONFIG.instrumentHeaderHeight + MIDI_EDITOR_CONFIG.spRowHeight * 2 + noteAreaHeight
+              : MIDI_EDITOR_CONFIG.instrumentHeaderHeight + MIDI_EDITOR_CONFIG.spRowHeight * (isVocal ? 2 : 3) + noteAreaHeight
             const instrumentNotes = notesByInstrument.get(instrument) || []
 
             const toggleCollapse = (): void => {
@@ -3225,7 +3504,7 @@ export function MidiEditor(): React.JSX.Element {
                   }}
                   onClick={toggleCollapse}
                 >
-                  <span style={{ marginRight: 6, fontSize: 9 }}>{isCollapsed ? '▶' : '▼'}</span>
+                  <span style={{ marginRight: 6, fontSize: 9 }}>{isCollapsed ? '>' : 'v'}</span>
                   {({ proKeys: 'Pro Keys', proGuitar: 'Pro Guitar', proBass: 'Pro Bass' } as Record<string, string>)[instrument] || instrument.charAt(0).toUpperCase() + instrument.slice(1)}
                 </div>
 
@@ -3286,6 +3565,34 @@ export function MidiEditor(): React.JSX.Element {
                       snapDivision={snapDivision}
                     />
                   </div>
+
+                  {/* Lane markers row (non-vocal instruments only) */}
+                  {!isVocal && (
+                    <div style={{ display: 'flex', flexDirection: 'row', height: MIDI_EDITOR_CONFIG.spRowHeight }}>
+                      <div
+                        className="midi-lane-label"
+                        style={{
+                          width: MIDI_EDITOR_CONFIG.headerWidth,
+                          height: MIDI_EDITOR_CONFIG.spRowHeight,
+                          backgroundColor: 'rgba(255,140,0,0.08)',
+                          borderRight: '1px solid var(--border-color)',
+                          flexShrink: 0
+                        }}
+                      >
+                        <span className="midi-lane-color" style={{ backgroundColor: 'rgba(255,140,0,0.7)' }} />
+                        <span className="midi-lane-name">Lane Markers</span>
+                      </div>
+                      <LaneMarkerLane
+                        markers={laneMarkers}
+                        instrument={instrument}
+                        scrollX={effectiveScrollX}
+                        zoomLevel={zoomLevel}
+                        songStore={songStore}
+                        editTool={editTool}
+                        snapDivision={snapDivision}
+                      />
+                    </div>
+                  )}
 
                   {/* Note lanes row: lane headers + grid */}
                   <div style={{ display: 'flex', flexDirection: 'row', height: noteAreaHeight }}>
@@ -3373,7 +3680,7 @@ export function MidiEditor(): React.JSX.Element {
                                   }
                                 }}
                               >
-                                🗑
+                                Del
                               </button>
                             )}
                           </div>
@@ -3431,7 +3738,7 @@ export function MidiEditor(): React.JSX.Element {
                               className="midi-lane-color"
                               style={{ backgroundColor: MIDI_EDITOR_CONFIG.laneColors[lane] }}
                             />
-                            <span className="midi-lane-name">{lane === DOUBLE_KICK_EDITOR_LANE ? 'kick 2x' : lane}</span>
+                            <span className="midi-lane-name">{formatLaneLabel(lane)}</span>
                           </div>
                         ))
                       )}

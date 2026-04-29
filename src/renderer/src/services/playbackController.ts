@@ -7,6 +7,9 @@ import type { TempoEvent } from '../types'
 
 let visualRafId: number | null = null
 
+// Track the tick position where each song last started playback, so Stop can return there
+const playbackStartTicks = new Map<string, number>()
+
 function cancelVisualRaf(): void {
   if (visualRafId !== null) {
     cancelAnimationFrame(visualRafId)
@@ -99,8 +102,11 @@ export async function startPlayback(songId: string): Promise<void> {
   const state = store.getState()
   const tempoEvents = state.song.tempoEvents
   const startTick = state.currentTick
+
+  // Remember where this playback run started so Stop can return here
+  playbackStartTicks.set(songId, startTick)
   const speed = useSettingsStore.getState().highwaySpeed
-  const audioOffsetMs = state.song.videoSync.offsetMs || 0
+  const audioSync = state.song.audioSync
 
   // Mark as playing
   store.getState().setIsPlaying(true)
@@ -123,7 +129,7 @@ export async function startPlayback(songId: string): Promise<void> {
         getSongStore(songId).getState().setIsPlaying(false)
       },
       speed,
-      audioOffsetMs
+      audioSync
     )
     if (!started) {
       // Audio failed — fall back to visual-only
@@ -145,10 +151,12 @@ export async function togglePlayback(songId: string): Promise<void> {
   }
 }
 
-/** Stop playback for a specific song and reset to tick 0. */
+/** Stop playback for a specific song and return to where playback began. */
 export function stopAndReset(songId: string): void {
   stopPlayback(songId)
-  getSongStore(songId).getState().setCurrentTick(0)
+  const startTick = playbackStartTicks.get(songId) ?? 0
+  playbackStartTicks.delete(songId)
+  getSongStore(songId).getState().setCurrentTick(startTick)
 }
 
 /** Stop everything — used on song switch. */

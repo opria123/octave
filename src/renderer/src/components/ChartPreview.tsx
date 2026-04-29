@@ -8,9 +8,9 @@ import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { useProjectStore, useUIStore, getSongStore } from '../stores'
 import { tickToSeconds } from '../services/audioService'
-import type { Instrument, Difficulty, EditingTool, VideoSync, TempoEvent } from '../types'
+import type { Instrument, Difficulty, EditingTool, VideoSync, TempoEvent, VenueTrackData } from '../types'
 import {
-  CAMERA_HEIGHT, CAMERA_DISTANCE, CAMERA_ANGLE, CAMERA_FOV, STRIKE_LINE_POS
+  CAMERA_HEIGHT, CAMERA_DISTANCE, CAMERA_FOV, STRIKE_LINE_POS
 } from './chartPreviewModules'
 import { AssetProvider } from './chartPreviewModules/AssetProvider'
 import { AnimatedHighwayScene } from './chartPreviewModules/AnimatedHighwayScene'
@@ -20,6 +20,7 @@ import {
   SnapSelector
 } from './chartPreviewModules/UIOverlays'
 import './ChartPreview.css'
+import { resolveVenuePlaybackState, resolveVenueVisualState, type VenueVisualState } from './chartPreviewModules/venuePlayback'
 
 // Error boundary scoped to the 3D preview — prevents asset loading failures from crashing the entire app
 class PreviewErrorBoundary extends Component<
@@ -61,8 +62,23 @@ class PreviewErrorBoundary extends Component<
   }
 }
 
+const DEFAULT_VENUE_VISUAL: VenueVisualState = {
+  ambientColor: '#182238',
+  ambientIntensity: 0.3,
+  keyLightColor: '#FFFFFF',
+  keyLightIntensity: 0.5,
+  accentColor: '#3366CC',
+  accentIntensity: 0.6,
+  bloomIntensity: 1.2,
+  cameraXOffset: 0,
+  cameraHeightOffset: 0,
+  cameraDistanceOffset: 0,
+  cameraFovOffset: 0,
+  cssFilter: 'none'
+}
+
 // -- Background Video (plays behind 3D highway like in the games) -----
-function BackgroundVideo({ songId }: { songId: string }): React.JSX.Element | null {
+function BackgroundVideo({ songId, cssFilter = 'none' }: { songId: string; cssFilter?: string }): React.JSX.Element | null {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [videoSync, setVideoSync] = useState<VideoSync>({ clips: [], offsetMs: 0, trimStartMs: 0, trimEndMs: 0 })
   const [isPlaying, setIsPlaying] = useState(false)
@@ -190,12 +206,21 @@ function BackgroundVideo({ songId }: { songId: string }): React.JSX.Element | nu
       muted
       playsInline
       preload="auto"
+      style={{ filter: cssFilter }}
     />
   )
 }
 
 // -- Highway Wrapper (with Suspense for FBX loading) ------------------
-function HighwayWrapper({ songId, editTool }: { songId: string; editTool: EditingTool }): React.JSX.Element {
+function HighwayWrapper({
+  songId,
+  editTool,
+  venueVisual,
+}: {
+  songId: string
+  editTool: EditingTool
+  venueVisual: VenueVisualState
+}): React.JSX.Element {
   const [visibleInstruments, setVisibleInstruments] = useState<Set<Instrument>>(
     new Set(['drums', 'guitar', 'bass', 'vocals', 'keys'])
   )
@@ -231,20 +256,26 @@ function HighwayWrapper({ songId, editTool }: { songId: string; editTool: Editin
 
   return (
     <Canvas shadows gl={glProps} style={hasVideo ? { background: 'transparent' } : undefined} onCreated={handleCreated}>
+      {/* PerspectiveCamera — VenueCameraController takes over position/fov each frame */}
       <PerspectiveCamera
         makeDefault
         position={[0, CAMERA_HEIGHT, STRIKE_LINE_POS + CAMERA_DISTANCE]}
-        rotation={[(-CAMERA_ANGLE * Math.PI) / 180, 0, 0]}
         fov={CAMERA_FOV}
         near={0.1}
-        far={50}
+        far={150}
       />
-      {!hasVideo && <fog attach="fog" args={['#050508', 10, 30]} />}
+      {!hasVideo && <fog attach="fog" args={['#050508', 18, 45]} />}
       {!hasVideo && <color attach="background" args={['#050508']} />}
-      <ambientLight intensity={0.3} />
-      <directionalLight position={[0, 10, 5]} intensity={0.5} color="#FFFFFF" />
-      <pointLight position={[0, 3, STRIKE_LINE_POS]} intensity={0.6} color="#3366CC" distance={8} />
-      <pointLight position={[0, 1.5, STRIKE_LINE_POS + 1]} intensity={0.3} color="#4488FF" distance={5} />
+
+      {/* Base lights — always on so highway/notes are always visible */}
+      <ambientLight intensity={0.55} color="#FFFFFF" />
+      <directionalLight position={[0, 10, 5]} intensity={0.6} color="#FFFFFF" castShadow />
+
+      {/* Venue mood lights — additive colored fill driven by venue cues */}
+      <ambientLight intensity={venueVisual.ambientIntensity * 0.5} color={venueVisual.ambientColor} />
+      <pointLight position={[-3, 5, STRIKE_LINE_POS - 2]} intensity={venueVisual.accentIntensity * 0.9} color={venueVisual.accentColor} distance={12} />
+      <pointLight position={[3, 5, STRIKE_LINE_POS - 2]} intensity={venueVisual.accentIntensity * 0.9} color={venueVisual.accentColor} distance={12} />
+      <pointLight position={[0, 2, STRIKE_LINE_POS + 0.5]} intensity={venueVisual.accentIntensity * 0.5} color={venueVisual.accentColor} distance={6} />
 
       <Suspense fallback={null}>
         <AssetProvider>
@@ -259,7 +290,7 @@ function HighwayWrapper({ songId, editTool }: { songId: string; editTool: Editin
 
       {!hasVideo && (
         <EffectComposer>
-          <Bloom luminanceThreshold={0.4} luminanceSmoothing={0.9} intensity={1.2} mipmapBlur />
+          <Bloom luminanceThreshold={0.4} luminanceSmoothing={0.9} intensity={venueVisual.bloomIntensity} mipmapBlur />
         </EffectComposer>
       )}
     </Canvas>
@@ -272,7 +303,7 @@ export function ChartPreview(): React.JSX.Element {
   const editTool = useUIStore((s) => s.editTool)
   const setEditTool = useUIStore((s) => s.setEditTool)
   const previewActionsRef = useRef<HTMLDivElement>(null)
-
+  const [venueVisual, setVenueVisual] = useState<VenueVisualState>(DEFAULT_VENUE_VISUAL)
   const isPreviewFullscreen = useUIStore((s) => s.isPreviewFullscreen)
   const togglePreviewFullscreen = useUIStore((s) => s.togglePreviewFullscreen)
 
@@ -324,6 +355,21 @@ export function ChartPreview(): React.JSX.Element {
     }
   }, [])
 
+  useEffect(() => {
+    if (!activeSongId) {
+      setVenueVisual(DEFAULT_VENUE_VISUAL)
+      return
+    }
+    const store = getSongStore(activeSongId)
+    const sync = (): void => {
+      const state = store.getState()
+      const playback = resolveVenuePlaybackState(state.song.venueTrack as VenueTrackData, state.currentTick)
+      setVenueVisual(resolveVenueVisualState(playback))
+    }
+    sync()
+    return store.subscribe(sync)
+  }, [activeSongId])
+
   return (
     <div className="chart-preview">
       <div className="panel-header">
@@ -356,12 +402,26 @@ export function ChartPreview(): React.JSX.Element {
           </button>
         </div>
       </div>
-      <div className="chart-preview-canvas" onWheel={handlePreviewWheel}>
+      <div
+        className="chart-preview-canvas"
+        onWheel={handlePreviewWheel}
+        style={{ filter: venueVisual.cssFilter !== 'none' ? venueVisual.cssFilter : undefined }}
+      >
         {activeSongId ? (
           <PreviewErrorBoundary>
-            <BackgroundVideo songId={activeSongId} />
+            <BackgroundVideo songId={activeSongId} cssFilter="none" />
             <VocalTrackOverlay songId={activeSongId} />
-            <HighwayWrapper songId={activeSongId} editTool={editTool} />
+            <HighwayWrapper songId={activeSongId} editTool={editTool} venueVisual={venueVisual} />
+            {/* Blackout overlay — shown during blackout lighting cues */}
+            {venueVisual.ambientIntensity < 0.15 && (
+              <div
+                style={{
+                  position: 'absolute', inset: 0, pointerEvents: 'none',
+                  background: `rgba(0,0,0,${Math.max(0, 1 - venueVisual.ambientIntensity * 7)})`,
+                  zIndex: 5
+                }}
+              />
+            )}
           </PreviewErrorBoundary>
         ) : (
           <div className="empty-state">

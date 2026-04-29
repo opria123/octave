@@ -11,7 +11,7 @@ import { Toolbar } from './Toolbar'
 import './Layout.css'
 
 export function Layout(): React.JSX.Element {
-  const { setFocusedPanel } = useUIStore()
+  const { setFocusedPanel, setSettingsModalOpen } = useUIStore()
   const isPreviewFullscreen = useUIStore((s) => s.isPreviewFullscreen)
   type PanelName = 'explorer' | 'preview' | 'properties' | 'midi' | 'video'
   const [panelVisible, setPanelVisible] = useState({
@@ -24,6 +24,10 @@ export function Layout(): React.JSX.Element {
 
   useEffect(() => {
     return window.api.onMenuCommand((command, payload) => {
+      if (command === 'file:open-settings') {
+        setSettingsModalOpen(true)
+        return
+      }
       if (command !== 'view:toggle-panel') return
       const data = payload as { panel?: string; visible?: boolean } | undefined
       if (!data?.panel || typeof data.visible !== 'boolean') return
@@ -34,7 +38,7 @@ export function Layout(): React.JSX.Element {
         return { ...prev, [panel]: data.visible }
       })
     })
-  }, [])
+  }, [setSettingsModalOpen])
 
   const hasTopPanel = panelVisible.explorer || panelVisible.preview || panelVisible.properties
   const hasBottomPanel = panelVisible.midi || panelVisible.video

@@ -14,6 +14,9 @@ const api = {
   openAudioDialog: (): Promise<string | null> =>
     ipcRenderer.invoke('dialog:openAudio'),
 
+  openLyricsFileDialog: (): Promise<{ filePath: string; content: string } | null> =>
+    ipcRenderer.invoke('dialog:openLyricsFile'),
+
   // Song APIs
   createSongFolder: (parentPath: string, folderName: string, audioPath?: string): Promise<{ id: string; path: string; name: string } | null> =>
     ipcRenderer.invoke('song:createFolder', parentPath, folderName, audioPath),
@@ -49,6 +52,18 @@ const api = {
   // Audio APIs
   readAudio: (songPath: string): Promise<{ filePath: string; filename: string }[] | null> =>
     ipcRenderer.invoke('song:readAudio', songPath),
+
+  readAudioJson: (songPath: string): Promise<Record<string, unknown> | null> =>
+    ipcRenderer.invoke('audio:readJson', songPath),
+
+  writeAudioJson: (songPath: string, data: unknown): Promise<boolean> =>
+    ipcRenderer.invoke('audio:writeJson', songPath, data),
+
+  readVenueJson: (songPath: string): Promise<Record<string, unknown> | null> =>
+    ipcRenderer.invoke('venue:readJson', songPath),
+
+  writeVenueJson: (songPath: string, data: unknown): Promise<boolean> =>
+    ipcRenderer.invoke('venue:writeJson', songPath, data),
 
   // Video APIs
   openVideoDialog: (): Promise<string | null> =>

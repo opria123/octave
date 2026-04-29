@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net, Menu, type MenuItemConstructorOptions } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net, Menu, session, type MenuItemConstructorOptions } from 'electron'
 import { join, resolve, basename } from 'path'
 import { readdir, readFile, writeFile, stat, rename, copyFile, unlink, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
@@ -31,6 +31,16 @@ type UpdaterState = {
 }
 
 const RELEASES_URL = 'https://github.com/opria123/octave/releases/latest'
+const RENDERER_CSP = [
+  "default-src 'self'",
+  is.dev
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'"
+    : "script-src 'self' 'wasm-unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "media-src 'self' song-file: https: http: blob:",
+  "connect-src 'self' song-file: https: http: blob:"
+].join('; ')
 
 function broadcastUpdaterState(payload: UpdaterState): void {
   const windows = BrowserWindow.getAllWindows()
@@ -195,6 +205,12 @@ function createApplicationMenu(): void {
           label: 'Open',
           accelerator: 'CmdOrCtrl+O',
           click: () => sendMenuCommand('file:open-folder')
+        },
+        { type: 'separator' },
+        {
+          label: 'Settings',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => sendMenuCommand('file:open-settings')
         }
       ]
     },
@@ -234,7 +250,7 @@ function createApplicationMenu(): void {
           click: (item) => sendMenuCommand('view:toggle-panel', { panel: 'midi', visible: item.checked })
         },
         {
-          label: 'Video Editor',
+          label: 'Timeline',
           type: 'checkbox',
           checked: true,
           click: (item) => sendMenuCommand('view:toggle-panel', { panel: 'video', visible: item.checked })
@@ -283,6 +299,12 @@ protocol.registerSchemesAsPrivileged([
 app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.opria123.octave')
+
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = details.responseHeaders ?? {}
+    responseHeaders['Content-Security-Policy'] = [RENDERER_CSP]
+    callback({ responseHeaders })
+  })
 
   // Register protocol handler: song-file://<encoded-path>
   // Only allows access to files within the currently opened project folder
@@ -486,6 +508,29 @@ ipcMain.handle('dialog:openAudio', async () => {
   })
   if (result.canceled || result.filePaths.length === 0) return null
   return result.filePaths[0]
+})
+
+// Open lyric/subtitle file dialog (.lrc/.srt/.ttml)
+ipcMain.handle('dialog:openLyricsFile', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    title: 'Select Lyric File',
+    filters: [
+      { name: 'Lyric Files', extensions: ['lrc', 'srt', 'ttml'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  })
+
+  if (result.canceled || result.filePaths.length === 0) return null
+
+  const filePath = result.filePaths[0]
+  try {
+    const content = await readFile(filePath, 'utf-8')
+    return { filePath, content }
+  } catch (error) {
+    console.error('Error reading lyric file:', error)
+    return null
+  }
 })
 
 // Scan folder for song directories (folders containing song.ini)
@@ -753,6 +798,56 @@ ipcMain.handle('video:writeJson', async (_event, songPath: string, data: unknown
     return true
   } catch (error) {
     console.error('Error writing video.json:', error)
+    return false
+  }
+})
+
+// Read audio.json (audio sync/clip data)
+ipcMain.handle('audio:readJson', async (_event, songPath: string) => {
+  if (!isPathAllowed(songPath)) return null
+  const jsonPath = join(songPath, 'audio.json')
+  try {
+    const content = await readFile(jsonPath, 'utf-8')
+    return JSON.parse(content)
+  } catch {
+    return null
+  }
+})
+
+// Write audio.json (audio sync/clip data)
+ipcMain.handle('audio:writeJson', async (_event, songPath: string, data: unknown) => {
+  if (!isPathAllowed(songPath)) return false
+  const jsonPath = join(songPath, 'audio.json')
+  try {
+    await writeFile(jsonPath, JSON.stringify(data, null, 2), 'utf-8')
+    return true
+  } catch (error) {
+    console.error('Error writing audio.json:', error)
+    return false
+  }
+})
+
+// Read venue.json (venue track data)
+ipcMain.handle('venue:readJson', async (_event, songPath: string) => {
+  if (!isPathAllowed(songPath)) return null
+  const jsonPath = join(songPath, 'venue.json')
+  try {
+    const content = await readFile(jsonPath, 'utf-8')
+    return JSON.parse(content)
+  } catch {
+    return null
+  }
+})
+
+// Write venue.json (venue track data)
+ipcMain.handle('venue:writeJson', async (_event, songPath: string, data: unknown) => {
+  if (!isPathAllowed(songPath)) return false
+  const jsonPath = join(songPath, 'venue.json')
+  try {
+    await writeFile(jsonPath, JSON.stringify(data, null, 2), 'utf-8')
+    return true
+  } catch (error) {
+    console.error('Error writing venue.json:', error)
     return false
   }
 })

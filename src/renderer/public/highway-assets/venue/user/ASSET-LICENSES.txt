@@ -1,0 +1,14 @@
+Sample assets in this folder are for preview/testing only.
+
+Sources:
+- CesiumMan.glb from KhronosGroup glTF Sample Assets
+  URL: https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CesiumMan
+  License: CC BY 4.0
+  Author: Analytical Graphics, Inc.
+
+- BoxAnimated.glb from KhronosGroup glTF Sample Assets
+  URL: https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/BoxAnimated
+  License: CC BY 4.0
+  Author: Analytical Graphics, Inc.
+
+If you redistribute this project or these assets, include attribution per CC BY 4.0.
