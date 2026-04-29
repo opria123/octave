@@ -1591,17 +1591,85 @@ function NoteModifierToggles(): React.JSX.Element {
 // Shortcut help button (same as the one in ChartPreview, rendered locally)
 function MidiShortcutHelpButton(): React.JSX.Element {
   const [open, setOpen] = useState(false)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [panelStyle, setPanelStyle] = useState<{ top: number; left: number; maxHeight: number } | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    const updatePanelPosition = (): void => {
+      const button = buttonRef.current
+      if (!button) return
+      const rect = button.getBoundingClientRect()
+      const panelWidth = 320
+      const viewportPadding = 12
+      const gap = 8
+      const preferredMaxHeight = 460
+
+      const left = Math.min(
+        window.innerWidth - panelWidth - viewportPadding,
+        Math.max(viewportPadding, rect.right - panelWidth)
+      )
+
+      let top = rect.bottom + gap
+      let maxHeight = Math.min(preferredMaxHeight, window.innerHeight - top - viewportPadding)
+
+      if (maxHeight < 180) {
+        top = Math.max(viewportPadding, rect.top - gap - preferredMaxHeight)
+        maxHeight = Math.min(preferredMaxHeight, rect.top - gap - viewportPadding)
+      }
+
+      setPanelStyle({ top, left, maxHeight: Math.max(140, maxHeight) })
+    }
+
+    const handleClickOutside = (event: MouseEvent): void => {
+      const target = event.target as Node | null
+      if (wrapperRef.current && target && !wrapperRef.current.contains(target)) {
+        setOpen(false)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    updatePanelPosition()
+    window.addEventListener('resize', updatePanelPosition)
+    window.addEventListener('scroll', updatePanelPosition, true)
+    window.addEventListener('mousedown', handleClickOutside)
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('resize', updatePanelPosition)
+      window.removeEventListener('scroll', updatePanelPosition, true)
+      window.removeEventListener('mousedown', handleClickOutside)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open])
+
   return (
-    <div className="shortcut-help-wrapper">
+    <div className="shortcut-help-wrapper" ref={wrapperRef}>
       <button
+        ref={buttonRef}
         className={`shortcut-help-toggle ${open ? 'active' : ''}`}
         onClick={() => setOpen((v) => !v)}
         title="Keyboard Shortcuts"
       >
         ?
       </button>
-      {open && (
-        <div className="shortcut-help-panel">
+      {open && panelStyle && (
+        <div
+          className="shortcut-help-panel"
+          style={{
+            position: 'fixed',
+            top: panelStyle.top,
+            left: panelStyle.left,
+            width: 320,
+            maxHeight: panelStyle.maxHeight,
+            zIndex: 4000
+          }}
+        >
           <div className="shortcut-help-title">Keyboard Shortcuts</div>
           <div className="shortcut-help-section">
             <div className="shortcut-help-section-title">Tools</div>
@@ -3104,7 +3172,7 @@ export function MidiEditor(): React.JSX.Element {
             </div>
           )
         })()}
-        <div className="midi-scroll-hint">Notes: H-scroll | Headers: V-scroll | Ctrl+Scroll: Zoom</div>
+        <div className="midi-scroll-hint">Scroll: vertical | Shift+Scroll: horizontal | Ctrl+Scroll: zoom</div>
         <MidiShortcutHelpButton />
       </div>
 

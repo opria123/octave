@@ -6,6 +6,55 @@
   background-color: var(--bg-primary);
 }
 
+.chart-preview .panel-header {
+  gap: 8px;
+  min-width: 0;
+}
+
+.chart-preview .panel-header-title {
+  flex-shrink: 0;
+}
+
+.preview-header-actions {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(126, 150, 186, 0.9) rgba(255, 255, 255, 0.04);
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+  padding-bottom: 4px;
+}
+
+.preview-header-actions > * {
+  flex-shrink: 0;
+}
+
+.preview-header-actions::-webkit-scrollbar {
+  height: 10px;
+}
+
+.preview-header-actions::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+}
+
+.preview-header-actions::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(126, 150, 186, 0.92), rgba(93, 120, 165, 0.92));
+  border: 2px solid rgba(0, 0, 0, 0);
+  background-clip: padding-box;
+  min-width: 20px;
+}
+
+.preview-header-actions::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(90deg, rgba(148, 172, 214, 0.95), rgba(110, 138, 188, 0.95));
+}
+
 .chart-preview-canvas {
   flex: 1;
   position: relative;
@@ -414,13 +463,20 @@
   right: 0;
   z-index: 1000;
   width: 320px;
-  max-height: 460px;
+  max-height: min(460px, calc(100dvh - 24px));
   overflow-y: auto;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   padding: 12px;
+}
+
+@media (max-height: 760px) {
+  .shortcut-help-panel {
+    top: auto;
+    bottom: calc(100% + 8px);
+  }
 }
 
 .shortcut-help-title {

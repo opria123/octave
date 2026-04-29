@@ -271,6 +271,7 @@ export function ChartPreview(): React.JSX.Element {
   const { activeSongId } = useProjectStore()
   const editTool = useUIStore((s) => s.editTool)
   const setEditTool = useUIStore((s) => s.setEditTool)
+  const previewActionsRef = useRef<HTMLDivElement>(null)
 
   const isPreviewFullscreen = useUIStore((s) => s.isPreviewFullscreen)
   const togglePreviewFullscreen = useUIStore((s) => s.togglePreviewFullscreen)
@@ -288,13 +289,53 @@ export function ChartPreview(): React.JSX.Element {
     [activeSongId]
   )
 
+  const handlePreviewActionsWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const el = e.currentTarget
+    if (el.scrollWidth <= el.clientWidth) return
+    const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX
+    if (delta === 0) return
+    const before = el.scrollLeft
+    el.scrollLeft += delta
+    if (el.scrollLeft !== before) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+  }, [])
+
+  useEffect(() => {
+    const el = previewActionsRef.current
+    if (!el) return
+
+    const onWheel = (event: WheelEvent): void => {
+      if (el.scrollWidth <= el.clientWidth) return
+      const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
+      if (delta === 0) return
+      const before = el.scrollLeft
+      el.scrollLeft += delta
+      if (el.scrollLeft !== before) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+    }
+
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => {
+      el.removeEventListener('wheel', onWheel)
+    }
+  }, [])
+
   return (
     <div className="chart-preview">
       <div className="panel-header">
         <span className="panel-header-title">
           <span>Chart Preview</span>
         </span>
-        <div className="panel-header-actions">
+        <div
+          ref={previewActionsRef}
+          className="panel-header-actions preview-header-actions"
+          onWheelCapture={handlePreviewActionsWheel}
+          onWheel={handlePreviewActionsWheel}
+        >
           <EditToolSelector editTool={editTool} setEditTool={setEditTool} />
           <NoteModifierToggles />
           <SnapSelector />

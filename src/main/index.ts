@@ -245,6 +245,11 @@ function createApplicationMenu(): void {
       label: 'Help',
       submenu: [
         {
+          label: `Version ${app.getVersion()}`,
+          enabled: false
+        },
+        { type: 'separator' },
+        {
           label: 'GitHub Repository',
           click: () => {
             void shell.openExternal('https://github.com/opria123/octave')

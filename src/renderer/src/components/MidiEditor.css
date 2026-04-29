@@ -13,11 +13,39 @@
 .midi-toolbar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 16px;
   padding: 8px 12px;
   background-color: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(126, 150, 186, 0.88) rgba(255, 255, 255, 0.04);
+}
+
+.midi-toolbar::-webkit-scrollbar {
+  height: 10px;
+}
+
+.midi-toolbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+}
+
+.midi-toolbar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(126, 150, 186, 0.9), rgba(93, 120, 165, 0.9));
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.midi-toolbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(90deg, rgba(148, 172, 214, 0.95), rgba(110, 138, 188, 0.95));
+}
+
+.midi-toolbar > * {
+  flex-shrink: 0;
 }
 
 /* Playhead ruler */
@@ -80,6 +108,7 @@
   margin-left: auto;
   font-size: 11px;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 /* Note modifier toggles */
