@@ -11,6 +11,9 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+extraResources:
+  - from: resources/
+    to: resources/
 win:
   executableName: octave
 nsis:
@@ -41,6 +44,7 @@ linux:
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
+beforePack: scripts/beforePack.js
 afterPack: scripts/afterPack.js
 publish:
   provider: github

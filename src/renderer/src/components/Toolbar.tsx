@@ -3,16 +3,71 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useProjectStore, useSettingsStore, getSongStore } from '../stores'
 import * as audioService from '../services/audioService'
 import * as playbackController from '../services/playbackController'
-import { serializeMidiBase64, serializeChartFile } from '../utils/midiParser'
+import { parseMidiBase64, parseChartFile, serializeMidiBase64, serializeChartFile } from '../utils/midiParser'
 import { validateChart, type ValidationIssue } from '../utils/chartValidation'
 import type { SongMetadata } from '../types'
 import { SettingsModal } from './SettingsModal'
 import './Toolbar.css'
 
+type AutoChartProgressState = {
+  runId: string | null
+  stage: string
+  message: string
+  percent: number
+  currentItem?: string
+  isRunning: boolean
+  outputDir: string
+  error: string | null
+  warnings: string[]
+}
+
+const EMPTY_AUTO_CHART_URL = ''
+const AUTO_CHART_STAGE_ORDER: Record<string, number> = {
+  bootstrap: 0,
+  download: 1,
+  separation: 2,
+  drums: 3,
+  guitar: 4,
+  bass: 5,
+  vocals: 6,
+  keys: 7,
+  merge: 8,
+  complete: 9,
+  error: 10
+}
+
 export function Toolbar(): React.JSX.Element {
   const { activeSongId, setLoadedFolder, addSong, setActiveSong } = useProjectStore()
-  const { autosaveEnabled, highwaySpeed, volume, leftyFlip, updateSettings } = useSettingsStore()
+  const {
+    autosaveEnabled,
+    highwaySpeed,
+    volume,
+    leftyFlip,
+    enableAutoChart,
+    autoChartOutputDir,
+    updateSettings
+  } = useSettingsStore()
   const [isAudioLoaded, setIsAudioLoaded] = useState(false)
+  const [isAutoChartModalOpen, setIsAutoChartModalOpen] = useState(false)
+  const [autoChartFiles, setAutoChartFiles] = useState<string[]>([])
+  const [autoChartFolders, setAutoChartFolders] = useState<string[]>([])
+  const [autoChartUrls, setAutoChartUrls] = useState<string[]>([EMPTY_AUTO_CHART_URL])
+  const [defaultAutoChartOutputDir, setDefaultAutoChartOutputDir] = useState('')
+  const [autoChartErrorCopied, setAutoChartErrorCopied] = useState(false)
+  const [autoChartProgress, setAutoChartProgress] = useState<AutoChartProgressState>({
+    runId: null,
+    stage: 'bootstrap',
+    message: '',
+    percent: 0,
+    isRunning: false,
+    outputDir: autoChartOutputDir ?? '',
+    error: null,
+    warnings: []
+  })
+
+  const getPreferredAutoChartOutputDir = useCallback((): string => {
+    return autoChartOutputDir?.trim() || defaultAutoChartOutputDir
+  }, [autoChartOutputDir, defaultAutoChartOutputDir])
 
   // Get active song store if available
   const songStore = activeSongId ? getSongStore(activeSongId) : null
@@ -128,68 +183,256 @@ export function Toolbar(): React.JSX.Element {
     audioService.setVolume(volume ?? 0.8)
   }, [volume])
 
+  useEffect(() => {
+    let cancelled = false
+
+    void window.api.getDefaultAutoChartOutputDir().then((defaultPath) => {
+      if (cancelled) return
+
+      setDefaultAutoChartOutputDir(defaultPath)
+
+      const currentSettings = useSettingsStore.getState()
+      const nextSettings: Partial<ReturnType<typeof useSettingsStore.getState>> = {}
+      if (!currentSettings.autoChartOutputDir?.trim()) {
+        nextSettings.autoChartOutputDir = defaultPath
+      }
+      if (!currentSettings.enableAutoChart && !currentSettings.autoChartOutputDir?.trim()) {
+        nextSettings.enableAutoChart = true
+      }
+      if (Object.keys(nextSettings).length > 0) {
+        updateSettings(nextSettings)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [updateSettings])
+
+  const loadProjectFolder = useCallback(async (folderPath: string): Promise<void> => {
+    setLoadedFolder(folderPath)
+    const songFolders = await window.api.scanFolder(folderPath)
+
+    for (const songFolder of songFolders) {
+      try {
+        const iniData = await window.api.readSongIni(songFolder.path)
+
+        const metadata: SongMetadata = {
+          name: (iniData?.name as string) || (iniData?.title as string) || songFolder.name,
+          artist: (iniData?.artist as string) || 'Unknown Artist',
+          album: iniData?.album as string,
+          genre: iniData?.genre as string,
+          year: iniData?.year !== undefined ? String(iniData.year) : undefined,
+          charter: iniData?.charter as string,
+          song_length: iniData?.song_length as number,
+          preview_start_time: iniData?.preview_start_time as number
+        }
+
+        let parsedData: ReturnType<typeof parseMidiBase64> | null = null
+        let sourceFormat: 'midi' | 'chart' = 'midi'
+
+        const midiResult = await window.api.readSongMidi(songFolder.path)
+        if (midiResult) {
+          parsedData = midiResult.type === 'chart'
+            ? parseChartFile(midiResult.data)
+            : parseMidiBase64(midiResult.data)
+          sourceFormat = midiResult.type === 'chart' ? 'chart' : 'midi'
+        }
+
+        const store = getSongStore(songFolder.id)
+        store.getState().loadSong({
+          id: songFolder.id,
+          folderPath: songFolder.path,
+          metadata,
+          notes: parsedData?.notes ?? [],
+          vocalNotes: parsedData?.vocalNotes ?? [],
+          vocalPhrases: parsedData?.vocalPhrases ?? [],
+          starPowerPhrases: parsedData?.starPowerPhrases ?? [],
+          soloSections: parsedData?.soloSections ?? [],
+          laneMarkers: parsedData?.laneMarkers ?? [],
+          songSections: parsedData?.songSections ?? [],
+          tempoEvents: parsedData?.tempoEvents ?? [{ tick: 0, bpm: 120 }],
+          timeSignatures: parsedData?.timeSignatures ?? [{ tick: 0, numerator: 4, denominator: 4 }],
+          videoSync: { clips: [], offsetMs: 0, trimStartMs: 0, trimEndMs: 0 },
+          audioSync: { clips: [] },
+          venueTrack: parsedData?.venueTrack ?? { autoGenerated: false, lighting: [], postProcessing: [], stage: [], performer: [], cameraCuts: [] },
+          sourceFormat
+        })
+
+        addSong(songFolder.id)
+      } catch (error) {
+        console.error(`Failed to load song ${songFolder.name}:`, error)
+      }
+    }
+
+    if (songFolders.length > 0) {
+      setActiveSong(songFolders[0].id)
+    }
+  }, [addSong, setActiveSong, setLoadedFolder])
+
   const handleOpenFolder = async (): Promise<void> => {
     try {
-      // 1. Open folder dialog
       const folderPath = await window.api.openFolder()
       if (!folderPath) return
-
-      // 2. Set loaded folder path (clears existing songs)
-      setLoadedFolder(folderPath)
-
-      // 3. Scan for song folders
-      const songFolders = await window.api.scanFolder(folderPath)
-
-      // 4. Load each song
-      for (const songFolder of songFolders) {
-        try {
-          const iniData = await window.api.readSongIni(songFolder.path)
-
-          const metadata: SongMetadata = {
-            name: (iniData?.name as string) || (iniData?.title as string) || songFolder.name,
-            artist: (iniData?.artist as string) || 'Unknown Artist',
-            album: iniData?.album as string,
-            genre: iniData?.genre as string,
-            year: iniData?.year !== undefined ? String(iniData.year) : undefined,
-            charter: iniData?.charter as string,
-            song_length: iniData?.song_length as number,
-            preview_start_time: iniData?.preview_start_time as number
-          }
-
-          const store = getSongStore(songFolder.id)
-          store.getState().loadSong({
-            id: songFolder.id,
-            folderPath: songFolder.path,
-            metadata,
-            notes: [],
-            vocalNotes: [],
-            vocalPhrases: [],
-            starPowerPhrases: [],
-            soloSections: [],
-            laneMarkers: [],
-            songSections: [],
-            tempoEvents: [{ tick: 0, bpm: 120 }],
-            timeSignatures: [{ tick: 0, numerator: 4, denominator: 4 }],
-            videoSync: { clips: [], offsetMs: 0, trimStartMs: 0, trimEndMs: 0 },
-            audioSync: { clips: [] },
-            venueTrack: { autoGenerated: false, lighting: [], postProcessing: [], stage: [], performer: [], cameraCuts: [] },
-            sourceFormat: 'midi'
-          })
-
-          addSong(songFolder.id)
-        } catch (error) {
-          console.error(`Failed to load song ${songFolder.name}:`, error)
-        }
-      }
-
-      // 5. Select first song
-      if (songFolders.length > 0) {
-        setActiveSong(songFolders[0].id)
-      }
+      await loadProjectFolder(folderPath)
     } catch (error) {
       console.error('Failed to open folder:', error)
     }
   }
+
+  useEffect(() => {
+    return window.api.onAutoChartProgress((event) => {
+      setAutoChartProgress((prev) => {
+        if (prev.runId && event.runId !== prev.runId) return prev
+
+        const currentRank = AUTO_CHART_STAGE_ORDER[prev.stage] ?? -1
+        const incomingRank = AUTO_CHART_STAGE_ORDER[event.stage] ?? -1
+        if (incomingRank < currentRank && event.stage !== 'error' && event.stage !== 'complete') {
+          return prev
+        }
+
+        const incomingPercent = event.percent ?? prev.percent
+        const nextPercent = incomingRank === currentRank
+          ? Math.max(prev.percent, incomingPercent)
+          : incomingPercent
+
+        return {
+          ...prev,
+          runId: event.runId,
+          stage: event.stage,
+          message: event.message,
+          percent: nextPercent,
+          currentItem: event.currentItem,
+          isRunning: event.stage !== 'complete' && event.stage !== 'error',
+          error: null
+        }
+      })
+    })
+  }, [])
+
+  useEffect(() => {
+    return window.api.onAutoChartComplete((event) => {
+      setAutoChartProgress((prev) => {
+        if (prev.runId !== event.runId) return prev
+        return {
+          ...prev,
+          isRunning: false,
+          percent: 100,
+          stage: 'complete',
+          message: event.success ? 'Auto-chart complete.' : 'Auto-chart finished with no successful songs.',
+          warnings: event.errors
+        }
+      })
+
+      if (event.success) {
+        updateSettings({ autoChartOutputDir: event.outputDir, lastOpenedFolder: event.outputDir })
+        void loadProjectFolder(event.outputDir)
+      }
+    })
+  }, [loadProjectFolder, updateSettings])
+
+  useEffect(() => {
+    return window.api.onAutoChartError((event) => {
+      setAutoChartProgress((prev) => {
+        if (prev.runId !== event.runId) return prev
+        return {
+          ...prev,
+          isRunning: false,
+          stage: 'error',
+          error: event.message,
+          message: event.message
+        }
+      })
+    })
+  }, [])
+
+  const openAutoChartModal = useCallback((): void => {
+    setAutoChartProgress((prev) => ({
+      ...prev,
+      outputDir: getPreferredAutoChartOutputDir(),
+      error: null
+    }))
+    setAutoChartUrls((prev) => (prev.length > 0 ? prev : [EMPTY_AUTO_CHART_URL]))
+    setIsAutoChartModalOpen(true)
+  }, [getPreferredAutoChartOutputDir])
+
+  const handleAddAutoChartUrl = useCallback((): void => {
+    setAutoChartUrls((prev) => [...prev, EMPTY_AUTO_CHART_URL])
+  }, [])
+
+  const handleUpdateAutoChartUrl = useCallback((index: number, value: string): void => {
+    setAutoChartUrls((prev) => prev.map((entry, entryIndex) => (entryIndex === index ? value : entry)))
+  }, [])
+
+  const handleRemoveAutoChartUrl = useCallback((index: number): void => {
+    setAutoChartUrls((prev) => {
+      if (prev.length === 1) {
+        return [EMPTY_AUTO_CHART_URL]
+      }
+
+      return prev.filter((_, entryIndex) => entryIndex !== index)
+    })
+  }, [])
+
+  const handleCopyAutoChartError = useCallback(async (): Promise<void> => {
+    if (!autoChartProgress.error) return
+
+    try {
+      await navigator.clipboard.writeText(autoChartProgress.error)
+      setAutoChartErrorCopied(true)
+      window.setTimeout(() => setAutoChartErrorCopied(false), 2000)
+    } catch (error) {
+      console.error('Failed to copy auto-chart error:', error)
+    }
+  }, [autoChartProgress.error])
+
+  const handleStartAutoChart = useCallback(async (): Promise<void> => {
+    const outputDir = autoChartProgress.outputDir.trim()
+    const urls = autoChartUrls.map((entry) => entry.trim()).filter(Boolean)
+
+    if (!outputDir) {
+      setAutoChartProgress((prev) => ({ ...prev, error: 'Choose an output folder before starting.' }))
+      return
+    }
+
+    if (autoChartFiles.length === 0 && autoChartFolders.length === 0 && urls.length === 0) {
+      setAutoChartProgress((prev) => ({ ...prev, error: 'Add at least one audio file, folder, or URL.' }))
+      return
+    }
+
+    updateSettings({ autoChartOutputDir: outputDir })
+    setAutoChartErrorCopied(false)
+    setAutoChartProgress((prev) => ({
+      ...prev,
+      isRunning: true,
+      error: null,
+      warnings: [],
+      message: 'Launching STRUM...',
+      percent: 0
+    }))
+
+    try {
+      const { runId } = await window.api.startAutoChart({
+        outputDir,
+        files: autoChartFiles,
+        folders: autoChartFolders,
+        urls,
+        includeKeys: true
+      })
+      setAutoChartProgress((prev) => ({ ...prev, runId }))
+    } catch (error) {
+      setAutoChartProgress((prev) => ({
+        ...prev,
+        isRunning: false,
+        error: error instanceof Error ? error.message : String(error)
+      }))
+    }
+  }, [autoChartFiles, autoChartFolders, autoChartProgress.outputDir, autoChartUrls, updateSettings])
+
+  const handleCancelAutoChart = useCallback(async (): Promise<void> => {
+    if (!autoChartProgress.runId) return
+    await window.api.cancelAutoChart(autoChartProgress.runId)
+  }, [autoChartProgress.runId])
 
   const handleSave = async (): Promise<void> => {
     if (!songStore) return
@@ -508,8 +751,9 @@ export function Toolbar(): React.JSX.Element {
       <div className="toolbar-group">
         <button
           className="toolbar-button toolbar-button-accent"
-          disabled={!activeSongId}
-          title="Generate Chart with AI"
+          disabled={!enableAutoChart}
+          title={enableAutoChart ? 'Generate a chart package from audio with STRUM' : 'Enable STRUM auto-charting in Settings'}
+          onClick={openAutoChartModal}
         >
           <span className="toolbar-icon">🤖</span>
           <span className="toolbar-label">Auto-Chart</span>
@@ -580,6 +824,172 @@ export function Toolbar(): React.JSX.Element {
                 ))}
               </ul>
             )}
+          </div>
+        </div>
+      )}
+
+      {isAutoChartModalOpen && (
+        <div className="settings-modal-overlay" onClick={() => !autoChartProgress.isRunning && setIsAutoChartModalOpen(false)}>
+          <div className="settings-modal auto-chart-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="settings-modal-header">
+              <div>
+                <h2 className="settings-modal-title">Auto-Chart from Audio</h2>
+                <p className="settings-modal-subtitle">Run STRUM on local audio files, folders, or URLs and load the generated chart package output.</p>
+              </div>
+              <button
+                className="settings-modal-close"
+                onClick={() => !autoChartProgress.isRunning && setIsAutoChartModalOpen(false)}
+                aria-label="Close auto-chart dialog"
+              >
+                X
+              </button>
+            </div>
+
+            <div className="settings-modal-body auto-chart-body">
+              <section className="settings-preferences-group">
+                <h3 className="settings-hotkey-group-title">Inputs</h3>
+                <div className="settings-preferences-body auto-chart-inputs">
+                  <div className="auto-chart-actions-row">
+                    <button className="settings-modal-secondary" onClick={async () => {
+                      const files = await window.api.openAudioFilesDialog()
+                      if (files.length > 0) {
+                        setAutoChartFiles((prev) => Array.from(new Set([...prev, ...files])))
+                      }
+                    }}>Add Files</button>
+                    <button className="settings-modal-secondary" onClick={async () => {
+                      const folder = await window.api.openAudioFolderDialog()
+                      if (folder) {
+                        setAutoChartFolders((prev) => Array.from(new Set([...prev, folder])))
+                      }
+                    }}>Add Folder</button>
+                    <button className="settings-modal-secondary" onClick={async () => {
+                      const folder = await window.api.openOutputFolderDialog()
+                      if (folder) {
+                        setAutoChartProgress((prev) => ({ ...prev, outputDir: folder, error: null }))
+                      }
+                    }}>Choose Output</button>
+                  </div>
+
+                  <div className="auto-chart-chip-list">
+                    {autoChartFiles.map((file) => (
+                      <button key={file} className="auto-chart-chip" onClick={() => setAutoChartFiles((prev) => prev.filter((entry) => entry !== file))}>
+                        File: {file.split(/[\\/]/).pop()} ×
+                      </button>
+                    ))}
+                    {autoChartFolders.map((folder) => (
+                      <button key={folder} className="auto-chart-chip" onClick={() => setAutoChartFolders((prev) => prev.filter((entry) => entry !== folder))}>
+                        Folder: {folder.split(/[\\/]/).pop()} ×
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="settings-field-stack">
+                    <label className="settings-field-label" htmlFor="auto-chart-output">Output folder</label>
+                    <input
+                      id="auto-chart-output"
+                      className="settings-folder-input"
+                      type="text"
+                      value={autoChartProgress.outputDir}
+                      onChange={(event) => setAutoChartProgress((prev) => ({ ...prev, outputDir: event.target.value }))}
+                      placeholder="Generated song folders will be written here"
+                    />
+                  </div>
+
+                  <div className="settings-field-stack">
+                    <div className="auto-chart-url-header">
+                      <label className="settings-field-label" htmlFor="auto-chart-url-0">Audio / YouTube URLs</label>
+                      <button className="auto-chart-icon-button" onClick={handleAddAutoChartUrl} title="Add URL row" aria-label="Add URL row">+</button>
+                    </div>
+                    <div className="auto-chart-url-list">
+                      {autoChartUrls.map((url, index) => (
+                        <div key={`auto-chart-url-${index}`} className="auto-chart-url-row">
+                          <input
+                            id={`auto-chart-url-${index}`}
+                            className="settings-folder-input auto-chart-url-input"
+                            type="text"
+                            value={url}
+                            onChange={(event) => handleUpdateAutoChartUrl(index, event.target.value)}
+                            placeholder="Paste an audio or YouTube URL"
+                          />
+                          <button
+                            className="auto-chart-icon-button auto-chart-delete-button"
+                            onClick={() => handleRemoveAutoChartUrl(index)}
+                            title="Remove URL row"
+                            aria-label="Remove URL row"
+                          >
+                            🗑
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="settings-preferences-group">
+                <h3 className="settings-hotkey-group-title">Progress</h3>
+                <div className="settings-preferences-body auto-chart-progress-panel">
+                  <div className="auto-chart-progress-header">
+                    <strong>{autoChartProgress.stage.toUpperCase()}</strong>
+                    <span>{autoChartProgress.percent}%</span>
+                  </div>
+                  <div className="toolbar-updater-bar auto-chart-progress-bar">
+                    <div className="toolbar-updater-bar-fill" style={{ width: `${autoChartProgress.percent}%` }} />
+                  </div>
+                  <div className="auto-chart-progress-message">{autoChartProgress.message || 'Idle'}</div>
+                  {autoChartProgress.currentItem && (
+                    <div className="auto-chart-progress-subtle">Current: {autoChartProgress.currentItem}</div>
+                  )}
+                  {autoChartProgress.error && (
+                    <div className="auto-chart-error">
+                      <div className="auto-chart-error-header">
+                        <strong>Run Error</strong>
+                        <button
+                          className="auto-chart-error-copy"
+                          onClick={() => void handleCopyAutoChartError()}
+                          type="button"
+                        >
+                          {autoChartErrorCopied ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <div className="auto-chart-error-text">{autoChartProgress.error}</div>
+                    </div>
+                  )}
+                  {autoChartProgress.warnings.length > 0 && (
+                    <div className="auto-chart-warning-list">
+                      {autoChartProgress.warnings.map((warning) => (
+                        <div key={warning} className="auto-chart-warning-item">{warning}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
+
+            <div className="settings-modal-footer">
+              <button className="settings-modal-secondary" onClick={() => {
+                setAutoChartFiles([])
+                setAutoChartFolders([])
+                setAutoChartUrls([EMPTY_AUTO_CHART_URL])
+                setAutoChartErrorCopied(false)
+                setAutoChartProgress({
+                  runId: null,
+                  stage: 'bootstrap',
+                  message: '',
+                  percent: 0,
+                  isRunning: false,
+                  outputDir: getPreferredAutoChartOutputDir(),
+                  error: null,
+                  warnings: []
+                })
+              }} disabled={autoChartProgress.isRunning}>Reset</button>
+              <button className="settings-modal-secondary" onClick={() => autoChartProgress.isRunning ? void handleCancelAutoChart() : setIsAutoChartModalOpen(false)}>
+                {autoChartProgress.isRunning ? 'Cancel Run' : 'Close'}
+              </button>
+              <button className="settings-modal-primary" onClick={() => void handleStartAutoChart()} disabled={autoChartProgress.isRunning}>
+                Start Auto-Chart
+              </button>
+            </div>
           </div>
         </div>
       )}

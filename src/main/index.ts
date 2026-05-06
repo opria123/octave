@@ -3,10 +3,12 @@ import { join, resolve, basename } from 'path'
 import { readdir, readFile, writeFile, stat, rename, copyFile, unlink, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { execFile, spawn } from 'child_process'
+import { randomUUID } from 'crypto'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater, type UpdateDownloadedEvent } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
 import ffmpeg from 'fluent-ffmpeg'
+import { cancelAutoChart, getStrumRequirementsPath, runAutoChart } from './strumIntegration/runner'
 
 // Point fluent-ffmpeg at the bundled static binary
 try {
@@ -508,6 +510,82 @@ ipcMain.handle('dialog:openAudio', async () => {
   })
   if (result.canceled || result.filePaths.length === 0) return null
   return result.filePaths[0]
+})
+
+ipcMain.handle('dialog:openAudioFiles', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile', 'multiSelections'],
+    title: 'Select Audio Files',
+    filters: [
+      { name: 'Audio Files', extensions: ['ogg', 'mp3', 'opus', 'wav', 'flac'] }
+    ]
+  })
+  if (result.canceled || result.filePaths.length === 0) return []
+  return result.filePaths
+})
+
+ipcMain.handle('dialog:openAudioFolder', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Select Audio Input Folder'
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+})
+
+ipcMain.handle('dialog:openOutputFolder', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Select Auto-Chart Output Folder'
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+})
+
+ipcMain.handle('strum:getDefaultOutputFolder', async () => {
+  const defaultOutputFolder = join(app.getPath('documents'), 'OCTAVE', 'Auto-Chart Output')
+  await mkdir(defaultOutputFolder, { recursive: true })
+  return defaultOutputFolder
+})
+
+ipcMain.handle('strum:start', async (_event, options: {
+  outputDir: string
+  files: string[]
+  folders: string[]
+  urls: string[]
+  includeKeys?: boolean
+}) => {
+  const runId = randomUUID()
+
+  void runAutoChart({
+    runId,
+    outputDir: options.outputDir,
+    files: options.files,
+    folders: options.folders,
+    urls: options.urls,
+    includeKeys: options.includeKeys
+  })
+    .then((result) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('strum:complete', { runId, ...result })
+      }
+    })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error)
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('strum:error', {
+          runId,
+          message,
+          requirementsPath: getStrumRequirementsPath()
+        })
+      }
+    })
+
+  return { runId }
+})
+
+ipcMain.handle('strum:cancel', async (_event, runId: string) => {
+  return await cancelAutoChart(runId)
 })
 
 // Open lyric/subtitle file dialog (.lrc/.srt/.ttml)

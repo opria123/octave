@@ -1,0 +1,58 @@
+# Pinned exact versions for reproducible packaged builds.
+# Generated from working dev environment (Anaconda 3.10, Windows, 2026-05-06).
+# torch/torchaudio pinned to CPU variant for cross-platform packaging;
+# they fall back to CPU automatically on machines without an NVIDIA GPU.
+# To use CUDA locally, install torch==2.6.0+cu124 and torchaudio==2.6.0+cu124
+# from https://download.pytorch.org/whl/cu124 after setup.
+
+# ── Core pipeline ──────────────────────────────────────────────────────────────
+torch==2.6.0
+torchaudio==2.6.0
+demucs==4.0.1
+librosa==0.11.0
+openai-whisper==20250625
+mido==1.3.3
+basic-pitch==0.4.0
+huggingface_hub==0.36.2
+numpy==1.26.4
+soundfile==0.13.1
+omegaconf==2.3.0
+PyYAML==6.0.1
+requests==2.33.1
+yt-dlp==2026.3.17
+pyphen==0.17.2
+crepe==0.0.16
+onnxruntime==1.20.0
+protobuf==4.25.3
+
+# ── Pinned indirect dependencies ───────────────────────────────────────────────
+scipy==1.15.3
+numba==0.65.1
+llvmlite==0.47.0
+resampy==0.4.2
+audioread==3.1.0
+soxr==1.1.0
+lazy-loader==0.5
+joblib==1.5.3
+decorator==5.2.1
+pooch==1.9.0
+msgpack==1.1.2
+einops==0.8.2
+julius==0.2.7
+lameenc==1.8.2
+dora-search==0.1.12
+antlr4-python3-runtime==4.9.3
+tqdm==4.66.5
+click==8.1.7
+mir_eval==0.8.2
+pretty_midi==0.2.11
+cffi==2.0.0
+six==1.17.0
+packaging==26.2
+filelock==3.25.2
+fsspec==2026.2.0
+typing_extensions==4.15.0
+certifi==2026.4.22
+charset-normalizer==3.4.7
+idna==3.13
+urllib3==2.6.3

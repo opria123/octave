@@ -16,16 +16,37 @@ export function SettingsModal(): React.JSX.Element | null {
   const isOpen = useUIStore((s) => s.isSettingsModalOpen)
   const setSettingsModalOpen = useUIStore((s) => s.setSettingsModalOpen)
   const hotkeys = useSettingsStore((s) => s.hotkeys)
+  const enableAutoChart = useSettingsStore((s) => s.enableAutoChart)
+  const autoChartOutputDir = useSettingsStore((s) => s.autoChartOutputDir)
   const updateSettings = useSettingsStore((s) => s.updateSettings)
   const [recordingAction, setRecordingAction] = useState<HotkeyAction | null>(null)
   const [draftHotkeys, setDraftHotkeys] = useState<AppHotkeys>(hotkeys)
+  const [draftEnableAutoChart, setDraftEnableAutoChart] = useState(enableAutoChart)
+  const [draftAutoChartOutputDir, setDraftAutoChartOutputDir] = useState(autoChartOutputDir ?? '')
 
   useEffect(() => {
     if (isOpen) {
       setDraftHotkeys(hotkeys)
+      setDraftEnableAutoChart(enableAutoChart)
+      setDraftAutoChartOutputDir(autoChartOutputDir ?? '')
       setRecordingAction(null)
     }
-  }, [hotkeys, isOpen])
+  }, [autoChartOutputDir, enableAutoChart, hotkeys, isOpen])
+
+  useEffect(() => {
+    if (!isOpen || draftAutoChartOutputDir.trim()) return
+
+    let cancelled = false
+    void window.api.getDefaultAutoChartOutputDir().then((defaultPath) => {
+      if (!cancelled) {
+        setDraftAutoChartOutputDir(defaultPath)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [draftAutoChartOutputDir, isOpen])
 
   const conflictMap = useMemo(() => {
     const buckets = new Map<string, HotkeyAction[]>()
@@ -93,6 +114,41 @@ export function SettingsModal(): React.JSX.Element | null {
         </div>
 
         <div className="settings-modal-body">
+          <section className="settings-preferences-group">
+            <h3 className="settings-hotkey-group-title">Auto-Chart</h3>
+            <div className="settings-preferences-body">
+              <label className="settings-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={draftEnableAutoChart}
+                  onChange={(event) => setDraftEnableAutoChart(event.target.checked)}
+                />
+                <span>Enable STRUM auto-charting</span>
+              </label>
+              <div className="settings-field-stack">
+                <label className="settings-field-label" htmlFor="auto-chart-output-dir">Default output folder</label>
+                <div className="settings-folder-picker">
+                  <input
+                    id="auto-chart-output-dir"
+                    className="settings-folder-input"
+                    type="text"
+                    value={draftAutoChartOutputDir}
+                    placeholder="Default output folder for generated chart packages"
+                    onChange={(event) => setDraftAutoChartOutputDir(event.target.value)}
+                  />
+                  <button
+                    className="settings-modal-secondary"
+                    onClick={async () => {
+                      const path = await window.api.openOutputFolderDialog()
+                      if (path) setDraftAutoChartOutputDir(path)
+                    }}
+                  >
+                    Browse
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
           {hasConflicts && (
             <div className="settings-hotkey-conflicts-banner">
               Resolve duplicate bindings before saving. Conflicting shortcuts are highlighted below.
@@ -154,7 +210,11 @@ export function SettingsModal(): React.JSX.Element | null {
             className="settings-modal-primary"
             disabled={hasConflicts}
             onClick={() => {
-              updateSettings({ hotkeys: draftHotkeys })
+              updateSettings({
+                hotkeys: draftHotkeys,
+                enableAutoChart: draftEnableAutoChart,
+                autoChartOutputDir: draftAutoChartOutputDir.trim() || undefined
+              })
               setSettingsModalOpen(false)
             }}
           >

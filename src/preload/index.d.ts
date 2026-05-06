@@ -9,6 +9,10 @@ interface ChartEditorAPI {
 
   // Dialog APIs
   openAudioDialog: () => Promise<string | null>
+  openAudioFilesDialog: () => Promise<string[]>
+  openAudioFolderDialog: () => Promise<string | null>
+  openOutputFolderDialog: () => Promise<string | null>
+  getDefaultAutoChartOutputDir: () => Promise<string>
   openLyricsFileDialog: () => Promise<{ filePath: string; content: string } | null>
 
   // Song APIs
@@ -49,6 +53,35 @@ interface ChartEditorAPI {
     offsetMs: number; trimStartMs: number; trimEndMs: number
   }) => Promise<{ success: boolean; error?: string }>
   onExportProgress: (callback: (percent: number) => void) => () => void
+
+  // STRUM auto-chart APIs
+  startAutoChart: (options: {
+    outputDir: string
+    files: string[]
+    folders: string[]
+    urls: string[]
+    includeKeys?: boolean
+  }) => Promise<{ runId: string }>
+  cancelAutoChart: (runId: string) => Promise<boolean>
+  onAutoChartProgress: (callback: (event: {
+    runId: string
+    stage: string
+    message: string
+    percent?: number
+    currentItem?: string
+  }) => void) => () => void
+  onAutoChartComplete: (callback: (event: {
+    runId: string
+    success: boolean
+    outputDir: string
+    songFolders: string[]
+    errors: string[]
+  }) => void) => () => void
+  onAutoChartError: (callback: (event: {
+    runId: string
+    message: string
+    requirementsPath?: string
+  }) => void) => () => void
 
   // App updater events
   onUpdaterStatus: (callback: (status: {

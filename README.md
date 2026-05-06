@@ -158,6 +158,47 @@ npm install
 npm run dev
 ```
 
+### STRUM Auto-Charting
+
+OCTAVE can run the STRUM auto-chart pipeline to generate Clone Hero / YARG chart packages from audio.
+
+End users:
+- Release builds are self-contained. Users install the OCTAVE app artifact only.
+- The bundled Python runtime and STRUM Python dependencies ship inside the app.
+- App auto-updates replace the app bundle, so bundled Python/runtime changes ship with the release automatically.
+
+Development builds:
+- The auto-chart feature uses a local Python 3.11+ environment in development.
+- Set `OCTAVE_STRUM_PYTHON` if you want to point OCTAVE at a specific interpreter.
+
+Release engineering:
+- Packaging runs `npm run prepare:python-runtime` before `electron-builder` so the current build machine's Python 3.11+ runtime and STRUM dependencies are copied into app resources.
+- Set `OCTAVE_BUNDLED_PYTHON` if the build should use a specific Python interpreter.
+- FFmpeg must still be available on `PATH` for Whisper/audio decoding.
+
+Development Python dependency install paths:
+
+CPU-only (default)
+```bash
+python -m pip install -r resources/strum/requirements.txt
+```
+
+NVIDIA CUDA
+```bash
+python -m pip install --index-url https://download.pytorch.org/whl/cu124 torch torchaudio
+python -m pip install -r resources/strum/requirements.txt
+```
+
+Apple Silicon
+```bash
+python -m pip install -r resources/strum/requirements.txt
+```
+
+Notes:
+- OCTAVE resolves the STRUM device automatically in this order: CUDA → Apple MPS → CPU.
+- Vanilla PyPI `torch` is the default. The CUDA index URL above is optional and only for NVIDIA users who want the PyTorch CUDA wheel explicitly.
+- STRUM checkpoints are downloaded on first run from the Hugging Face repo and cached outside the source tree.
+
 ### Scripts
 
 | Command | Description |

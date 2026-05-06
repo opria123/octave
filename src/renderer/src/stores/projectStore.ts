@@ -58,6 +58,8 @@ const defaultSettings: AppSettings = {
   snapDivision: 4,
   lastOpenedFolder: undefined,
   leftyFlip: false,
+  enableAutoChart: true,
+  autoChartOutputDir: undefined,
   hotkeys: cloneDefaultHotkeys()
 }
 

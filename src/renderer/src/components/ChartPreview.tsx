@@ -2,7 +2,7 @@
 // Split into modules under ./chartPreview/ for maintainability
 import { useEffect, useState, useCallback, useRef, Suspense, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { PerspectiveCamera } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import * as THREE from 'three'
@@ -75,6 +75,45 @@ const DEFAULT_VENUE_VISUAL: VenueVisualState = {
   cameraDistanceOffset: 0,
   cameraFovOffset: 0,
   cssFilter: 'none'
+}
+
+function VenueCameraController({
+  venueVisual,
+  hasVocalOverlay,
+  visibleTrackCount
+}: {
+  venueVisual: VenueVisualState
+  hasVocalOverlay: boolean
+  visibleTrackCount: number
+}): null {
+  const { camera } = useThree()
+  const desiredPos = useRef(new THREE.Vector3())
+  const lookAtPos = useRef(new THREE.Vector3())
+
+  useFrame(() => {
+    const baseHeight = CAMERA_HEIGHT + (hasVocalOverlay ? 0.06 : 0)
+    const baseDistance = CAMERA_DISTANCE + 0.75 + (hasVocalOverlay ? 0.22 : 0) + (visibleTrackCount >= 4 ? 0.18 : 0)
+
+    desiredPos.current.set(
+      venueVisual.cameraXOffset,
+      baseHeight + venueVisual.cameraHeightOffset,
+      STRIKE_LINE_POS + baseDistance + venueVisual.cameraDistanceOffset
+    )
+
+    camera.position.lerp(desiredPos.current, 0.18)
+
+    // Aim farther down-lane to reduce steep pitch and expose more highway depth.
+    lookAtPos.current.set(venueVisual.cameraXOffset * 0.2, 0.22, STRIKE_LINE_POS - 2.6)
+    camera.lookAt(lookAtPos.current)
+
+    if (camera instanceof THREE.PerspectiveCamera) {
+      const targetFov = THREE.MathUtils.clamp(CAMERA_FOV + venueVisual.cameraFovOffset, 35, 80)
+      camera.fov += (targetFov - camera.fov) * 0.18
+      camera.updateProjectionMatrix()
+    }
+  })
+
+  return null
 }
 
 // -- Background Video (plays behind 3D highway like in the games) -----
@@ -242,6 +281,9 @@ function HighwayWrapper({
     })
   }, [songId])
 
+  const visibleTrackCount = Array.from(visibleInstruments).filter((inst) => inst !== 'vocals').length
+  const hasVocalOverlay = visibleInstruments.has('vocals')
+
   // When video is loaded, make canvas transparent so video shows behind
   const glProps = hasVideo
     ? { antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0, alpha: true }
@@ -263,6 +305,11 @@ function HighwayWrapper({
         fov={CAMERA_FOV}
         near={0.1}
         far={150}
+      />
+      <VenueCameraController
+        venueVisual={venueVisual}
+        hasVocalOverlay={hasVocalOverlay}
+        visibleTrackCount={visibleTrackCount}
       />
       {!hasVideo && <fog attach="fog" args={['#050508', 18, 45]} />}
       {!hasVideo && <color attach="background" args={['#050508']} />}

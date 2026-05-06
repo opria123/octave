@@ -264,6 +264,8 @@ export interface AppSettings {
   snapDivision: number // 1-32
   lastOpenedFolder?: string
   leftyFlip: boolean // Mirror highway left-right for left-handed players
+  enableAutoChart: boolean
+  autoChartOutputDir?: string
   hotkeys: AppHotkeys
 }
 

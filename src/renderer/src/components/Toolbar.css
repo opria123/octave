@@ -343,3 +343,149 @@
   background: var(--accent-color);
   transition: width 0.2s ease;
 }
+
+.auto-chart-modal {
+  width: min(860px, 100%);
+}
+
+.auto-chart-body {
+  gap: 16px;
+}
+
+.auto-chart-inputs {
+  gap: 12px;
+}
+
+.auto-chart-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.auto-chart-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.auto-chart-chip {
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.auto-chart-url-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.auto-chart-url-list {
+  display: grid;
+  gap: 10px;
+}
+
+.auto-chart-url-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.auto-chart-url-input {
+  min-width: 0;
+}
+
+.auto-chart-icon-button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.auto-chart-delete-button {
+  font-size: 16px;
+}
+
+.auto-chart-progress-panel {
+  gap: 10px;
+}
+
+.auto-chart-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.auto-chart-progress-bar {
+  width: 100%;
+}
+
+.auto-chart-progress-message {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.auto-chart-progress-subtle {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.auto-chart-error {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(240, 109, 109, 0.1);
+  border: 1px solid rgba(240, 109, 109, 0.35);
+  color: #ffb2b2;
+  font-size: 12px;
+}
+
+.auto-chart-error-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.auto-chart-error-copy {
+  border: 1px solid rgba(240, 109, 109, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffd0d0;
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.auto-chart-error-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  cursor: text;
+}
+
+.auto-chart-warning-list {
+  display: grid;
+  gap: 8px;
+}
+
+.auto-chart-warning-item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 170, 68, 0.08);
+  border: 1px solid rgba(255, 170, 68, 0.25);
+  color: #ffd39b;
+  font-size: 12px;
+}

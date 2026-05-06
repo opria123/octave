@@ -14,6 +14,18 @@ const api = {
   openAudioDialog: (): Promise<string | null> =>
     ipcRenderer.invoke('dialog:openAudio'),
 
+  openAudioFilesDialog: (): Promise<string[]> =>
+    ipcRenderer.invoke('dialog:openAudioFiles'),
+
+  openAudioFolderDialog: (): Promise<string | null> =>
+    ipcRenderer.invoke('dialog:openAudioFolder'),
+
+  openOutputFolderDialog: (): Promise<string | null> =>
+    ipcRenderer.invoke('dialog:openOutputFolder'),
+
+  getDefaultAutoChartOutputDir: (): Promise<string> =>
+    ipcRenderer.invoke('strum:getDefaultOutputFolder'),
+
   openLyricsFileDialog: (): Promise<{ filePath: string; content: string } | null> =>
     ipcRenderer.invoke('dialog:openLyricsFile'),
 
@@ -107,6 +119,68 @@ const api = {
     const handler = (_event: unknown, percent: number): void => callback(percent)
     ipcRenderer.on('video:export-progress', handler)
     return () => ipcRenderer.removeListener('video:export-progress', handler)
+  },
+
+  startAutoChart: (options: {
+    outputDir: string
+    files: string[]
+    folders: string[]
+    urls: string[]
+    includeKeys?: boolean
+  }): Promise<{ runId: string }> =>
+    ipcRenderer.invoke('strum:start', options),
+
+  cancelAutoChart: (runId: string): Promise<boolean> =>
+    ipcRenderer.invoke('strum:cancel', runId),
+
+  onAutoChartProgress: (callback: (event: {
+    runId: string
+    stage: string
+    message: string
+    percent?: number
+    currentItem?: string
+  }) => void): (() => void) => {
+    const handler = (_event: unknown, payload: {
+      runId: string
+      stage: string
+      message: string
+      percent?: number
+      currentItem?: string
+    }): void => callback(payload)
+    ipcRenderer.on('strum:progress', handler)
+    return () => ipcRenderer.removeListener('strum:progress', handler)
+  },
+
+  onAutoChartComplete: (callback: (event: {
+    runId: string
+    success: boolean
+    outputDir: string
+    songFolders: string[]
+    errors: string[]
+  }) => void): (() => void) => {
+    const handler = (_event: unknown, payload: {
+      runId: string
+      success: boolean
+      outputDir: string
+      songFolders: string[]
+      errors: string[]
+    }): void => callback(payload)
+    ipcRenderer.on('strum:complete', handler)
+    return () => ipcRenderer.removeListener('strum:complete', handler)
+  },
+
+  onAutoChartError: (callback: (event: {
+    runId: string
+    message: string
+    requirementsPath?: string
+  }) => void): (() => void) => {
+    const handler = (_event: unknown, payload: {
+      runId: string
+      message: string
+      requirementsPath?: string
+    }): void => callback(payload)
+    ipcRenderer.on('strum:error', handler)
+    return () => ipcRenderer.removeListener('strum:error', handler)
   },
 
   // App updater events
