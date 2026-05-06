@@ -219,12 +219,35 @@ function ensureBundleFresh(info, requirementsHash) {
 
 function installRequirements(command, sitePackagesDir) {
   mkdirp(sitePackagesDir)
+
+  // Some legacy sdists (for example crepe==0.0.16) import pkg_resources
+  // during setup. On modern Python installers, isolated build envs can miss
+  // that module. Prime setuptools/wheel in the invoking interpreter and then
+  // disable build isolation so those packages can build reliably.
   execFileSync(command.command, [
     ...command.args,
     '-m',
     'pip',
     'install',
     '--upgrade',
+    'setuptools<81',
+    'wheel'
+  ], {
+    cwd: projectRoot,
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    }
+  })
+
+  execFileSync(command.command, [
+    ...command.args,
+    '-m',
+    'pip',
+    'install',
+    '--upgrade',
+    '--no-build-isolation',
     '--target',
     sitePackagesDir,
     '-r',
