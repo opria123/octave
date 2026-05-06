@@ -104,11 +104,22 @@ jobs:
         run: |
           cd resources/python/${{ matrix.platform }}-${{ matrix.arch }}
           tar -czf "../../../${{ steps.asset.outputs.name }}" python metadata.json
+          cd ../../..
+          # GitHub release assets are capped at 2 GiB, so split into 1.8 GiB
+          # parts. We always split (even small files become a single part)
+          # so the downloader has one consistent code path. Use the default
+          # 2-letter alphabetic suffix so this works with both GNU coreutils
+          # (Linux/Git Bash on Windows) and BSD split (macOS).
+          split -b 1800m \
+            "${{ steps.asset.outputs.name }}" \
+            "${{ steps.asset.outputs.name }}.part."
+          rm "${{ steps.asset.outputs.name }}"
+          ls -lh "${{ steps.asset.outputs.name }}".part.*
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.asset.outputs.name }}
-          path: ${{ steps.asset.outputs.name }}
+          path: ${{ steps.asset.outputs.name }}.part.*
           if-no-files-found: error
           retention-days: 7
 

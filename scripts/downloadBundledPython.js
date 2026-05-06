@@ -107,16 +107,20 @@ function downloadToFile(url, destPath) {
   })
 }
 
-async function findAssetUrl(tag, assetName) {
+async function findAssetParts(tag, assetName) {
   const apiUrl = `https://api.github.com/repos/${repository}/releases/tags/${tag}`
   const res = await httpsRequest(apiUrl, { headers: { Accept: 'application/vnd.github+json' } })
-  if (res.statusCode === 404) return null
+  if (res.statusCode === 404) return []
   if (res.statusCode !== 200) {
     throw new Error(`GitHub API returned ${res.statusCode} for ${apiUrl}`)
   }
   const release = JSON.parse(res.body.toString('utf-8'))
-  const asset = (release.assets || []).find((a) => a.name === assetName)
-  return asset ? asset.url : null
+  const partPrefix = `${assetName}.part.`
+  const parts = (release.assets || [])
+    .filter((a) => a.name.startsWith(partPrefix))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((a) => ({ name: a.name, url: a.url }))
+  return parts
 }
 
 async function main() {
@@ -129,25 +133,44 @@ async function main() {
   const assetName = getAssetName(process.platform, process.arch)
   console.log(`  • looking up pre-built runtime  tag=${tag} asset=${assetName}`)
 
-  let assetUrl
+  let parts
   try {
-    assetUrl = await findAssetUrl(tag, assetName)
+    parts = await findAssetParts(tag, assetName)
   } catch (err) {
     console.log(`  • lookup failed (${err.message}); will fall back to local build`)
     return
   }
 
-  if (!assetUrl) {
+  if (!parts || parts.length === 0) {
     console.log(`  • no pre-built runtime published for this requirements hash; will build locally`)
     return
   }
 
   fs.mkdirSync(targetDir(), { recursive: true })
   const tarballPath = path.join(targetDir(), assetName)
+  const partPaths = parts.map((p) => path.join(targetDir(), p.name))
 
   try {
-    console.log(`  • downloading pre-built runtime from release...`)
-    await downloadToFile(assetUrl, tarballPath)
+    console.log(`  • downloading ${parts.length} part(s) of pre-built runtime...`)
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i]
+      console.log(`    - [${i + 1}/${parts.length}] ${p.name}`)
+      await downloadToFile(p.url, path.join(targetDir(), p.name))
+    }
+
+    console.log(`  • reassembling tarball...`)
+    const out = fs.createWriteStream(tarballPath)
+    for (const partPath of partPaths) {
+      const data = fs.readFileSync(partPath)
+      out.write(data)
+    }
+    await new Promise((resolve, reject) => {
+      out.end((err) => (err ? reject(err) : resolve()))
+    })
+    for (const partPath of partPaths) {
+      try { fs.unlinkSync(partPath) } catch { /* noop */ }
+    }
+
     console.log(`  • extracting...`)
     execFileSync('tar', ['-xzf', tarballPath, '-C', targetDir()], { stdio: 'inherit' })
     fs.unlinkSync(tarballPath)
