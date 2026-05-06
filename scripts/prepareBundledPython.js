@@ -249,6 +249,7 @@ function splitRequirementsForBasicPitch() {
   const lines = raw.split(/\r?\n/)
 
   let basicPitchRequirement = null
+  const torchRequirements = []
   const baseLines = lines.filter((line) => {
     const trimmed = line.trim()
     if (!trimmed || trimmed.startsWith('#')) return true
@@ -257,11 +258,21 @@ function splitRequirementsForBasicPitch() {
       basicPitchRequirement = requirement
       return false
     }
+    // On Linux the default PyPI torch wheel pulls ~3 GB of CUDA libs
+    // (cuBLAS, cuDNN, cuSparse, nccl, triton, etc.). The bundled runtime
+    // doesn't need GPU — route torch/torchaudio through the CPU-only wheel
+    // index so packaged builds stay slim and finish within CI time limits.
+    if (process.platform === 'linux'
+      && (requirement.startsWith('torch==') || requirement.startsWith('torchaudio=='))) {
+      torchRequirements.push(requirement)
+      return false
+    }
     return true
   })
 
   return {
     basicPitchRequirement,
+    torchRequirements,
     baseRequirementsText: `${baseLines.join('\n')}\n`
   }
 }
@@ -290,12 +301,37 @@ function installRequirements(command, sitePackagesDir) {
     }
   })
 
-  const { basicPitchRequirement, baseRequirementsText } = splitRequirementsForBasicPitch()
+  const { basicPitchRequirement, torchRequirements, baseRequirementsText } = splitRequirementsForBasicPitch()
   const tempRequirementsPath = path.join(projectRoot, 'resources', 'python', getTargetKey(), 'requirements.base.txt')
   mkdirp(path.dirname(tempRequirementsPath))
   fs.writeFileSync(tempRequirementsPath, baseRequirementsText, 'utf-8')
 
   try {
+    if (torchRequirements.length > 0) {
+      execFileSync(command.command, [
+        ...command.args,
+        '-m',
+        'pip',
+        'install',
+        '--upgrade',
+        '--no-build-isolation',
+        '--target',
+        sitePackagesDir,
+        '--index-url',
+        'https://download.pytorch.org/whl/cpu',
+        '--extra-index-url',
+        'https://pypi.org/simple',
+        ...torchRequirements
+      ], {
+        cwd: projectRoot,
+        stdio: 'inherit',
+        env: {
+          ...process.env,
+          PIP_DISABLE_PIP_VERSION_CHECK: '1'
+        }
+      })
+    }
+
     execFileSync(command.command, [
       ...command.args,
       '-m',

@@ -80,7 +80,7 @@ jobs:
           - os: ubuntu-latest
             platform: linux
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
