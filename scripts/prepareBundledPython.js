@@ -107,22 +107,20 @@ function runPythonJson(command, args) {
 }
 
 function getPythonInfo(command) {
-  return runPythonJson(command, [
-    '-c',
-    [
-      'import json, site, sys, sysconfig',
-      'data = {',
-      '  "version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",',
-      '  "major_minor": f"{sys.version_info.major}.{sys.version_info.minor}",',
-      '  "base_prefix": sys.base_prefix,',
-      '  "executable": sys.executable,',
-      '  "purelib": sysconfig.get_path("purelib"),',
-      '  "platlib": sysconfig.get_path("platlib"),',
-      '  "sitepackages": site.getsitepackages(),',
-      '}',
-      'print(json.dumps(data))'
-    ].join('; ')
-  ])
+  // NOTE: must be a single semicolon-separated line — dict literals cannot span
+  // statements when using `python -c "..."` with `;` joining.
+  const script = 'import json, site, sys, sysconfig; '
+    + 'data = {'
+    + '"version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}", '
+    + '"major_minor": f"{sys.version_info.major}.{sys.version_info.minor}", '
+    + '"base_prefix": sys.base_prefix, '
+    + '"executable": sys.executable, '
+    + '"purelib": sysconfig.get_path("purelib"), '
+    + '"platlib": sysconfig.get_path("platlib"), '
+    + '"sitepackages": site.getsitepackages()'
+    + '}; '
+    + 'print(json.dumps(data))'
+  return runPythonJson(command, ['-c', script])
 }
 
 function ensureMinimumVersion(version) {
