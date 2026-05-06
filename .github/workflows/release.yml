@@ -68,8 +68,26 @@ jobs:
           git tag ${{ steps.bump.outputs.tag }}
           git push origin master --tags
 
-  build:
+  ensure-python-runtime:
     needs: tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Wait for matching python-runtime release (build & wait if missing)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/waitForPythonRuntime.js
+
+  build:
+    needs: [tag, ensure-python-runtime]
     strategy:
       matrix:
         include:
@@ -95,12 +113,27 @@ jobs:
         id: setup-python
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: resources/strum/requirements.txt
+
+      - name: Cache bundled Python runtime
+        uses: actions/cache@v4
+        with:
+          path: resources/python
+          key: bundled-python-${{ matrix.platform }}-py3.12-${{ hashFiles('resources/strum/requirements.txt', 'scripts/prepareBundledPython.js') }}
+          restore-keys: |
+            bundled-python-${{ matrix.platform }}-py3.12-
 
       - name: Install dependencies
         run: npm ci
 
       - name: Build app
         run: npm run build
+
+      - name: Download pre-built Python runtime (if available)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/downloadBundledPython.js
 
       - name: Package (${{ matrix.platform }})
         run: npx electron-builder --${{ matrix.platform }} --publish never

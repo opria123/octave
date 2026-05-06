@@ -1,0 +1,137 @@
+name: Build Python Runtime
+
+# Builds the bundled Python runtime per OS/arch and uploads the result as
+# assets on a content-addressed GitHub Release tag. Subsequent app release
+# builds download these tarballs instead of running pip from scratch.
+#
+# Triggered when requirements.txt or the bundling script changes (or manually).
+# A run is a no-op if a release already exists for the current hash.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'resources/strum/requirements.txt'
+      - 'scripts/prepareBundledPython.js'
+      - 'scripts/bundledPythonHash.js'
+      - '.github/workflows/python-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.compute.outputs.tag }}
+      hash: ${{ steps.compute.outputs.hash }}
+      already_built: ${{ steps.check.outputs.already_built }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Compute runtime hash
+        id: compute
+        run: |
+          HASH=$(node scripts/bundledPythonHash.js)
+          TAG="python-runtime-${HASH}"
+          echo "hash=${HASH}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Runtime tag: ${TAG}"
+
+      - name: Check if release already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${{ steps.compute.outputs.tag }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release ${{ steps.compute.outputs.tag }} already exists; skipping build."
+            echo "already_built=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_built=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: resolve
+    if: needs.resolve.outputs.already_built != 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win32
+            arch: x64
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-python@v5
+        id: setup-python
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: resources/strum/requirements.txt
+
+      - name: Build bundled Python runtime
+        env:
+          OCTAVE_BUNDLED_PYTHON: ${{ steps.setup-python.outputs.python-path }}
+        run: node scripts/prepareBundledPython.js
+
+      - name: Compute asset name
+        id: asset
+        shell: bash
+        run: |
+          NAME=$(node scripts/bundledPythonHash.js --asset ${{ matrix.platform }} ${{ matrix.arch }})
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Package runtime tarball
+        shell: bash
+        run: |
+          cd resources/python/${{ matrix.platform }}-${{ matrix.arch }}
+          tar -czf "../../../${{ steps.asset.outputs.name }}" python metadata.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.asset.outputs.name }}
+          path: ${{ steps.asset.outputs.name }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [resolve, build]
+    if: needs.resolve.outputs.already_built != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all runtime artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release with runtime tarballs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -lh artifacts
+          gh release create "${{ needs.resolve.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --title "Bundled Python runtime ${{ needs.resolve.outputs.hash }}" \
+            --notes "Auto-generated runtime tarballs for hash ${{ needs.resolve.outputs.hash }}. Consumed by the main release workflow." \
+            artifacts/*
