@@ -217,6 +217,28 @@ function ensureBundleFresh(info, requirementsHash) {
   return true
 }
 
+function splitRequirementsForBasicPitch() {
+  const raw = fs.readFileSync(strumRequirementsPath, 'utf-8')
+  const lines = raw.split(/\r?\n/)
+
+  let basicPitchRequirement = null
+  const baseLines = lines.filter((line) => {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) return true
+    const requirement = trimmed.split('#')[0].trim()
+    if (requirement.startsWith('basic-pitch')) {
+      basicPitchRequirement = requirement
+      return false
+    }
+    return true
+  })
+
+  return {
+    basicPitchRequirement,
+    baseRequirementsText: `${baseLines.join('\n')}\n`
+  }
+}
+
 function installRequirements(command, sitePackagesDir) {
   mkdirp(sitePackagesDir)
 
@@ -241,25 +263,58 @@ function installRequirements(command, sitePackagesDir) {
     }
   })
 
-  execFileSync(command.command, [
-    ...command.args,
-    '-m',
-    'pip',
-    'install',
-    '--upgrade',
-    '--no-build-isolation',
-    '--target',
-    sitePackagesDir,
-    '-r',
-    strumRequirementsPath
-  ], {
-    cwd: projectRoot,
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  const { basicPitchRequirement, baseRequirementsText } = splitRequirementsForBasicPitch()
+  const tempRequirementsPath = path.join(projectRoot, 'resources', 'python', getTargetKey(), 'requirements.base.txt')
+  mkdirp(path.dirname(tempRequirementsPath))
+  fs.writeFileSync(tempRequirementsPath, baseRequirementsText, 'utf-8')
+
+  try {
+    execFileSync(command.command, [
+      ...command.args,
+      '-m',
+      'pip',
+      'install',
+      '--upgrade',
+      '--no-build-isolation',
+      '--target',
+      sitePackagesDir,
+      '-r',
+      tempRequirementsPath
+    ], {
+      cwd: projectRoot,
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      }
+    })
+
+    if (basicPitchRequirement) {
+      // basic-pitch pulls in tensorflow/tensorflow-macos via environment markers,
+      // which are incompatible with our pinned macOS/Python matrix. Runtime uses
+      // ONNX model path, so install basic-pitch itself without transitive deps.
+      execFileSync(command.command, [
+        ...command.args,
+        '-m',
+        'pip',
+        'install',
+        '--upgrade',
+        '--no-deps',
+        '--target',
+        sitePackagesDir,
+        basicPitchRequirement
+      ], {
+        cwd: projectRoot,
+        stdio: 'inherit',
+        env: {
+          ...process.env,
+          PIP_DISABLE_PIP_VERSION_CHECK: '1'
+        }
+      })
     }
-  })
+  } finally {
+    fs.rmSync(tempRequirementsPath, { force: true })
+  }
 }
 
 function prepareBundledPython() {
