@@ -53,30 +53,20 @@ function copyDirectory(sourceDir, destinationDir) {
     if (entry.isDirectory()) {
       copyDirectory(sourcePath, destinationPath)
     } else if (entry.isSymbolicLink()) {
-      const linkTarget = fs.readlinkSync(sourcePath)
-      if (path.isAbsolute(linkTarget)) {
-        // Absolute symlinks (common in macOS Homebrew/framework Python) point
-        // to locations outside the bundle — always dereference so the copy is
-        // self-contained and mkdirp/pip can write into subdirs correctly.
-        try {
-          const realPath = fs.realpathSync(sourcePath)
-          const stat = fs.statSync(realPath)
-          if (stat.isDirectory()) {
-            copyDirectory(realPath, destinationPath)
-          } else {
-            fs.copyFileSync(realPath, destinationPath)
-          }
-        } catch {
-          // Broken absolute symlink — skip.
+      // Always dereference symlinks when copying the Python runtime into the
+      // bundle. Both absolute symlinks (common in Homebrew framework Python)
+      // and relative directory symlinks would become broken once transplanted
+      // to a new path. Copying real content makes the bundle fully self-contained.
+      try {
+        const realPath = fs.realpathSync(sourcePath)
+        const stat = fs.statSync(realPath)
+        if (stat.isDirectory()) {
+          copyDirectory(realPath, destinationPath)
+        } else {
+          fs.copyFileSync(realPath, destinationPath)
         }
-      } else {
-        // Relative symlinks are internal structure (e.g. python3 -> python3.x)
-        // and are safe to preserve as-is.
-        try {
-          fs.symlinkSync(linkTarget, destinationPath)
-        } catch {
-          // Already exists or unwritable — skip.
-        }
+      } catch {
+        // Broken or unreadable symlink — skip.
       }
     } else {
       fs.copyFileSync(sourcePath, destinationPath)
@@ -150,6 +140,20 @@ function relativeSitePackages(majorMinor) {
   return path.join('lib', `python${majorMinor}`, 'site-packages')
 }
 
+/**
+ * Derive the site-packages directory inside the copied bundle.
+ * Prefers Python's own reported `purelib` path made relative to `base_prefix`,
+ * which handles non-standard layouts (e.g. macOS Homebrew/framework Python).
+ * Falls back to the conventional computed path if purelib is outside base_prefix.
+ */
+function resolveSitePackagesDir(targetRuntimeDir, info) {
+  const rel = path.relative(info.base_prefix, info.purelib)
+  if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+    return path.join(targetRuntimeDir, rel)
+  }
+  return path.join(targetRuntimeDir, relativeSitePackages(info.major_minor))
+}
+
 function relativeExecutable() {
   if (process.platform === 'win32') {
     return 'python.exe'
@@ -162,7 +166,7 @@ function writeMetadata(info, requirementsHash) {
     version: info.version,
     majorMinor: info.major_minor,
     executable: relativeExecutable(),
-    sitePackages: relativeSitePackages(info.major_minor),
+    sitePackages: path.relative(getTargetRuntimeDir(), resolveSitePackagesDir(getTargetRuntimeDir(), info)),
     requirementsHash,
     target: getTargetKey()
   }
@@ -230,7 +234,7 @@ function prepareBundledPython() {
   mkdirp(path.dirname(targetRuntimeDir))
   copyDirectory(info.base_prefix, targetRuntimeDir)
 
-  const sitePackagesDir = path.join(targetRuntimeDir, relativeSitePackages(info.major_minor))
+  const sitePackagesDir = resolveSitePackagesDir(targetRuntimeDir, info)
   installRequirements(command, sitePackagesDir)
   writeMetadata(info, requirementsHash)
 
