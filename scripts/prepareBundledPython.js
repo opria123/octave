@@ -54,15 +54,28 @@ function copyDirectory(sourceDir, destinationDir) {
       copyDirectory(sourcePath, destinationPath)
     } else if (entry.isSymbolicLink()) {
       const linkTarget = fs.readlinkSync(sourcePath)
-      try {
-        fs.symlinkSync(linkTarget, destinationPath)
-      } catch {
-        const realPath = fs.realpathSync(sourcePath)
-        const stat = fs.statSync(realPath)
-        if (stat.isDirectory()) {
-          copyDirectory(realPath, destinationPath)
-        } else {
-          fs.copyFileSync(realPath, destinationPath)
+      if (path.isAbsolute(linkTarget)) {
+        // Absolute symlinks (common in macOS Homebrew/framework Python) point
+        // to locations outside the bundle — always dereference so the copy is
+        // self-contained and mkdirp/pip can write into subdirs correctly.
+        try {
+          const realPath = fs.realpathSync(sourcePath)
+          const stat = fs.statSync(realPath)
+          if (stat.isDirectory()) {
+            copyDirectory(realPath, destinationPath)
+          } else {
+            fs.copyFileSync(realPath, destinationPath)
+          }
+        } catch {
+          // Broken absolute symlink — skip.
+        }
+      } else {
+        // Relative symlinks are internal structure (e.g. python3 -> python3.x)
+        // and are safe to preserve as-is.
+        try {
+          fs.symlinkSync(linkTarget, destinationPath)
+        } catch {
+          // Already exists or unwritable — skip.
         }
       }
     } else {
