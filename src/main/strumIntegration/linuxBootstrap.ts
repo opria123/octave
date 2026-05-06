@@ -136,11 +136,22 @@ function splitRequirements(requirementsPath: string): {
     }
     return true
   })
+  // tensorflow on Linux PyPI pulls ~2 GB of CUDA libs by default. Swap to the
+  // CPU-only sibling package for the first-launch venv bootstrap.
+  const rewritten = baseLines.map((line) => {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) return line
+    const requirement = trimmed.split('#')[0].trim()
+    if (requirement.startsWith('tensorflow==')) {
+      return line.replace(/tensorflow==/, 'tensorflow-cpu==')
+    }
+    return line
+  })
 
   return {
     basicPitchRequirement,
     torchRequirements,
-    baseRequirementsText: `${baseLines.join('\n')}\n`
+    baseRequirementsText: `${rewritten.join('\n')}\n`
   }
 }
 

@@ -24,6 +24,12 @@ GITHUB_ZIP_URL = "https://codeload.github.com/opria123/strum/zip/refs/heads/main
 HF_REPO_ID = "opria123/strum"
 HF_REPO_URL = "https://huggingface.co/opria123/strum"
 SOURCE_FOLDER_NAME = "strum-source"
+# Bump this whenever strum's GitHub HEAD changes in a way the worker depends on
+# (new pipeline params, new checkpoints, etc.). The cached source under
+# <cache_dir>/strum-source/.octave-source-version is compared on every run and
+# the cache is wiped + re-downloaded on mismatch.
+STRUM_SOURCE_VERSION = "2026-05-06.1"
+SOURCE_VERSION_FILE = ".octave-source-version"
 SNAPSHOT_FOLDER_NAME = "strum-checkpoints-snapshot"
 AUDIO_SEPARATION_TIMEOUT_SEC = int(os.environ.get("OCTAVE_STRUM_SEPARATION_TIMEOUT_SEC", "900"))
 FAST_AUDIO_ANALYSIS = os.environ.get("OCTAVE_STRUM_FAST_ANALYSIS", "1") != "0"
@@ -315,8 +321,21 @@ def bootstrap_source(cache_dir: Path, run_id: str) -> Path:
 
     source_root = cache_dir / SOURCE_FOLDER_NAME
     if is_valid_source_root(source_root):
-        emit_progress(run_id, "bootstrap", "Using cached STRUM source.", percent=100)
-        return source_root
+        version_marker = source_root / SOURCE_VERSION_FILE
+        cached_version = version_marker.read_text(encoding="utf-8").strip() if version_marker.exists() else ""
+        if cached_version == STRUM_SOURCE_VERSION:
+            emit_progress(run_id, "bootstrap", "Using cached STRUM source.", percent=100)
+            return source_root
+        emit_progress(
+            run_id,
+            "bootstrap",
+            f"Cached STRUM source is stale (have='{cached_version or 'none'}', want='{STRUM_SOURCE_VERSION}'). Refreshing...",
+            percent=0,
+        )
+        try:
+            shutil.rmtree(source_root)
+        except Exception:
+            pass
 
     local_source = resolve_local_source_override()
     if local_source is not None:
@@ -329,6 +348,10 @@ def bootstrap_source(cache_dir: Path, run_id: str) -> Path:
             ) from exc
 
         emit_progress(run_id, "bootstrap", "STRUM source ready from local checkout.", percent=100)
+        try:
+            (source_root / SOURCE_VERSION_FILE).write_text(STRUM_SOURCE_VERSION, encoding="utf-8")
+        except Exception:
+            pass
         return source_root
 
     emit_progress(run_id, "bootstrap", "Downloading STRUM source...", percent=0)
@@ -359,6 +382,11 @@ def bootstrap_source(cache_dir: Path, run_id: str) -> Path:
             shutil.rmtree(source_root)
         source_root.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(extracted_root), str(source_root))
+
+    try:
+        (source_root / SOURCE_VERSION_FILE).write_text(STRUM_SOURCE_VERSION, encoding="utf-8")
+    except Exception:
+        pass
 
     emit_progress(run_id, "bootstrap", "STRUM source ready.", percent=100)
     return source_root

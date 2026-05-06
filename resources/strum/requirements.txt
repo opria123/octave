@@ -13,6 +13,12 @@ librosa==0.11.0
 openai-whisper==20250625
 mido==1.3.3
 basic-pitch==0.4.0
+# CREPE (pinned above) imports tensorflow at runtime for pitch detection on
+# guitar/bass stems. We install it from PyPI on Windows/Linux/macOS-arm64
+# where modern tensorflow wheels exist; basic-pitch is installed with
+# --no-deps so its conflicting tensorflow-macos marker doesn't interfere
+# (see scripts/prepareBundledPython.js).
+tensorflow==2.18.0
 huggingface_hub==0.36.2
 numpy==1.26.4
 soundfile==0.13.1
