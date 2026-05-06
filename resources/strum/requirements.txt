@@ -44,6 +44,7 @@ dora-search==0.1.12
 antlr4-python3-runtime==4.9.3
 tqdm==4.66.5
 click==8.1.7
+rich==13.7.1
 mir_eval==0.8.2
 pretty_midi==0.2.11
 cffi==2.0.0
