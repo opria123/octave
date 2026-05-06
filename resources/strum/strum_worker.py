@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
 import importlib
 import json
 import logging
@@ -32,7 +31,11 @@ STRUM_SOURCE_VERSION = "2026-05-06.1"
 SOURCE_VERSION_FILE = ".octave-source-version"
 SNAPSHOT_FOLDER_NAME = "strum-checkpoints-snapshot"
 AUDIO_SEPARATION_TIMEOUT_SEC = int(os.environ.get("OCTAVE_STRUM_SEPARATION_TIMEOUT_SEC", "900"))
-FAST_AUDIO_ANALYSIS = os.environ.get("OCTAVE_STRUM_FAST_ANALYSIS", "1") != "0"
+# Fast analysis bypasses real tempo/key detection and forces 120 BPM. The
+# STRUM benchmark used real detected tempo (feeds STRUM_PHASE_ALIGN beat-grid
+# alignment + tempo-relative drum heuristics), so default to OFF for chart
+# quality. Set OCTAVE_STRUM_FAST_ANALYSIS=1 only for quick previews.
+FAST_AUDIO_ANALYSIS = os.environ.get("OCTAVE_STRUM_FAST_ANALYSIS", "0") != "0"
 FAST_AUDIO_METADATA_LOOKUP = os.environ.get("OCTAVE_STRUM_FAST_METADATA_LOOKUP", "1") != "0"
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".ogg", ".opus", ".flac"}
 DIRECT_AUDIO_URL_EXTENSIONS = AUDIO_EXTENSIONS | {".m4a"}
@@ -502,7 +505,14 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
         def vocals_charter(self):
             if self._vocals_charter is None and self.include_vocals:
                 logging.getLogger(__name__).info("Loading vocals charter (Whisper)...")
-                self._vocals_charter = vocals_charter_cls(whisper_model="medium", device=device)
+                # Use VocalsCharter's default whisper model to match the STRUM
+                # benchmark transcription quality. Override with
+                # OCTAVE_WHISPER_MODEL if a smaller model is needed for speed.
+                whisper_kwargs = {}
+                whisper_override = os.environ.get("OCTAVE_WHISPER_MODEL", "").strip()
+                if whisper_override:
+                    whisper_kwargs["whisper_model"] = whisper_override
+                self._vocals_charter = vocals_charter_cls(device=device, **whisper_kwargs)
             return self._vocals_charter
 
         def separate_stems(self, audio_path: Path, work_dir: Path):
@@ -607,10 +617,17 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
             return self._drums_engine
 
         def _with_fast_crepe(self, fn, *args, **kwargs):
-            """Call fn with CREPE model forced to OCTAVE_CREPE_MODEL (default: tiny) for speed."""
+            """Optionally override CREPE model capacity via OCTAVE_CREPE_MODEL.
+
+            The STRUM benchmark used CREPE's default capacity ('full'), so we
+            no longer force 'tiny'. Set OCTAVE_CREPE_MODEL=tiny|small|medium
+            for faster (lower-quality) pitch detection.
+            """
+            cap = os.environ.get("OCTAVE_CREPE_MODEL", "").strip()
+            if not cap:
+                return fn(*args, **kwargs)
             import src.inference.guitar_bass as _gb
             orig = _gb.detect_pitches_crepe
-            cap = os.environ.get("OCTAVE_CREPE_MODEL", "tiny")
             def _patched(*a, **kw):
                 kw['model_capacity'] = cap
                 return orig(*a, **kw)
@@ -620,52 +637,14 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
             finally:
                 _gb.detect_pitches_crepe = orig
 
-        @contextlib.contextmanager
-        def _basic_pitch_onnx_override(self):
-            """Force Basic Pitch to use ONNX model path in environments with incompatible TF runtime."""
-            logger = logging.getLogger(__name__)
-            try:
-                import basic_pitch as _bp
-
-                old_model_path = getattr(_bp, "ICASSP_2022_MODEL_PATH", None)
-                onnx_model_path = _bp.build_icassp_2022_model_path(_bp.FilenameSuffix.onnx)
-
-                if onnx_model_path.exists():
-                    _bp.ICASSP_2022_MODEL_PATH = onnx_model_path
-                    logger.info(f"Forcing Basic Pitch ONNX model path: {onnx_model_path}")
-                else:
-                    logger.warning(
-                        f"Basic Pitch ONNX model not found at {onnx_model_path}; keeping default model path"
-                    )
-
-                try:
-                    yield
-                finally:
-                    if old_model_path is not None:
-                        _bp.ICASSP_2022_MODEL_PATH = old_model_path
-            except Exception as exc:
-                logger.warning(f"Failed to apply Basic Pitch ONNX override: {exc}")
-                yield
-
-        def _with_basic_pitch_onnx(self, fn, *args, **kwargs):
-            with self._basic_pitch_onnx_override():
-                return fn(*args, **kwargs)
-
         def transcribe_guitar(self, other_stem: Path, tempo_bpm: float):
-            return self._with_basic_pitch_onnx(
-                self._with_fast_crepe,
-                super().transcribe_guitar,
-                other_stem,
-                tempo_bpm,
-            )
+            # TF is now bundled, so Basic Pitch uses its default TF model path
+            # (matches the STRUM benchmark). CREPE capacity is left at its
+            # default unless OCTAVE_CREPE_MODEL is set.
+            return self._with_fast_crepe(super().transcribe_guitar, other_stem, tempo_bpm)
 
         def transcribe_bass(self, bass_stem: Path, tempo_bpm: float):
-            return self._with_basic_pitch_onnx(
-                self._with_fast_crepe,
-                super().transcribe_bass,
-                bass_stem,
-                tempo_bpm,
-            )
+            return self._with_fast_crepe(super().transcribe_bass, bass_stem, tempo_bpm)
 
         def analyze_audio(self, audio_path: Path, artist: str = '', title: str = ''):
             if not FAST_AUDIO_ANALYSIS:
