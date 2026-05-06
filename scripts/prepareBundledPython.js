@@ -7,6 +7,8 @@ const projectRoot = path.resolve(__dirname, '..')
 const resourcesRoot = path.join(projectRoot, 'resources')
 const pythonResourcesRoot = path.join(resourcesRoot, 'python')
 const strumRequirementsPath = path.join(resourcesRoot, 'strum', 'requirements.txt')
+const MIN_SUPPORTED_PYTHON_MINOR = 11
+const MAX_SUPPORTED_PYTHON_MINOR = 12
 
 function getTargetKey() {
   return `${process.platform}-${process.arch}`
@@ -74,6 +76,16 @@ function copyDirectory(sourceDir, destinationDir) {
   }
 }
 
+function isSupportedPythonVersion(version) {
+  const [major, minor] = version.split('.').map(Number)
+  return major === 3 && minor >= MIN_SUPPORTED_PYTHON_MINOR && minor <= MAX_SUPPORTED_PYTHON_MINOR
+}
+
+function formatCommand(command) {
+  if (!command.args || command.args.length === 0) return command.command
+  return `${command.command} ${command.args.join(' ')}`
+}
+
 function findBuildPythonCommand() {
   const candidates = []
   const configured = process.env.OCTAVE_BUNDLED_PYTHON || process.env.OCTAVE_STRUM_PYTHON
@@ -83,21 +95,31 @@ function findBuildPythonCommand() {
   if (process.platform === 'win32') {
     candidates.push({ command: 'py', args: ['-3'] })
   }
+  candidates.push({ command: 'python3.12', args: [] })
+  candidates.push({ command: 'python3.11', args: [] })
   candidates.push({ command: 'python3', args: [] })
   candidates.push({ command: 'python', args: [] })
+
+  const discovered = []
 
   for (const candidate of candidates) {
     try {
       execFileSync(candidate.command, [...candidate.args, '--version'], { stdio: 'ignore' })
-      return candidate
+      const info = getPythonInfo(candidate)
+      discovered.push(`${formatCommand(candidate)} (${info.version})`)
+      if (isSupportedPythonVersion(info.version)) {
+        return { command: candidate, info }
+      }
     } catch {
       // Try next candidate.
     }
   }
 
   throw new Error(
-    'Python 3.11+ is required on the build machine to bundle the STRUM runtime. '
-    + 'Set OCTAVE_BUNDLED_PYTHON to point at the interpreter to copy.'
+    `Bundled STRUM runtime requires Python 3.${MIN_SUPPORTED_PYTHON_MINOR}-3.${MAX_SUPPORTED_PYTHON_MINOR} `
+    + `for pinned dependencies, but no compatible interpreter was found. `
+    + `Discovered: ${discovered.length ? discovered.join(', ') : 'none'}. `
+    + 'Install python3.11 or python3.12 and/or set OCTAVE_BUNDLED_PYTHON to that interpreter.'
   )
 }
 
@@ -126,10 +148,11 @@ function getPythonInfo(command) {
   return runPythonJson(command, ['-c', script])
 }
 
-function ensureMinimumVersion(version) {
-  const [major, minor] = version.split('.').map(Number)
-  if (major < 3 || (major === 3 && minor < 11)) {
-    throw new Error(`Bundled STRUM runtime requires Python 3.11+, got ${version}`)
+function ensureSupportedVersion(version) {
+  if (!isSupportedPythonVersion(version)) {
+    throw new Error(
+      `Bundled STRUM runtime requires Python 3.${MIN_SUPPORTED_PYTHON_MINOR}-3.${MAX_SUPPORTED_PYTHON_MINOR}, got ${version}`
+    )
   }
 }
 
@@ -217,9 +240,10 @@ function installRequirements(command, sitePackagesDir) {
 }
 
 function prepareBundledPython() {
-  const command = findBuildPythonCommand()
-  const info = getPythonInfo(command)
-  ensureMinimumVersion(info.version)
+  const resolved = findBuildPythonCommand()
+  const command = resolved.command
+  const info = resolved.info
+  ensureSupportedVersion(info.version)
 
   const requirementsHash = sha256File(strumRequirementsPath)
   if (ensureBundleFresh(info, requirementsHash)) {
