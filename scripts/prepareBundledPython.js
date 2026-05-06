@@ -86,6 +86,32 @@ function formatCommand(command) {
   return `${command.command} ${command.args.join(' ')}`
 }
 
+function linuxHostedToolcacheCandidates() {
+  if (process.platform !== 'linux') return []
+
+  const root = '/opt/hostedtoolcache/Python'
+  if (!exists(root)) return []
+
+  const versions = fs.readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => /^3\.(11|12)(\.|$)/.test(name))
+    .sort()
+    .reverse()
+
+  const candidates = []
+  for (const version of versions) {
+    const base = path.join(root, version, 'x64', 'bin')
+    const py312 = path.join(base, 'python3.12')
+    const py311 = path.join(base, 'python3.11')
+    const py3 = path.join(base, 'python3')
+    if (exists(py312)) candidates.push({ command: py312, args: [] })
+    if (exists(py311)) candidates.push({ command: py311, args: [] })
+    if (exists(py3)) candidates.push({ command: py3, args: [] })
+  }
+  return candidates
+}
+
 function findBuildPythonCommand() {
   const candidates = []
   const configured = process.env.OCTAVE_BUNDLED_PYTHON || process.env.OCTAVE_STRUM_PYTHON
@@ -95,6 +121,7 @@ function findBuildPythonCommand() {
   if (process.platform === 'win32') {
     candidates.push({ command: 'py', args: ['-3'] })
   }
+  candidates.push(...linuxHostedToolcacheCandidates())
   candidates.push({ command: 'python3.12', args: [] })
   candidates.push({ command: 'python3.11', args: [] })
   candidates.push({ command: 'python3', args: [] })
@@ -322,6 +349,14 @@ function prepareBundledPython() {
   const command = resolved.command
   const info = resolved.info
   ensureSupportedVersion(info.version)
+
+  if (process.platform === 'linux' && path.resolve(info.base_prefix) === '/usr') {
+    throw new Error(
+      'Refusing to bundle Python from /usr on Linux (would copy huge system tree and fail builds). '
+      + 'Install/setup Python 3.11/3.12 in a standalone prefix (for GitHub Actions use actions/setup-python) '
+      + 'and set OCTAVE_BUNDLED_PYTHON to that interpreter path.'
+    )
+  }
 
   const requirementsHash = sha256File(strumRequirementsPath)
   if (ensureBundleFresh(info, requirementsHash)) {

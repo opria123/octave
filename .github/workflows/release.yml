@@ -91,6 +91,11 @@ jobs:
           node-version: 20
           cache: npm
 
+      - uses: actions/setup-python@v5
+        id: setup-python
+        with:
+          python-version: '3.12'
+
       - name: Install dependencies
         run: npm ci
 
@@ -101,6 +106,7 @@ jobs:
         run: npx electron-builder --${{ matrix.platform }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OCTAVE_BUNDLED_PYTHON: ${{ steps.setup-python.outputs.python-path }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
