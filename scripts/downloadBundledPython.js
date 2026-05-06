@@ -159,13 +159,23 @@ async function main() {
     }
 
     console.log(`  • reassembling tarball...`)
-    const out = fs.createWriteStream(tarballPath)
-    for (const partPath of partPaths) {
-      const data = fs.readFileSync(partPath)
-      out.write(data)
-    }
     await new Promise((resolve, reject) => {
-      out.end((err) => (err ? reject(err) : resolve()))
+      const out = fs.createWriteStream(tarballPath)
+      out.on('error', reject)
+      out.on('finish', resolve)
+
+      let i = 0
+      const next = () => {
+        if (i >= partPaths.length) {
+          out.end()
+          return
+        }
+        const input = fs.createReadStream(partPaths[i++])
+        input.on('error', reject)
+        input.on('end', next)
+        input.pipe(out, { end: false })
+      }
+      next()
     })
     for (const partPath of partPaths) {
       try { fs.unlinkSync(partPath) } catch { /* noop */ }
