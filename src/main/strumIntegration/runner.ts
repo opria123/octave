@@ -1,8 +1,8 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import { execFile, spawn } from 'child_process'
 import { join } from 'path'
 import { mkdir, unlink, writeFile } from 'fs/promises'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readFileSync, mkdirSync, createWriteStream, type WriteStream } from 'fs'
 import { parseAutoChartProgressLine } from './progress'
 import { ensureLinuxBootstrappedPython, isLinuxBootstrapTarget } from './linuxBootstrap'
 import type { AutoChartProgressEvent, AutoChartRunOptions, AutoChartRunResult, AutoChartStage } from './types'
@@ -91,6 +91,39 @@ function warnStrum(runId: string, message: string, detail?: unknown): void {
 
 function isVerboseDebug(): boolean {
   return process.env.OCTAVE_STRUM_DEBUG === '1' || !app.isPackaged
+}
+
+function getStrumLogsDir(): string {
+  return join(app.getPath('userData'), 'logs', 'strum')
+}
+
+export function getStrumLogsFolder(): string {
+  return getStrumLogsDir()
+}
+
+export async function openStrumLogsFolder(): Promise<void> {
+  const dir = getStrumLogsDir()
+  try {
+    mkdirSync(dir, { recursive: true })
+  } catch {
+    // ignore
+  }
+  await shell.openPath(dir)
+}
+
+function openRunLog(runId: string): WriteStream | null {
+  try {
+    const dir = getStrumLogsDir()
+    mkdirSync(dir, { recursive: true })
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const file = join(dir, `${stamp}_${runId}.log`)
+    const stream = createWriteStream(file, { flags: 'a' })
+    stream.write(`# STRUM run log\n# runId=${runId}\n# started=${new Date().toISOString()}\n# packaged=${app.isPackaged}\n# platform=${process.platform}-${process.arch}\n# logPath=${file}\n\n`)
+    return stream
+  } catch (err) {
+    console.warn('[STRUM] failed to open run log:', err)
+    return null
+  }
 }
 
 function broadcast(channel: string, payload: unknown): void {
@@ -439,6 +472,21 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
     runningJobs.set(runId, { process: child, payloadPath })
     logStrum(runId, `Worker spawned (pid=${child.pid ?? 'unknown'})`)
 
+    const runLog = openRunLog(runId)
+    const writeLog = (line: string): void => {
+      if (!runLog) return
+      try { runLog.write(line.endsWith('\n') ? line : `${line}\n`) } catch { /* noop */ }
+    }
+    if (runLog) {
+      writeLog(`# python=${python.command} args=${JSON.stringify(python.baseArgs)}`)
+      writeLog(`# workerScript=${workerScript}`)
+      writeLog(`# cacheDir=${cacheDir}`)
+      writeLog(`# outputDir=${options.outputDir}`)
+      writeLog(`# pid=${child.pid ?? 'unknown'}`)
+      writeLog('')
+      logStrum(runId, `Run log: ${(runLog as unknown as { path?: string }).path ?? getStrumLogsDir()}`)
+    }
+
     let stdoutRemainder = ''
     let stderrRemainder = ''
     const completion: { result?: AutoChartRunResult; error?: string } = {}
@@ -472,6 +520,11 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
     const consume = (chunk: Buffer, stream: 'stdout' | 'stderr'): void => {
       const text = chunk.toString('utf-8')
       lastOutputAt = Date.now()
+      // Always tee raw output to the per-run log file so packaged builds
+      // can be debugged without devtools.
+      if (runLog) {
+        try { runLog.write(text) } catch { /* noop */ }
+      }
       const split = splitLines(text, stream === 'stdout' ? stdoutRemainder : stderrRemainder)
       if (stream === 'stdout') {
         stdoutRemainder = split.remainder
@@ -542,6 +595,8 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
     child.on('error', async (error) => {
       clearInterval(heartbeat)
       warnStrum(runId, 'Worker process error', error)
+      writeLog(`# WORKER ERROR: ${error.message}`)
+      if (runLog) { try { runLog.end() } catch { /* noop */ } }
       runningJobs.delete(runId)
       try {
         await unlink(payloadPath)
@@ -554,6 +609,8 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
     child.on('close', async (code, signal) => {
       clearInterval(heartbeat)
       logStrum(runId, `Worker closed (code=${code ?? 'null'}, signal=${signal ?? 'null'})`)
+      writeLog(`# WORKER CLOSED code=${code ?? 'null'} signal=${signal ?? 'null'} at=${new Date().toISOString()}`)
+      if (runLog) { try { runLog.end() } catch { /* noop */ } }
       runningJobs.delete(runId)
       try {
         await unlink(payloadPath)

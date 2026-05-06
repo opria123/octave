@@ -8,7 +8,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater, type UpdateDownloadedEvent } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
 import ffmpeg from 'fluent-ffmpeg'
-import { cancelAutoChart, getStrumRequirementsPath, runAutoChart } from './strumIntegration/runner'
+import { cancelAutoChart, getStrumRequirementsPath, openStrumLogsFolder, runAutoChart } from './strumIntegration/runner'
 
 // Point fluent-ffmpeg at the bundled static binary
 try {
@@ -586,6 +586,10 @@ ipcMain.handle('strum:start', async (_event, options: {
 
 ipcMain.handle('strum:cancel', async (_event, runId: string) => {
   return await cancelAutoChart(runId)
+})
+
+ipcMain.handle('strum:openLogs', async () => {
+  await openStrumLogsFolder()
 })
 
 // Open lyric/subtitle file dialog (.lrc/.srt/.ttml)
