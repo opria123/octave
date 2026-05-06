@@ -38,7 +38,6 @@ dmg:
 linux:
   target:
     - AppImage
-    - deb
   maintainer: opria123
   category: AudioVideo
 appImage:

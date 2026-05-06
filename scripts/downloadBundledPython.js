@@ -124,6 +124,12 @@ async function findAssetParts(tag, assetName) {
 }
 
 async function main() {
+  if (process.platform === 'linux') {
+    // Linux uses first-launch venv bootstrap rather than a bundled runtime.
+    console.log('  • bundled Python download skipped on Linux (uses first-launch venv bootstrap)')
+    return
+  }
+
   if (isAlreadyPresent()) {
     console.log(`  • bundled Python runtime already present for ${getTargetKey()}`)
     return

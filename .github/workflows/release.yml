@@ -109,14 +109,16 @@ jobs:
           node-version: 20
           cache: npm
 
-      - uses: actions/setup-python@v5
+      - if: matrix.platform != 'linux'
+        uses: actions/setup-python@v5
         id: setup-python
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: resources/strum/requirements.txt
 
-      - name: Cache bundled Python runtime
+      - if: matrix.platform != 'linux'
+        name: Cache bundled Python runtime
         uses: actions/cache@v4
         with:
           path: resources/python
@@ -130,7 +132,8 @@ jobs:
       - name: Build app
         run: npm run build
 
-      - name: Download pre-built Python runtime (if available)
+      - if: matrix.platform != 'linux'
+        name: Download pre-built Python runtime (if available)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/downloadBundledPython.js
@@ -190,7 +193,7 @@ jobs:
             echo "### Downloads"
             echo "- **Windows**: \`.exe\` installer"
             echo "- **macOS**: \`.dmg\` disk image"
-            echo "- **Linux**: \`.AppImage\` or \`.deb\` package"
+            echo "- **Linux**: \`.AppImage\` (Python is bootstrapped on first launch — requires \`python3.11\` or \`python3.12\` on PATH and ~3 GB free in your home directory)"
             echo ""
             echo "---"
             echo "*Built automatically from \`master\`*"

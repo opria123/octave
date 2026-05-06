@@ -68,9 +68,6 @@ jobs:
           - os: macos-latest
             platform: darwin
             arch: arm64
-          - os: ubuntu-latest
-            platform: linux
-            arch: x64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     steps:

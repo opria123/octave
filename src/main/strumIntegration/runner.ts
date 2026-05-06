@@ -4,6 +4,7 @@ import { join } from 'path'
 import { mkdir, unlink, writeFile } from 'fs/promises'
 import { existsSync, readFileSync } from 'fs'
 import { parseAutoChartProgressLine } from './progress'
+import { ensureLinuxBootstrappedPython, isLinuxBootstrapTarget } from './linuxBootstrap'
 import type { AutoChartProgressEvent, AutoChartRunOptions, AutoChartRunResult, AutoChartStage } from './types'
 
 const EVENT_PREFIX = '__OCTAVE_EVENT__'
@@ -193,6 +194,11 @@ function getBundledPythonCandidates(): PythonCommand[] {
 }
 
 function getBundledPythonEnv(): NodeJS.ProcessEnv {
+  // On Linux the runtime is a venv created at first launch (see
+  // linuxBootstrap.ts), not a self-contained bundled prefix. The venv's
+  // own pyvenv.cfg already points the interpreter at the right site-packages,
+  // and forcing PYTHONHOME/PYTHONPATH from a bundle metadata.json would
+  // break it. Only return the bundled env when a metadata.json exists.
   const metadata = getBundledPythonMetadata()
   if (!metadata) {
     return {
@@ -224,8 +230,17 @@ async function commandExists(candidate: PythonCommand): Promise<boolean> {
   })
 }
 
-async function findPythonCommand(): Promise<PythonCommand> {
+async function findPythonCommand(runId?: string): Promise<PythonCommand> {
   if (app.isPackaged) {
+    if (isLinuxBootstrapTarget()) {
+      const requirementsPath = getStrumRequirementsPath()
+      if (!existsSync(requirementsPath)) {
+        throw new Error(`STRUM requirements file not found at ${requirementsPath}`)
+      }
+      const venvPython = await ensureLinuxBootstrappedPython(requirementsPath, runId)
+      return { command: venvPython, baseArgs: [] }
+    }
+
     const bundledCandidates = getBundledPythonCandidates()
     for (const candidate of bundledCandidates) {
       if (existsSync(candidate.command) && await commandExists(candidate)) {
@@ -364,7 +379,7 @@ function handlePlainLine(runId: string, line: string): void {
 }
 
 export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'>): Promise<AutoChartRunResult> {
-  const python = await findPythonCommand()
+  const python = await findPythonCommand(options.runId)
   const runId = options.runId
   const cacheDir = join(app.getPath('userData'), 'cache', 'strum')
   const workerScript = getWorkerScriptPath()

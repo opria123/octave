@@ -381,6 +381,16 @@ function installRequirements(command, sitePackagesDir) {
 }
 
 function prepareBundledPython() {
+  if (process.platform === 'linux') {
+    // On Linux we don't bundle Python at all — the packaged AppImage would
+    // balloon past 3 GB once torch + ML weights are included, and Debian
+    // packaging (fpm) chokes on trees of that size. The Electron main
+    // process bootstraps a venv into the user's data dir on first launch
+    // (see src/main/strumIntegration/linuxBootstrap.ts).
+    console.log('  • skipping bundled Python on Linux (uses first-launch venv bootstrap instead)')
+    return
+  }
+
   const resolved = findBuildPythonCommand()
   const command = resolved.command
   const info = resolved.info
