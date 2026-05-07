@@ -19,7 +19,7 @@ from typing import Any
 
 EVENT_PREFIX = "__OCTAVE_EVENT__"
 GITHUB_REPO_URL = "https://github.com/opria123/strum"
-GITHUB_ZIP_URL = "https://codeload.github.com/opria123/strum/zip/refs/heads/main"
+GITHUB_ZIP_URL = "https://codeload.github.com/opria123/strum/zip/refs/heads/master"
 HF_REPO_ID = "opria123/strum"
 HF_REPO_URL = "https://huggingface.co/opria123/strum"
 SOURCE_FOLDER_NAME = "strum-source"
