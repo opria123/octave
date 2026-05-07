@@ -1,6 +1,6 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { execFile, spawn } from 'child_process'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { mkdir, unlink, writeFile } from 'fs/promises'
 import { existsSync, readFileSync, mkdirSync, createWriteStream, type WriteStream } from 'fs'
 import { parseAutoChartProgressLine } from './progress'
@@ -11,6 +11,30 @@ const EVENT_PREFIX = '__OCTAVE_EVENT__'
 const PYTHON_CHECK_TIMEOUT_MS = 10_000
 const NO_OUTPUT_WARN_MS = 30_000
 const HEARTBEAT_TICK_MS = 15_000
+
+/**
+ * Locate the bundled ffmpeg-static binary so we can prepend its directory to
+ * the worker's PATH. Whisper / yt-dlp / demucs all shell out to `ffmpeg`, and
+ * many user machines don't have it on PATH.
+ */
+function resolveBundledFfmpegDir(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const ffmpegPath = require('ffmpeg-static') as string | null
+    if (!ffmpegPath) return null
+    // electron-builder asarUnpack rewrites the path inside app.asar to
+    // app.asar.unpacked. ffmpeg-static handles this itself by returning the
+    // unpacked path at runtime, so dirname() is enough.
+    let resolved = ffmpegPath
+    if (resolved.includes(`app.asar${require('path').sep}`)) {
+      resolved = resolved.replace(`app.asar${require('path').sep}`, `app.asar.unpacked${require('path').sep}`)
+    }
+    if (!existsSync(resolved)) return null
+    return dirname(resolved)
+  } catch {
+    return null
+  }
+}
 
 type PythonCommand = {
   command: string
@@ -233,9 +257,19 @@ function getBundledPythonEnv(): NodeJS.ProcessEnv {
   // and forcing PYTHONHOME/PYTHONPATH from a bundle metadata.json would
   // break it. Only return the bundled env when a metadata.json exists.
   const metadata = getBundledPythonMetadata()
+  const pathSeparator = process.platform === 'win32' ? ';' : ':'
+  // Prepend bundled ffmpeg dir to PATH so Whisper / yt-dlp / demucs can find
+  // ffmpeg without the user installing it system-wide.
+  const ffmpegDir = resolveBundledFfmpegDir()
+  const existingPath = process.env.PATH ?? process.env.Path ?? ''
+  const augmentedPath = ffmpegDir
+    ? `${ffmpegDir}${pathSeparator}${existingPath}`
+    : existingPath
+
   if (!metadata) {
     return {
       ...process.env,
+      PATH: augmentedPath,
       PYTHONUTF8: '1',
       OCTAVE_PACKAGED: '1'
     }
@@ -243,11 +277,11 @@ function getBundledPythonEnv(): NodeJS.ProcessEnv {
 
   const runtimeHome = getBundledRuntimeHome()
   const sitePackages = join(runtimeHome, metadata.sitePackages)
-  const pathSeparator = process.platform === 'win32' ? ';' : ':'
   const pythonPath = process.env.PYTHONPATH
 
   return {
     ...process.env,
+    PATH: augmentedPath,
     PYTHONHOME: runtimeHome,
     PYTHONPATH: pythonPath ? `${sitePackages}${pathSeparator}${pythonPath}` : sitePackages,
     PYTHONUTF8: '1',

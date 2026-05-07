@@ -11,6 +11,10 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+  # ffmpeg-static ships a binary that must be executable on disk; asar-packed
+  # binaries cannot be exec'd directly, so unpack it. STRUM's Whisper /
+  # demucs / yt-dlp shell out to this ffmpeg via PATH.
+  - node_modules/ffmpeg-static/**
 extraResources:
   - from: resources/
     to: resources/
