@@ -1,34 +1,39 @@
 ; Custom NSIS hooks for OCTAVE installer.
 ;
-; Problem: When the user runs auto-update (electron-updater quitAndInstall),
-; the installer sometimes shows "OCTAVE cannot be closed" because lingering
-; python.exe child processes spawned by the STRUM worker still hold open
-; handles to files inside the install dir (resources\python\... and the
-; bundled strum source).
+; Problem: When the user runs auto-update, the installer shows
+; "OCTAVE cannot be closed" because lingering python.exe child processes
+; (spawned by the STRUM worker) hold open handles to files inside the
+; install dir, AND/OR the OCTAVE.exe parent itself isn't fully gone yet.
 ;
-; Solution: Before installing/uninstalling, kill any python.exe whose parent
-; install dir matches ours. We use taskkill with a window-title-agnostic
-; image-name match because PowerShell isn't guaranteed to be available in the
-; minimal NSIS environment, but cmd.exe always is.
+; Solution: Before any install/uninstall step runs, force-kill anything that
+; could be holding files: OCTAVE.exe (with /T to take down children) and any
+; python.exe whose image path is inside our install directory.
+;
+; We use PowerShell (guaranteed on Windows 10+) instead of cmd/wmic because
+; quoting is far more reliable and wmic was removed/optional on Win11.
 
-!macro customInit
-  ; Best-effort: kill any leftover OCTAVE / python helpers before install.
-  ; /F = force, /T = tree (children), /IM = image name. Errors are ignored
-  ; (SetErrors is cleared) so a clean install where nothing is running is
-  ; not treated as a failure.
+!macro octaveKillRunning
+  ; Kill OCTAVE.exe and every child process. Both casings to be safe.
   nsExec::Exec 'taskkill /F /T /IM octave.exe'
   nsExec::Exec 'taskkill /F /T /IM OCTAVE.exe'
-  ; STRUM workers run under the bundled python.exe. Killing all python.exe
-  ; instances on the machine is too aggressive, so target only ones that
-  ; live inside our install dir tree. wmic is deprecated on Win11 but still
-  ; ships; the command is wrapped in cmd /c so a missing wmic is harmless.
-  nsExec::Exec 'cmd /c "for /f \"tokens=2 delims=,\" %P in (^'wmic process where ^"name=^'python.exe^' and ExecutablePath like ^'%%$INSTDIR%%^'^" get ProcessId /format:csv ^| findstr /r /c:[0-9]^') do @taskkill /F /PID %P"'
-  SetErrors
+
+  ; Kill any python.exe whose ExecutablePath is inside the install dir.
+  ; -ErrorAction SilentlyContinue + try/catch makes a no-match a no-op.
+  nsExec::Exec 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "try { Get-CimInstance Win32_Process -Filter \"Name=''python.exe''\" -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith(''$INSTDIR'', [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } } catch { }"'
+
+  ; Give the OS a moment to release file handles.
+  Sleep 500
   ClearErrors
 !macroend
 
+!macro customInit
+  !insertmacro octaveKillRunning
+!macroend
+
+!macro customInstall
+  !insertmacro octaveKillRunning
+!macroend
+
 !macro customUnInit
-  nsExec::Exec 'taskkill /F /T /IM octave.exe'
-  nsExec::Exec 'taskkill /F /T /IM OCTAVE.exe'
-  ClearErrors
+  !insertmacro octaveKillRunning
 !macroend
