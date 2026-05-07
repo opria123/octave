@@ -19,7 +19,9 @@
 
   ; Kill any python.exe whose ExecutablePath is inside the install dir.
   ; -ErrorAction SilentlyContinue + try/catch makes a no-match a no-op.
-  nsExec::Exec 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "try { Get-CimInstance Win32_Process -Filter \"Name=''python.exe''\" -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith(''$INSTDIR'', [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } } catch { }"'
+  ; NSIS uses $ for variable expansion, so PowerShell's $_ must be escaped
+  ; as $$_ to survive into the spawned command line.
+  nsExec::Exec 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "try { Get-CimInstance Win32_Process -Filter \"Name=''python.exe''\" -ErrorAction SilentlyContinue | Where-Object { $$_.ExecutablePath -and $$_.ExecutablePath.StartsWith(''$INSTDIR'', [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue } } catch { }"'
 
   ; Give the OS a moment to release file handles.
   Sleep 500
