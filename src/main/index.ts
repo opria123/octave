@@ -450,7 +450,16 @@ app.whenReady().then(() => {
         })
         .then(({ response }) => {
           if (response === 0) {
-            autoUpdater.quitAndInstall()
+            // Tear down Python workers BEFORE quitAndInstall so the NSIS
+            // installer doesn't see lingering child processes that block the
+            // "OCTAVE cannot be closed" check.
+            try {
+              killAllRunningJobs()
+            } catch (error) {
+              console.warn('[Updater] Failed to terminate STRUM workers before install:', error)
+            }
+            // isSilent=true, isForceRunAfter=true — closes & relaunches.
+            autoUpdater.quitAndInstall(true, true)
           }
         })
     })

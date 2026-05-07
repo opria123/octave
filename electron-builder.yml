@@ -21,6 +21,10 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  # Custom NSIS hooks force-kill any leftover OCTAVE.exe / bundled python.exe
+  # instances before install so auto-update doesn't fail with
+  # "OCTAVE cannot be closed".
+  include: build/installer.nsh
 mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
