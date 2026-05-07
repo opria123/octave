@@ -637,14 +637,15 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
             finally:
                 _gb.detect_pitches_crepe = orig
 
-        def transcribe_guitar(self, other_stem: Path, tempo_bpm: float):
+        def transcribe_guitar(self, other_stem: Path, tempo_bpm: float, *args, **kwargs):
             # TF is now bundled, so Basic Pitch uses its default TF model path
             # (matches the STRUM benchmark). CREPE capacity is left at its
-            # default unless OCTAVE_CREPE_MODEL is set.
-            return self._with_fast_crepe(super().transcribe_guitar, other_stem, tempo_bpm)
+            # default unless OCTAVE_CREPE_MODEL is set. Forward *args/**kwargs
+            # so newer upstream signatures (e.g. full_mix=...) keep working.
+            return self._with_fast_crepe(super().transcribe_guitar, other_stem, tempo_bpm, *args, **kwargs)
 
-        def transcribe_bass(self, bass_stem: Path, tempo_bpm: float):
-            return self._with_fast_crepe(super().transcribe_bass, bass_stem, tempo_bpm)
+        def transcribe_bass(self, bass_stem: Path, tempo_bpm: float, *args, **kwargs):
+            return self._with_fast_crepe(super().transcribe_bass, bass_stem, tempo_bpm, *args, **kwargs)
 
         def analyze_audio(self, audio_path: Path, artist: str = '', title: str = ''):
             if not FAST_AUDIO_ANALYSIS:
