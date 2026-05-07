@@ -667,3 +667,19 @@ export async function cancelAutoChart(runId: string): Promise<boolean> {
   } satisfies AutoChartProgressEvent)
   return true
 }
+
+/**
+ * Synchronously terminate every still-running STRUM worker. Intended for the
+ * Electron `before-quit` hook so orphan Python processes don't keep the
+ * installer-detectable process count above 1 during auto-update.
+ */
+export function killAllRunningJobs(): void {
+  for (const [, job] of runningJobs) {
+    try {
+      job.process.kill('SIGKILL')
+    } catch {
+      // Best-effort; nothing else to do during shutdown.
+    }
+  }
+  runningJobs.clear()
+}

@@ -8,7 +8,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater, type UpdateDownloadedEvent } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
 import ffmpeg from 'fluent-ffmpeg'
-import { cancelAutoChart, getStrumRequirementsPath, openStrumLogsFolder, runAutoChart } from './strumIntegration/runner'
+import { cancelAutoChart, getStrumRequirementsPath, killAllRunningJobs, openStrumLogsFolder, runAutoChart } from './strumIntegration/runner'
 
 // Point fluent-ffmpeg at the bundled static binary
 try {
@@ -21,6 +21,34 @@ try {
 
 // Allow AudioContext to start without user gesture requirement in Electron
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+
+// Enforce a single running OCTAVE instance. Without this, NSIS auto-update
+// fails with "two running versions" because the installer refuses to replace
+// the binary while another copy is open. The second launch focuses the
+// existing window instead.
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.focus()
+    }
+  })
+}
+
+// Make sure orphan Python workers are terminated before the app exits so the
+// auto-updater installer can take over without "another instance is running"
+// errors.
+app.on('before-quit', () => {
+  try {
+    killAllRunningJobs()
+  } catch (error) {
+    console.warn('[Quit] Failed to terminate STRUM workers:', error)
+  }
+})
 
 // Track the currently opened project folder for path validation
 let allowedProjectPath: string | null = null
