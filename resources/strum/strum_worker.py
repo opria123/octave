@@ -687,6 +687,36 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
             logger.info(f"    Separated stems: {list(stems.keys())}")
             return stems
 
+        def _ensure_demucs_cpp_input(self, audio_path: Path, work_dir: Path) -> Path:
+            """demucs.cpp only accepts 44.1 kHz WAV. If the source is already
+            a 44100 Hz WAV we use it as-is; otherwise decode + resample with
+            librosa and write a stereo float32 WAV next to the demucs output.
+            """
+            try:
+                import soundfile as sf
+                if audio_path.suffix.lower() == ".wav":
+                    info = sf.info(str(audio_path))
+                    if int(info.samplerate) == 44100:
+                        return audio_path
+            except Exception:
+                pass
+
+            import librosa
+            import soundfile as sf
+            import numpy as np
+
+            y, _sr = librosa.load(str(audio_path), sr=44100, mono=False)
+            if y.ndim == 1:
+                y = np.stack([y, y], axis=0)
+            elif y.shape[0] == 1:
+                y = np.repeat(y, 2, axis=0)
+            elif y.shape[0] > 2:
+                y = y[:2]
+
+            resampled = work_dir / f"{audio_path.stem}_44k.wav"
+            sf.write(str(resampled), y.T, 44100, subtype="PCM_16")
+            return resampled
+
         def _separate_stems_cpp(
             self,
             audio_path: Path,
@@ -705,9 +735,13 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
                 shutil.rmtree(demucs_out, ignore_errors=True)
             demucs_out.mkdir(parents=True, exist_ok=True)
 
+            # demucs.cpp only accepts 44100 Hz input. Resample to a temp
+            # 44.1kHz stereo WAV so mp3 / 48k / mono sources all work.
+            input_for_demucs = self._ensure_demucs_cpp_input(audio_path, demucs_out)
+
             # demucs_mt.cpp.main signature: <model.bin> <input.wav> <output_dir> <num_threads>
             num_threads = max(1, (os.cpu_count() or 4) - 1)
-            cmd = [cpp_bin, cpp_weights, str(audio_path), str(demucs_out), str(num_threads)]
+            cmd = [cpp_bin, cpp_weights, str(input_for_demucs), str(demucs_out), str(num_threads)]
 
             started_at = time.time()
             try:
