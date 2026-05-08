@@ -394,12 +394,12 @@ async function installRequirements(
   if (torchRequirements.length > 0) {
     const isCuda = accelerator === 'cuda'
     const torchIndex = isCuda
-      ? 'https://download.pytorch.org/whl/cu124'
+      ? 'https://download.pytorch.org/whl/cu128'
       : 'https://download.pytorch.org/whl/cpu'
     emitProgress(
       runId,
       isCuda
-        ? 'Installing torch (CUDA 12.4 build, ~2.5 GB)...'
+        ? 'Installing torch (CUDA 12.8 build, ~2.7 GB)...'
         : 'Installing torch (CPU build, ~200 MB)...',
       45
     )

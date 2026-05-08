@@ -1,9 +1,13 @@
 # Pinned exact versions for reproducible packaged builds.
 # Generated from working dev environment (Anaconda 3.10, Windows, 2026-05-06).
 # torch/torchaudio: the runtime bootstrap detects nvidia-smi at install time
-# and pip-installs the matching CUDA 12.4 wheel automatically when an NVIDIA
+# and pip-installs the matching CUDA 12.8 wheel automatically when an NVIDIA
 # GPU is present (Windows/Linux x64). Otherwise the CPU wheel is installed.
 # Apple Silicon uses the CPU wheel which transparently uses MPS.
+#
+# torch 2.7 + cu128 ships kernels up to sm_120 (Blackwell / RTX 50-series).
+# Older 2.6 + cu124 stops at sm_90 (Hopper) and crashes on RTX 5070/5080/5090
+# with "no kernel image is available for execution on the device".
 
 # ── Core pipeline ──────────────────────────────────────────────────────────────
 # torch/torchaudio are still required (STRUM's CRNN onset models, drums
@@ -16,8 +20,8 @@
 # Lyric transcription uses a native whisper.cpp binary
 # (src/main/strumIntegration/whisperCppBootstrap.ts) on both, so the
 # Python `openai-whisper` package + tiktoken are not needed.
-torch==2.6.0
-torchaudio==2.6.0
+torch==2.7.1
+torchaudio==2.7.1
 # Python demucs is only invoked on CUDA hosts; demucs.cpp handles CPU.
 # Pinned to the last release that targets torch 2.x. Installed with --no-deps
 # (handled in splitRequirements) so pip does not pull diffq, which has no
