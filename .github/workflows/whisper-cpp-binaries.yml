@@ -66,13 +66,14 @@ jobs:
 
       - name: Install CUDA toolkit (Linux)
         if: matrix.variant == 'cuda' && matrix.platform == 'linux'
-        uses: Jimver/cuda-toolkit@v0.2.19
-        with:
-          cuda: '12.4.0'
-          method: 'network'
-          # Linux apt repo doesn't expose a visual_studio_integration package.
-          # `thrust` is bundled inside the cudart sub-package on Linux.
-          sub-packages: '["nvcc", "cudart", "cublas", "cublas-dev"]'
+        shell: bash
+        run: |
+          # Ubuntu 24.04 ships CUDA 12.0 in `nvidia-cuda-toolkit`; that's
+          # plenty for building whisper.cpp's ggml-cuda backend. Avoids
+          # the brittle Jimver/cuda-toolkit apt-name dance on Linux.
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nvidia-cuda-toolkit
+          nvcc --version
 
       - name: Clone whisper.cpp
         shell: bash
@@ -102,7 +103,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_CUDA=ON \
-            -DCMAKE_CUDA_ARCHITECTURES="75;86;89" \
+            -DCMAKE_CUDA_ARCHITECTURES="86;89" \
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_EXAMPLES=ON
 
@@ -143,7 +144,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
             -DGGML_CUDA=ON \
-            -DCMAKE_CUDA_ARCHITECTURES="75;86;89" \
+            -DCMAKE_CUDA_ARCHITECTURES="86;89" \
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_EXAMPLES=ON
 
@@ -186,6 +187,17 @@ jobs:
                 break
               fi
             done
+            # Bundle libcublas/libcudart from Ubuntu's nvidia-cuda-toolkit
+            # so the binary runs on machines without the toolkit installed
+            # (only the NVIDIA driver is required).
+            if [[ "${{ matrix.variant }}" == "cuda" && "${{ matrix.platform }}" == "linux" ]]; then
+              for so in libcublas.so libcublasLt.so libcudart.so; do
+                found=$(ldconfig -p | awk -v s="${so}" '$1 ~ s {print $NF; exit}')
+                if [[ -n "${found}" && -f "${found}" ]]; then
+                  cp -L "${found}" "staged/$(basename "${found}")"
+                fi
+              done
+            fi
           fi
           ls -la staged
           test -f "staged/${{ matrix.exe }}"
