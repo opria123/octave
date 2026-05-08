@@ -29,6 +29,12 @@ export interface AutoChartRunOptions {
   folders: string[]
   urls: string[]
   includeKeys?: boolean
+  /**
+   * When true, skip all online metadata/album-art/lyric lookups in the
+   * Python pipeline. Useful for fully-offline charting and to avoid
+   * misidentifying custom uploads as well-known commercial songs.
+   */
+  disableOnlineLookup?: boolean
 }
 
 export interface AutoChartRunResult {

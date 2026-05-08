@@ -127,6 +127,7 @@ const api = {
     folders: string[]
     urls: string[]
     includeKeys?: boolean
+    disableOnlineLookup?: boolean
   }): Promise<{ runId: string }> =>
     ipcRenderer.invoke('strum:start', options),
 

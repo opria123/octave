@@ -61,6 +61,7 @@ interface ChartEditorAPI {
     folders: string[]
     urls: string[]
     includeKeys?: boolean
+    disableOnlineLookup?: boolean
   }) => Promise<{ runId: string }>
   cancelAutoChart: (runId: string) => Promise<boolean>
   onAutoChartProgress: (callback: (event: {

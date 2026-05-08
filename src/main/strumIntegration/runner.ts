@@ -430,11 +430,18 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
 
   return await new Promise<AutoChartRunResult>((resolve, reject) => {
     const verboseDebug = isVerboseDebug()
+    const offlineEnv: NodeJS.ProcessEnv = options.disableOnlineLookup
+      ? {
+          OCTAVE_STRUM_DISABLE_ONLINE_LOOKUP: '1',
+          OCTAVE_STRUM_FAST_METADATA_LOOKUP: '0'
+        }
+      : {}
     const devEnv: NodeJS.ProcessEnv = {
       ...process.env,
       PYTHONUTF8: '1',
       ...(demucsCppEnv ?? {}),
-      ...(whisperCppEnv ?? {})
+      ...(whisperCppEnv ?? {}),
+      ...offlineEnv
     }
     const sourceOverride = getDevStrumSourceOverride()
     if (sourceOverride) {
@@ -457,7 +464,7 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
       {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: app.isPackaged
-          ? { ...getBundledPythonEnv(), ...(demucsCppEnv ?? {}), ...(whisperCppEnv ?? {}) }
+          ? { ...getBundledPythonEnv(), ...(demucsCppEnv ?? {}), ...(whisperCppEnv ?? {}), ...offlineEnv }
           : devEnv
       }
     )

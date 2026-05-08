@@ -37,6 +37,12 @@ AUDIO_SEPARATION_TIMEOUT_SEC = int(os.environ.get("OCTAVE_STRUM_SEPARATION_TIMEO
 # quality. Set OCTAVE_STRUM_FAST_ANALYSIS=1 only for quick previews.
 FAST_AUDIO_ANALYSIS = os.environ.get("OCTAVE_STRUM_FAST_ANALYSIS", "0") != "0"
 FAST_AUDIO_METADATA_LOOKUP = os.environ.get("OCTAVE_STRUM_FAST_METADATA_LOOKUP", "1") != "0"
+# When OCTAVE_STRUM_DISABLE_ONLINE_LOOKUP=1, all online metadata/album-art/lyric
+# lookups are suppressed. Used by the UI's offline-mode toggle so custom uploads
+# aren't misidentified against MusicBrainz / iTunes / etc.
+DISABLE_ONLINE_LOOKUP = os.environ.get("OCTAVE_STRUM_DISABLE_ONLINE_LOOKUP", "0") == "1"
+if DISABLE_ONLINE_LOOKUP:
+    FAST_AUDIO_METADATA_LOOKUP = False
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".ogg", ".opus", ".flac"}
 DIRECT_AUDIO_URL_EXTENSIONS = AUDIO_EXTENSIONS | {".m4a"}
 REQUIRED_MODULES = {
@@ -478,6 +484,49 @@ def patch_hybrid_device(device: str) -> None:
     guitar_hybrid_v2._get_hybrid_charter = wrapped
 
 
+def _install_offline_lookup_stubs(batch_pipeline_cls) -> None:
+    """Replace STRUM source's online metadata/album-art/lyric methods with no-ops.
+
+    Called when OCTAVE_STRUM_DISABLE_ONLINE_LOOKUP=1. Keeps the pipeline running
+    with whatever metadata is already embedded in the audio file's tags, and
+    prevents custom uploads from being misidentified against MusicBrainz.
+    """
+    logger = logging.getLogger(__name__)
+    logger.info("Offline mode enabled: stubbing STRUM online lookups.")
+
+    def _stub_bool(self, *_args, **_kwargs):
+        return False
+
+    def _stub_dict(self, *_args, **_kwargs):
+        return {}
+
+    for name in ("_quick_musicbrainz_check",):
+        if hasattr(batch_pipeline_cls, name):
+            setattr(batch_pipeline_cls, name, _stub_bool)
+    for name in ("_fetch_musicbrainz_metadata",):
+        if hasattr(batch_pipeline_cls, name):
+            setattr(batch_pipeline_cls, name, _stub_dict)
+    for name in ("fetch_album_art", "_fetch_itunes_art", "fetch_music_video"):
+        if hasattr(batch_pipeline_cls, name):
+            setattr(batch_pipeline_cls, name, _stub_bool)
+
+    try:
+        unified_module = importlib.import_module("src.inference.unified")
+        unified_cls = getattr(unified_module, "UnifiedAutoCharter", None)
+        if unified_cls is not None and hasattr(unified_cls, "fetch_song_metadata"):
+            unified_cls.fetch_song_metadata = _stub_dict  # type: ignore[assignment]
+    except Exception:
+        pass
+
+    try:
+        lyrics_fetcher = importlib.import_module("src.lyrics.fetcher")
+        for name in ("fetch_from_lrclib", "fetch_from_lyrics_ovh", "fetch_lyrics"):
+            if hasattr(lyrics_fetcher, name):
+                setattr(lyrics_fetcher, name, lambda *_a, **_k: None)
+    except Exception:
+        pass
+
+
 def build_pipeline(source_root: Path, output_dir: Path, device: str, include_keys: bool):
     add_source_paths(source_root)
     batch_pipeline_module = importlib.import_module("batch_pipeline")
@@ -485,6 +534,9 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
     patch_hybrid_device(device)
     batch_pipeline_cls = getattr(batch_pipeline_module, "BatchPipeline")
     vocals_charter_cls = getattr(vocals_module, "VocalsCharter")
+
+    if DISABLE_ONLINE_LOOKUP:
+        _install_offline_lookup_stubs(batch_pipeline_cls)
 
     class OctaveVocalsCharter(vocals_charter_cls):
         """VocalsCharter that prefers a native whisper.cpp binary when the

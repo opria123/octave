@@ -52,6 +52,7 @@ export function Toolbar(): React.JSX.Element {
   const [autoChartFiles, setAutoChartFiles] = useState<string[]>([])
   const [autoChartFolders, setAutoChartFolders] = useState<string[]>([])
   const [autoChartUrls, setAutoChartUrls] = useState<string[]>([EMPTY_AUTO_CHART_URL])
+  const [autoChartDisableOnlineLookup, setAutoChartDisableOnlineLookup] = useState(false)
   const [defaultAutoChartOutputDir, setDefaultAutoChartOutputDir] = useState('')
   const [autoChartErrorCopied, setAutoChartErrorCopied] = useState(false)
   const [autoChartProgress, setAutoChartProgress] = useState<AutoChartProgressState>({
@@ -464,7 +465,8 @@ export function Toolbar(): React.JSX.Element {
         files: autoChartFiles,
         folders: autoChartFolders,
         urls,
-        includeKeys: true
+        includeKeys: true,
+        disableOnlineLookup: autoChartDisableOnlineLookup
       })
       setAutoChartProgress((prev) => ({ ...prev, runId }))
     } catch (error) {
@@ -474,7 +476,7 @@ export function Toolbar(): React.JSX.Element {
         error: error instanceof Error ? error.message : String(error)
       }))
     }
-  }, [autoChartFiles, autoChartFolders, autoChartProgress.outputDir, autoChartUrls, runtimeStatus, updateSettings])
+  }, [autoChartDisableOnlineLookup, autoChartFiles, autoChartFolders, autoChartProgress.outputDir, autoChartUrls, runtimeStatus, updateSettings])
 
   const handleCancelAutoChart = useCallback(async (): Promise<void> => {
     if (!autoChartProgress.runId) return
@@ -992,6 +994,26 @@ export function Toolbar(): React.JSX.Element {
                       ))}
                     </div>
                   </div>
+                </div>
+              </section>
+
+              <section className="settings-preferences-group">
+                <h3 className="settings-hotkey-group-title">Advanced</h3>
+                <div className="settings-preferences-body">
+                  <label className="settings-checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={autoChartDisableOnlineLookup}
+                      onChange={(event) => setAutoChartDisableOnlineLookup(event.target.checked)}
+                      disabled={autoChartProgress.isRunning}
+                    />
+                    <span>
+                      Offline mode (disable online lookups)
+                      <small style={{ display: 'block', opacity: 0.7 }}>
+                        Skips MusicBrainz, album art, and lyric searches. Use this for custom uploads to avoid them being misidentified as other songs.
+                      </small>
+                    </span>
+                  </label>
                 </div>
               </section>
 
