@@ -99,11 +99,15 @@ jobs:
         shell: bash
         run: |
           cd upstream
+          # Single SM 8.6 (Ampere) arch keeps nvcc memory + time within the
+          # GitHub-hosted Linux runner's budget (parallel nvcc OOM-killed at
+          # multi-arch). PTX fallback (implicit trailing virtual) covers Ada,
+          # Hopper, Blackwell via JIT on first launch.
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_CUDA=ON \
-            -DCMAKE_CUDA_ARCHITECTURES="86;89" \
+            -DCMAKE_CUDA_ARCHITECTURES="86" \
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_EXAMPLES=ON
 
@@ -140,11 +144,14 @@ jobs:
         shell: bash
         run: |
           cd upstream
+          # Single SM 8.6 (Ampere) arch keeps the Windows runner build under
+          # the 6h job timeout. PTX fallback covers Ada / Hopper / Blackwell
+          # via JIT.
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
             -DGGML_CUDA=ON \
-            -DCMAKE_CUDA_ARCHITECTURES="86;89" \
+            -DCMAKE_CUDA_ARCHITECTURES="86" \
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_EXAMPLES=ON
 
@@ -152,7 +159,14 @@ jobs:
         shell: bash
         run: |
           cd upstream
-          cmake --build build --config Release --target whisper-cli --parallel
+          # Linux CUDA: cap parallel nvcc to 2 — multiple ggml-cuda .cu
+          # translation units each consume ~3 GB at peak, and the runner's
+          # ~16 GB RAM gets OOM-killed (exit 143) at higher concurrency.
+          if [ "${{ matrix.platform }}" = "linux" ] && [ "${{ matrix.variant }}" = "cuda" ]; then
+            cmake --build build --config Release --target whisper-cli --parallel 2
+          else
+            cmake --build build --config Release --target whisper-cli --parallel
+          fi
 
       - name: Stage binary
         shell: bash

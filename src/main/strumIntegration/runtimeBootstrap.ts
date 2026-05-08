@@ -278,8 +278,24 @@ function runStreaming(
       stdio: ['ignore', 'pipe', 'pipe']
     })
 
+    // Keep the last ~120 lines of combined output so a non-zero exit can
+    // surface the actual pip error to the user instead of a bare
+    // "failed with exit code 1".
+    const tail: string[] = []
+    const TAIL_MAX = 120
+    const pushTail = (chunk: Buffer): void => {
+      const text = chunk.toString('utf-8')
+      for (const rawLine of text.split(/\r?\n/)) {
+        const line = rawLine.replace(/\r/g, '').trimEnd()
+        if (!line) continue
+        tail.push(line)
+        if (tail.length > TAIL_MAX) tail.shift()
+      }
+    }
+
     let lastBroadcast = 0
-    const onChunk = (chunk: Buffer) => {
+    const onChunk = (chunk: Buffer): void => {
+      pushTail(chunk)
       const now = Date.now()
       if (now - lastBroadcast > 1000) {
         const text = chunk.toString('utf-8').split(/\r?\n/).map((s) => s.trim()).filter(Boolean).pop()
@@ -294,8 +310,18 @@ function runStreaming(
 
     child.on('error', reject)
     child.on('close', (code) => {
-      if (code === 0) resolve()
-      else reject(new Error(`${label} failed with exit code ${code}`))
+      if (code === 0) {
+        resolve()
+        return
+      }
+      // Prefer the last error-ish lines pip emitted; fall back to the raw tail.
+      const errorLines = tail.filter((l) =>
+        /^(ERROR|error:|FAILED|fatal|note:|Could not|No matching distribution|Building wheel for|Failed building wheel|Consider using|Cannot install|Requirement already|HINT|hint:)/i.test(l)
+        || /\bexit code\b/i.test(l)
+      )
+      const excerpt = (errorLines.length > 0 ? errorLines.slice(-25) : tail.slice(-25)).join('\n')
+      const detail = excerpt ? `\n--- pip output (tail) ---\n${excerpt}\n--- end pip output ---` : ''
+      reject(new Error(`${label} failed with exit code ${code}.${detail}`))
     })
   })
 }
@@ -386,9 +412,13 @@ async function installRequirements(
 
   try {
     emitProgress(runId, 'Installing ML/audio dependencies (~600 MB)...', 60)
+    // Drop --no-build-isolation here: several deps (lameenc, diffq, etc.)
+    // ship sdists on some platforms and need their own build deps (Cython,
+    // numpy headers, ...). Build isolation lets pip provision them per-package.
+    // --prefer-binary biases the resolver toward wheels when available.
     await runStreaming(
       pythonPath,
-      ['-m', 'pip', 'install', '--upgrade', '--no-build-isolation', '-r', tempReqPath],
+      ['-m', 'pip', 'install', '--upgrade', '--prefer-binary', '-r', tempReqPath],
       runId,
       'pip base'
     )
@@ -397,7 +427,7 @@ async function installRequirements(
       emitProgress(runId, 'Installing basic-pitch...', 90)
       await runStreaming(
         pythonPath,
-        ['-m', 'pip', 'install', '--upgrade', '--no-deps', basicPitchRequirement],
+        ['-m', 'pip', 'install', '--upgrade', '--no-deps', '--prefer-binary', basicPitchRequirement],
         runId,
         'pip basic-pitch'
       )
