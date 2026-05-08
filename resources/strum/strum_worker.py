@@ -876,32 +876,49 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
             # (matches the STRUM benchmark). CREPE capacity is left at its
             # default unless OCTAVE_CREPE_MODEL is set. Forward *args/**kwargs
             # so newer upstream signatures (e.g. full_mix=...) keep working.
-            print(f"[OCTAVE] >>> transcribe_guitar(stem={other_stem.name})", file=sys.stderr, flush=True)
+            print(f"[OCTAVE] >>> transcribe_guitar(stem={other_stem}, tempo={tempo_bpm}, args={args}, kwargs={list(kwargs.keys())})", file=sys.stderr, flush=True)
             try:
-                result = self._with_fast_crepe(super().transcribe_guitar, other_stem, tempo_bpm, *args, **kwargs)
-                n = len(result.notes) if result and getattr(result, "notes", None) is not None else 0
-                print(f"[OCTAVE] <<< transcribe_guitar produced {n} notes", file=sys.stderr, flush=True)
-                return result
+                from src.inference.guitar_hybrid_v2 import transcribe_guitar_hybrid
+                # Bypass upstream wrapper to expose any exception directly.
+                chart = transcribe_guitar_hybrid(other_stem, tempo_bpm=tempo_bpm)
+                n_notes = len(getattr(chart, "notes", []) or [])
+                n_chords = len(getattr(chart, "chords", []) or [])
+                print(f"[OCTAVE] <<< transcribe_guitar produced {n_notes} notes / {n_chords} chords (chart={type(chart).__name__})", file=sys.stderr, flush=True)
+                return chart
             except Exception as exc:
                 import traceback as _tb
-                print(f"[OCTAVE] !!! transcribe_guitar EXCEPTION: {exc}", file=sys.stderr, flush=True)
+                print(f"[OCTAVE] !!! transcribe_guitar EXCEPTION: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
                 _tb.print_exc(file=sys.stderr)
                 sys.stderr.flush()
-                raise
+                return None
 
         def transcribe_bass(self, bass_stem: Path, tempo_bpm: float, *args, **kwargs):
-            print(f"[OCTAVE] >>> transcribe_bass(stem={bass_stem.name})", file=sys.stderr, flush=True)
+            print(f"[OCTAVE] >>> transcribe_bass(stem={bass_stem}, tempo={tempo_bpm})", file=sys.stderr, flush=True)
             try:
-                result = self._with_fast_crepe(super().transcribe_bass, bass_stem, tempo_bpm, *args, **kwargs)
-                n = len(result.notes) if result and getattr(result, "notes", None) is not None else 0
-                print(f"[OCTAVE] <<< transcribe_bass produced {n} notes", file=sys.stderr, flush=True)
-                return result
+                from src.inference.guitar_hybrid_v2 import transcribe_guitar_hybrid
+                prev_min = os.environ.get("STRUM_BP_MIN_PITCH")
+                prev_max = os.environ.get("STRUM_BP_MAX_PITCH")
+                prev_thr = os.environ.get("STRUM_GUITAR_PEAK_THR")
+                os.environ["STRUM_BP_MIN_PITCH"] = "24"
+                os.environ["STRUM_BP_MAX_PITCH"] = "67"
+                os.environ["STRUM_GUITAR_PEAK_THR"] = os.environ.get("STRUM_BASS_PEAK_THR", "0.15")
+                try:
+                    chart = transcribe_guitar_hybrid(bass_stem, tempo_bpm=tempo_bpm, is_bass=True)
+                finally:
+                    for k, v in (("STRUM_BP_MIN_PITCH", prev_min), ("STRUM_BP_MAX_PITCH", prev_max), ("STRUM_GUITAR_PEAK_THR", prev_thr)):
+                        if v is None:
+                            os.environ.pop(k, None)
+                        else:
+                            os.environ[k] = v
+                n_notes = len(getattr(chart, "notes", []) or [])
+                print(f"[OCTAVE] <<< transcribe_bass produced {n_notes} notes", file=sys.stderr, flush=True)
+                return chart
             except Exception as exc:
                 import traceback as _tb
-                print(f"[OCTAVE] !!! transcribe_bass EXCEPTION: {exc}", file=sys.stderr, flush=True)
+                print(f"[OCTAVE] !!! transcribe_bass EXCEPTION: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
                 _tb.print_exc(file=sys.stderr)
                 sys.stderr.flush()
-                raise
+                return None
 
         def transcribe_vocals(self, vocals_stem: Path, artist: str, title: str):
             print(f"[OCTAVE] >>> transcribe_vocals(stem={vocals_stem.name})", file=sys.stderr, flush=True)
@@ -913,24 +930,28 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
                 return result
             except Exception as exc:
                 import traceback as _tb
-                print(f"[OCTAVE] !!! transcribe_vocals EXCEPTION: {exc}", file=sys.stderr, flush=True)
+                print(f"[OCTAVE] !!! transcribe_vocals EXCEPTION: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
                 _tb.print_exc(file=sys.stderr)
                 sys.stderr.flush()
-                raise
+                return None, None
 
         def transcribe_keys(self, other_stem: Path, guitar_stem: Path | None = None):
-            print(f"[OCTAVE] >>> transcribe_keys(stem={other_stem.name})", file=sys.stderr, flush=True)
+            print(f"[OCTAVE] >>> transcribe_keys(stem={other_stem}, guitar_stem={guitar_stem})", file=sys.stderr, flush=True)
             try:
-                result = super().transcribe_keys(other_stem, guitar_stem=guitar_stem)
-                n = len(result) if result else 0
-                print(f"[OCTAVE] <<< transcribe_keys produced {n} notes", file=sys.stderr, flush=True)
-                return result
+                # Bypass upstream wrapper's exception swallowing.
+                notes, details = self.keys_charter.transcribe(
+                    str(other_stem), force=False,
+                    guitar_stem=str(guitar_stem) if guitar_stem else None,
+                )
+                n = len(notes) if notes else 0
+                print(f"[OCTAVE] <<< transcribe_keys produced {n} notes (details={details!r})", file=sys.stderr, flush=True)
+                return notes
             except Exception as exc:
                 import traceback as _tb
-                print(f"[OCTAVE] !!! transcribe_keys EXCEPTION: {exc}", file=sys.stderr, flush=True)
+                print(f"[OCTAVE] !!! transcribe_keys EXCEPTION: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
                 _tb.print_exc(file=sys.stderr)
                 sys.stderr.flush()
-                raise
+                return None
 
         def analyze_audio(self, audio_path: Path, artist: str = '', title: str = ''):
             if not FAST_AUDIO_ANALYSIS:
