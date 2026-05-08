@@ -56,13 +56,23 @@ jobs:
       - name: Checkout chart-editor
         uses: actions/checkout@v4
 
-      - name: Install CUDA toolkit
-        if: matrix.variant == 'cuda'
+      - name: Install CUDA toolkit (Windows)
+        if: matrix.variant == 'cuda' && matrix.platform == 'win32'
         uses: Jimver/cuda-toolkit@v0.2.19
         with:
           cuda: '12.4.0'
           method: 'network'
           sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust", "visual_studio_integration"]'
+
+      - name: Install CUDA toolkit (Linux)
+        if: matrix.variant == 'cuda' && matrix.platform == 'linux'
+        uses: Jimver/cuda-toolkit@v0.2.19
+        with:
+          cuda: '12.4.0'
+          method: 'network'
+          # Linux apt repo doesn't expose a visual_studio_integration package.
+          # `thrust` is bundled inside the cudart sub-package on Linux.
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas-dev"]'
 
       - name: Clone whisper.cpp
         shell: bash
@@ -92,7 +102,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_CUDA=ON \
-            -DCMAKE_CUDA_ARCHITECTURES="75;86;89;90" \
+            -DCMAKE_CUDA_ARCHITECTURES="75;86;89" \
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_EXAMPLES=ON
 
@@ -133,7 +143,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
             -DGGML_CUDA=ON \
-            -DCMAKE_CUDA_ARCHITECTURES="75;86;89;90" \
+            -DCMAKE_CUDA_ARCHITECTURES="75;86;89" \
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_EXAMPLES=ON
 
