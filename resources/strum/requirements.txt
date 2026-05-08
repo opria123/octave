@@ -24,7 +24,8 @@ demucs==4.0.1
 # demucs's hard deps not already covered above.
 julius==0.2.7
 lameenc==1.7.0
-dora-search==0.1.13
+# dora-search 0.1.12 is the latest on PyPI (0.1.13 only exists as a git tag).
+dora-search==0.1.12
 openunmix==1.3.0
 diffq==0.2.4
 librosa==0.11.0
