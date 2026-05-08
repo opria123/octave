@@ -48,7 +48,6 @@
 .explorer-song-item:hover {
   background-color: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.08);
-  transform: translateY(-1px);
 }
 
 .explorer-song-item.active {

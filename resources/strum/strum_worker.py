@@ -504,7 +504,14 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
                 file=sys.stderr, flush=True,
             )
             if bin_ok and model_ok:
-                return self._transcribe_lyrics_cpp(str(audio_path), cpp_bin, cpp_model)
+                try:
+                    return self._transcribe_lyrics_cpp(str(audio_path), cpp_bin, cpp_model)
+                except Exception as exc:
+                    import traceback as _tb
+                    print(f"[OCTAVE] !!! _transcribe_lyrics_cpp EXCEPTION: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+                    _tb.print_exc(file=sys.stderr)
+                    sys.stderr.flush()
+                    raise
             print("[OCTAVE] transcribe_lyrics: falling back to Python whisper", file=sys.stderr, flush=True)
             return super().transcribe_lyrics(audio_path)
 
@@ -563,15 +570,25 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
                     f"[OCTAVE] whisper.cpp rc={result.returncode} stdout_len={len(stdout_text)} stderr_len={len(stderr_text)}",
                     file=sys.stderr, flush=True,
                 )
+                print(f"[OCTAVE] whisper.cpp stderr tail: {stderr_text[-2000:]}", file=sys.stderr, flush=True)
                 if result.returncode != 0:
                     raise RuntimeError(
                         f"whisper.cpp failed (rc={result.returncode}): {stderr_text[-2000:]}"
                     )
 
                 json_path = Path(str(out_prefix) + ".json")
+                print(f"[OCTAVE] whisper.cpp json_path={json_path} exists={json_path.exists()}", file=sys.stderr, flush=True)
                 if not json_path.exists():
-                    raise RuntimeError(f"whisper.cpp produced no JSON output at {json_path}")
-                payload = json.loads(json_path.read_text(encoding="utf-8"))
+                    # Surface what files whisper actually wrote.
+                    try:
+                        listing = sorted(p.name for p in tmp.iterdir())
+                    except Exception:
+                        listing = []
+                    raise RuntimeError(f"whisper.cpp produced no JSON output at {json_path}; tmpdir contents={listing}")
+                try:
+                    payload = json.loads(json_path.read_text(encoding="utf-8"))
+                except Exception as exc:
+                    raise RuntimeError(f"whisper.cpp JSON parse failed: {exc}") from exc
 
             # whisper.cpp -ojf JSON shape (current upstream):
             #   { "transcription": [
