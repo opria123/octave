@@ -166,14 +166,17 @@ async function main() {
   }
 
   // 3. base requirements
+  // Keep build isolation ON (the default) so sdists like dora-search can
+  // pull their build deps (e.g. Cython) into a transient env. Use
+  // --prefer-binary to favor wheels when available.
   const baseReq = join(OUT_DIR, 'requirements.base.txt')
   writeFileSync(baseReq, split.base)
-  runPython(pythonExe, ['-m', 'pip', 'install', '--upgrade', '--no-build-isolation', '-r', baseReq])
+  runPython(pythonExe, ['-m', 'pip', 'install', '--upgrade', '--prefer-binary', '-r', baseReq])
   rmSync(baseReq, { force: true })
 
   // 4. basic-pitch (--no-deps)
   if (split.basicPitch) {
-    runPython(pythonExe, ['-m', 'pip', 'install', '--upgrade', '--no-deps', split.basicPitch])
+    runPython(pythonExe, ['-m', 'pip', 'install', '--upgrade', '--no-deps', '--prefer-binary', split.basicPitch])
   }
 
   // 5. state file (matches runtimeBootstrap.writeState shape)
