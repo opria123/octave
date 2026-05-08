@@ -144,7 +144,11 @@ export function ProjectExplorer(): React.JSX.Element {
       try {
         const iniData = await window.api.readSongIni(songFolder.path)
 
+        // Spread the full ini so per-instrument difficulties (diff_drums,
+        // diff_guitar, ...) and any other custom keys flow through to the
+        // PropertyPanel; then override the typed display fields.
         const metadata: SongMetadata = {
+          ...(iniData ?? {}),
           name: (iniData?.name as string) || (iniData?.title as string) || songFolder.name,
           artist: (iniData?.artist as string) || 'Unknown Artist',
           album: iniData?.album as string,
