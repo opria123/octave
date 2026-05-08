@@ -84,6 +84,26 @@ jobs:
                   patched += 1
                   print(f'patched {cml}')
           print(f'total patched: {patched}')
+
+          # libnyquist's CMakeLists overwrites CMAKE_CXX_FLAGS wholesale,
+          # which strips the default /EHsc that CMake injects for MSVC-like
+          # compilers (including ClangCL). Without it, clang-cl rejects the
+          # try/throw blocks in vendor/libnyquist/src/Common.cpp. Inject an
+          # explicit add_compile_options(/EHsc) for MSVC at the top of
+          # libnyquist's project.
+          ny = pathlib.Path('vendor/libnyquist/CMakeLists.txt')
+          if ny.exists():
+              text = ny.read_text()
+              guard = '# OCTAVE: ensure C++ exceptions on MSVC/ClangCL'
+              if guard not in text:
+                  inject = (
+                      f'\n{guard}\n'
+                      'if(MSVC)\n'
+                      '    add_compile_options(/EHsc)\n'
+                      'endif()\n'
+                  )
+                  ny.write_text(text + inject)
+                  print('injected /EHsc into libnyquist CMakeLists.txt')
           PY
 
       - name: Install OpenBLAS (Linux)
