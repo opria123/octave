@@ -30,6 +30,9 @@ env:
   UPSTREAM_REPO: 'sevagh/demucs.cpp'
   UPSTREAM_REF: ${{ github.event.inputs.upstream_ref || 'main' }}
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:

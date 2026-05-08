@@ -33,6 +33,9 @@ env:
   UPSTREAM_REPO: 'ggerganov/whisper.cpp'
   UPSTREAM_REF: ${{ github.event.inputs.upstream_ref || 'master' }}
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
