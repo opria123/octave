@@ -505,16 +505,23 @@ export function ProjectExplorer(): React.JSX.Element {
     })
   }
 
-  const handleDeleteSong = async (songId: string): Promise<void> => {
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string; folderPath: string } | null>(null)
+
+  const handleDeleteSong = (songId: string): void => {
     const store = getSongStore(songId)
     const songName = store.getState().song.metadata.name
     const folderPath = store.getState().song.folderPath
-    if (!confirm(`Delete "${songName}"?\n\nThis will move the song folder to the trash.`)) return
+    setPendingDelete({ id: songId, name: songName, folderPath })
+  }
 
+  const confirmDelete = async (): Promise<void> => {
+    if (!pendingDelete) return
+    const { id, folderPath } = pendingDelete
+    setPendingDelete(null)
     const deleted = await window.api.deleteSongFolder(folderPath)
     if (deleted) {
-      removeSong(songId)
-      removeSongStore(songId)
+      removeSong(id)
+      removeSongStore(id)
     }
   }
 
@@ -597,6 +604,28 @@ export function ProjectExplorer(): React.JSX.Element {
           </div>
         )}
       </div>
+      {pendingDelete && (
+        <div
+          className="delete-confirm-overlay"
+          onClick={() => setPendingDelete(null)}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div className="delete-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="delete-confirm-title">Delete song?</div>
+            <div className="delete-confirm-body">
+              “{pendingDelete.name}” will be moved to the trash.
+            </div>
+            <div className="delete-confirm-actions">
+              <button className="delete-confirm-cancel" onClick={() => setPendingDelete(null)}>
+                Cancel
+              </button>
+              <button className="delete-confirm-delete" onClick={confirmDelete} autoFocus>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* New Song Dialog */}
       {showNewSongDialog && (

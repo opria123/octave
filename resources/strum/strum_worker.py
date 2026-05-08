@@ -496,8 +496,16 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
         def transcribe_lyrics(self, audio_path):
             cpp_bin = os.environ.get("OCTAVE_WHISPER_CPP_BIN", "").strip()
             cpp_model = os.environ.get("OCTAVE_WHISPER_CPP_MODEL", "").strip()
-            if cpp_bin and cpp_model and Path(cpp_bin).exists() and Path(cpp_model).exists():
+            bin_ok = bool(cpp_bin) and Path(cpp_bin).exists()
+            model_ok = bool(cpp_model) and Path(cpp_model).exists()
+            print(
+                f"[OCTAVE] transcribe_lyrics: cpp_bin={'set' if cpp_bin else 'unset'}({'exists' if bin_ok else 'missing'}) "
+                f"cpp_model={'set' if cpp_model else 'unset'}({'exists' if model_ok else 'missing'})",
+                file=sys.stderr, flush=True,
+            )
+            if bin_ok and model_ok:
                 return self._transcribe_lyrics_cpp(str(audio_path), cpp_bin, cpp_model)
+            print("[OCTAVE] transcribe_lyrics: falling back to Python whisper", file=sys.stderr, flush=True)
             return super().transcribe_lyrics(audio_path)
 
         def _transcribe_lyrics_cpp(self, audio_path: str, cpp_bin: str, cpp_model: str):
@@ -542,16 +550,22 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
                     "-t", str(max(1, (os.cpu_count() or 4) - 1)),
                 ]
 
+                print(f"[OCTAVE] whisper.cpp invoking: {cpp_bin}", file=sys.stderr, flush=True)
                 try:
                     result = subprocess.run(cmd, capture_output=True, timeout=AUDIO_SEPARATION_TIMEOUT_SEC)
                 except subprocess.TimeoutExpired as exc:
                     raise RuntimeError(
                         f"whisper.cpp timed out after {AUDIO_SEPARATION_TIMEOUT_SEC}s."
                     ) from exc
+                stderr_text = (result.stderr or b"").decode("utf-8", errors="replace")
+                stdout_text = (result.stdout or b"").decode("utf-8", errors="replace")
+                print(
+                    f"[OCTAVE] whisper.cpp rc={result.returncode} stdout_len={len(stdout_text)} stderr_len={len(stderr_text)}",
+                    file=sys.stderr, flush=True,
+                )
                 if result.returncode != 0:
-                    stderr = (result.stderr or b"").decode("utf-8", errors="replace")[-2000:]
                     raise RuntimeError(
-                        f"whisper.cpp failed (rc={result.returncode}): {stderr}"
+                        f"whisper.cpp failed (rc={result.returncode}): {stderr_text[-2000:]}"
                     )
 
                 json_path = Path(str(out_prefix) + ".json")
@@ -591,10 +605,17 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
                     end = max(start + 0.01, end_ms / 1000.0 + self.timing_offset)
                     words.append({"word": text, "start": start, "end": end})
 
-            logger.info(
-                f"whisper.cpp transcribed {len(words)} words "
-                f"(timing offset: {self.timing_offset:+.3f}s)"
+            print(
+                f"[OCTAVE] whisper.cpp transcribed {len(words)} words "
+                f"(timing offset: {self.timing_offset:+.3f}s)",
+                file=sys.stderr, flush=True,
             )
+            if len(words) == 0:
+                # Surface whisper's own output so we can diagnose silent runs.
+                tail_err = stderr_text[-1500:] if stderr_text else ""
+                tail_out = stdout_text[-500:] if stdout_text else ""
+                print(f"[OCTAVE] whisper.cpp stderr tail: {tail_err}", file=sys.stderr, flush=True)
+                print(f"[OCTAVE] whisper.cpp stdout tail: {tail_out}", file=sys.stderr, flush=True)
 
             # Re-use the parent class's harmony-duplicate filter so the
             # downstream alignment behaves identically to the Python path.
