@@ -54,8 +54,15 @@ type BinaryTarget = {
   executableRel: string
 }
 
-/** Platforms+arches for which we publish a CUDA-accelerated build. */
-const CUDA_SUPPORTED = new Set<string>(['win32-x64', 'linux-x64'])
+/**
+ * Platforms+arches for which we publish a CUDA-accelerated build.
+ * Linux is intentionally excluded: ggml-cuda's template-instance .cu files
+ * each peak ~4-5 GB during nvcc PTX generation, and the GitHub-hosted Linux
+ * runner OOM-kills the build even at low parallelism. Linux NVIDIA users
+ * still get GPU acceleration via Python demucs + onnxruntime-gpu; only
+ * whisper transcription falls back to the CPU whisper.cpp binary.
+ */
+const CUDA_SUPPORTED = new Set<string>(['win32-x64'])
 
 function makeAsset(platform: string, arch: string, variant: BinaryVariant): string {
   return `whisper-cpp-bin-${platform}-${arch}-${variant}-v${WHISPER_CPP_BIN_VERSION}.tar.gz`

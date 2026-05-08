@@ -45,7 +45,13 @@ jobs:
       matrix:
         include:
           - { os: ubuntu-latest,  platform: linux,   arch: x64,   variant: cpu,  exe: whisper-cli }
-          - { os: ubuntu-latest,  platform: linux,   arch: x64,   variant: cuda, exe: whisper-cli }
+          # Linux CUDA whisper.cpp is intentionally NOT built: ggml-cuda's
+          # template-instance .cu files each peak ~4-5 GB during nvcc PTX
+          # generation, and even --parallel 2 OOM-kills the GitHub-hosted
+          # Linux runner (~16 GB RAM) at ~91% of the build. Linux NVIDIA
+          # users still get GPU acceleration via Python demucs (torch+CUDA)
+          # and onnxruntime-gpu; only whisper transcription falls back to
+          # the CPU whisper.cpp binary, which is acceptable.
           - { os: macos-14,       platform: darwin,  arch: arm64, variant: cpu,  exe: whisper-cli }
           - { os: windows-latest, platform: win32,   arch: x64,   variant: cpu,  exe: whisper-cli.exe }
           - { os: windows-latest, platform: win32,   arch: x64,   variant: cuda, exe: whisper-cli.exe }
