@@ -76,7 +76,21 @@ async function downloadFile(url, dest) {
 
 function extractTarGz(archive, dest) {
   mkdirSync(dest, { recursive: true })
-  execFileSync('tar', ['-xzf', archive, '-C', dest], { stdio: 'inherit' })
+  // GNU tar (used on GitHub's Windows runners via Git for Windows) treats
+  // any arg containing `:` as `host:path` and tries to SSH. Run tar from
+  // inside the destination dir with a copy of the archive so neither -f nor
+  // -C carries a drive letter.
+  const path = require('path')
+  const { copyFileSync, unlinkSync } = require('fs')
+  const archiveName = '__extract_input.tar.gz'
+  const destAbs = path.resolve(dest)
+  const stagedArchive = path.join(destAbs, archiveName)
+  copyFileSync(archive, stagedArchive)
+  try {
+    execFileSync('tar', ['-xzf', archiveName], { stdio: 'inherit', cwd: destAbs })
+  } finally {
+    try { unlinkSync(stagedArchive) } catch { /* ignore */ }
+  }
 }
 
 function runPython(pythonExe, args) {
