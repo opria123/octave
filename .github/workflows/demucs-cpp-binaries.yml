@@ -59,6 +59,33 @@ jobs:
           git submodule update --init --recursive
           git rev-parse HEAD > ../UPSTREAM_SHA
 
+      - name: Patch upstream CMakeLists for portable builds
+        shell: bash
+        working-directory: demucs-cpp-src
+        run: |
+          # Upstream uses cmake_minimum_required < 3.5, which CMake 4.x
+          # rejects outright. Bump it to 3.18 across all CMakeLists.txt
+          # in the source tree (the codebase itself still builds with that
+          # version's policies). On Windows we additionally compile with
+          # ClangCL, which accepts the GCC-style warning flags upstream
+          # uses unconditionally.
+          python3 - <<'PY'
+          import re, pathlib
+          patched = 0
+          for cml in pathlib.Path('.').rglob('CMakeLists.txt'):
+              text = cml.read_text()
+              new = re.sub(
+                  r'(?im)^(\s*cmake_minimum_required\s*\(\s*VERSION\s+)\d+(?:\.\d+){0,2}',
+                  r'\g<1>3.18',
+                  text,
+              )
+              if new != text:
+                  cml.write_text(new)
+                  patched += 1
+                  print(f'patched {cml}')
+          print(f'total patched: {patched}')
+          PY
+
       - name: Install OpenBLAS (Linux)
         if: matrix.platform == 'linux'
         run: |
@@ -111,7 +138,12 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path build | Out-Null
           cd build
-          cmake -DCMAKE_BUILD_TYPE=Release `
+          # Use ClangCL toolset — ships with VS 2022 on windows-latest and
+          # accepts the GCC-style warning flags (-Wall, -Wextra, ...) that
+          # upstream's CMakeLists.txt adds unconditionally. MSVC's cl.exe
+          # rejects them.
+          cmake -G "Visual Studio 17 2022" -A x64 -T ClangCL `
+            -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_TOOLCHAIN" `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
             ..
