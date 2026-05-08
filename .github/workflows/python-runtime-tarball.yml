@@ -32,8 +32,6 @@ jobs:
         include:
           - os: windows-latest
             label: win32-x64
-          - os: macos-13
-            label: darwin-x64
           - os: macos-14
             label: darwin-arm64
           - os: ubuntu-latest
