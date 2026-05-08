@@ -99,6 +99,12 @@ jobs:
                       f'\n{guard}\n'
                       'if(MSVC)\n'
                       '    target_compile_options(libnyquist PRIVATE /EHsc)\n'
+                      '    # wavpack uses MSVC intrinsics like _BitScanReverse\n'
+                      '    # without including <intrin.h>; clang-cl treats the\n'
+                      '    # implicit declaration as a hard error by default.\n'
+                      '    target_compile_options(libnyquist PRIVATE\n'
+                      '        $<$<C_COMPILER_ID:Clang>:-Wno-implicit-function-declaration>\n'
+                      '        $<$<CXX_COMPILER_ID:Clang>:-Wno-implicit-function-declaration>)\n'
                       'endif()\n'
                   )
                   ny.write_text(text + inject)
