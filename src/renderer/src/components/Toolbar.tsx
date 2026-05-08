@@ -282,6 +282,10 @@ export function Toolbar(): React.JSX.Element {
 
   useEffect(() => {
     return window.api.onAutoChartProgress((event) => {
+      // Runtime setup progress (Python install on first launch) is owned by
+      // SetupModal; ignore here so it doesn't latch isRunning=true on the
+      // Auto-Chart modal until the next app restart.
+      if (event.runId === 'runtime-setup') return
       setAutoChartProgress((prev) => {
         if (prev.runId && event.runId !== prev.runId) return prev
 
@@ -312,6 +316,7 @@ export function Toolbar(): React.JSX.Element {
 
   useEffect(() => {
     return window.api.onAutoChartComplete((event) => {
+      if (event.runId === 'runtime-setup') return
       setAutoChartProgress((prev) => {
         if (prev.runId !== event.runId) return prev
         return {
@@ -333,6 +338,7 @@ export function Toolbar(): React.JSX.Element {
 
   useEffect(() => {
     return window.api.onAutoChartError((event) => {
+      if (event.runId === 'runtime-setup') return
       setAutoChartProgress((prev) => {
         if (prev.runId !== event.runId) return prev
         return {

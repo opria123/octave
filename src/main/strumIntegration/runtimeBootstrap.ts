@@ -80,6 +80,30 @@ type BootstrapState = {
   pythonVersion: string
   pythonBuildTag: string
   requirementsHash: string
+  /** 'cuda' or 'cpu'. Switching machines invalidates the prebuilt runtime. */
+  accelerator?: string
+}
+
+/**
+ * Detect whether this machine can run a CUDA-enabled torch wheel. We only
+ * advertise CUDA on win/linux x64; Apple Silicon already gets MPS via the
+ * default torch wheel.
+ */
+function detectAccelerator(): 'cuda' | 'cpu' {
+  if (process.platform !== 'win32' && process.platform !== 'linux') return 'cpu'
+  if (process.arch !== 'x64') return 'cpu'
+  try {
+    // nvidia-smi exits 0 when an NVIDIA driver + GPU is present.
+    // execFileSync would deadlock on stuck drivers; use sync spawn semantics
+    // with a hard timeout via spawnSync.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { spawnSync } = require('child_process') as typeof import('child_process')
+    const result = spawnSync('nvidia-smi', ['-L'], { timeout: 4000, encoding: 'utf-8' })
+    if (result.status === 0 && /\bGPU\s+\d+:/i.test(result.stdout ?? '')) return 'cuda'
+  } catch {
+    // nvidia-smi not present — no NVIDIA driver installed.
+  }
+  return 'cpu'
 }
 
 function broadcast(channel: string, payload: unknown): void {
@@ -311,7 +335,8 @@ function splitRequirements(requirementsPath: string): {
 async function installRequirements(
   pythonPath: string,
   requirementsPath: string,
-  runId: string | undefined
+  runId: string | undefined,
+  accelerator: 'cuda' | 'cpu'
 ): Promise<void> {
   emitProgress(runId, 'Installing build dependencies (setuptools, wheel)...', 35)
   await runStreaming(
@@ -324,12 +349,22 @@ async function installRequirements(
   const { basicPitchRequirement, torchRequirements, baseRequirementsText } = splitRequirements(requirementsPath)
 
   if (torchRequirements.length > 0) {
-    emitProgress(runId, 'Installing torch (CPU build, ~200 MB)...', 45)
+    const isCuda = accelerator === 'cuda'
+    const torchIndex = isCuda
+      ? 'https://download.pytorch.org/whl/cu124'
+      : 'https://download.pytorch.org/whl/cpu'
+    emitProgress(
+      runId,
+      isCuda
+        ? 'Installing torch (CUDA 12.4 build, ~2.5 GB)...'
+        : 'Installing torch (CPU build, ~200 MB)...',
+      45
+    )
     await runStreaming(
       pythonPath,
       [
         '-m', 'pip', 'install', '--upgrade', '--no-build-isolation',
-        '--index-url', 'https://download.pytorch.org/whl/cpu',
+        '--index-url', torchIndex,
         '--extra-index-url', 'https://pypi.org/simple',
         ...torchRequirements
       ],
@@ -378,6 +413,7 @@ export async function ensureBootstrappedPython(
 ): Promise<string> {
   const pythonPath = getRuntimeExecutable()
   const requirementsHash = sha256OfFile(requirementsPath)
+  const accelerator = detectAccelerator()
   const state = readState()
 
   if (
@@ -386,6 +422,7 @@ export async function ensureBootstrappedPython(
     && state.requirementsHash === requirementsHash
     && state.pythonBuildTag === PYTHON_BUILD_STANDALONE_TAG
     && state.pythonVersion === PYTHON_VERSION
+    && (state.accelerator ?? 'cpu') === accelerator
   ) {
     return pythonPath
   }
@@ -402,11 +439,14 @@ export async function ensureBootstrappedPython(
 
       // Fast path: download pre-built tarball if CI has published one for
       // this platform + requirements hash. Drops install time from minutes
-      // to ~30 sec.
-      const usedPrebuilt = await tryPrebuiltRuntime(runtimeRoot, requirementsHash, runId).catch((err) => {
-        console.warn(`[BOOTSTRAP] Prebuilt runtime path failed; falling back to pip install. ${err instanceof Error ? err.message : String(err)}`)
-        return false
-      })
+      // to ~30 sec. Skipped when an NVIDIA GPU is detected because the
+      // prebuilt tarballs ship CPU torch only.
+      const usedPrebuilt = accelerator === 'cuda'
+        ? false
+        : await tryPrebuiltRuntime(runtimeRoot, requirementsHash, runId).catch((err) => {
+            console.warn(`[BOOTSTRAP] Prebuilt runtime path failed; falling back to pip install. ${err instanceof Error ? err.message : String(err)}`)
+            return false
+          })
 
       if (!usedPrebuilt) {
         const url = getDownloadUrl()
@@ -425,13 +465,14 @@ export async function ensureBootstrappedPython(
           )
         }
 
-        await installRequirements(pythonPath, requirementsPath, runId)
+        await installRequirements(pythonPath, requirementsPath, runId, accelerator)
       }
 
       await writeState({
         pythonVersion: PYTHON_VERSION,
         pythonBuildTag: PYTHON_BUILD_STANDALONE_TAG,
-        requirementsHash
+        requirementsHash,
+        accelerator
       })
       emitProgress(runId, 'Python runtime ready.', 100)
       return pythonPath
@@ -483,10 +524,12 @@ export function getRuntimeStatus(requirementsPath: string): RuntimeStatus {
   const state = readState()
   if (!state) return status
   const requirementsHash = sha256OfFile(requirementsPath)
+  const accelerator = detectAccelerator()
   status.ready = (
     state.requirementsHash === requirementsHash
     && state.pythonBuildTag === PYTHON_BUILD_STANDALONE_TAG
     && state.pythonVersion === PYTHON_VERSION
+    && (state.accelerator ?? 'cpu') === accelerator
   )
   return status
 }

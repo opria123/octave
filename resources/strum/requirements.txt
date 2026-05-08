@@ -1,9 +1,9 @@
 # Pinned exact versions for reproducible packaged builds.
 # Generated from working dev environment (Anaconda 3.10, Windows, 2026-05-06).
-# torch/torchaudio pinned to CPU variant for cross-platform packaging;
-# they fall back to CPU automatically on machines without an NVIDIA GPU.
-# To use CUDA locally, install torch==2.6.0+cu124 and torchaudio==2.6.0+cu124
-# from https://download.pytorch.org/whl/cu124 after setup.
+# torch/torchaudio: the runtime bootstrap detects nvidia-smi at install time
+# and pip-installs the matching CUDA 12.4 wheel automatically when an NVIDIA
+# GPU is present (Windows/Linux x64). Otherwise the CPU wheel is installed.
+# Apple Silicon uses the CPU wheel which transparently uses MPS.
 
 # ── Core pipeline ──────────────────────────────────────────────────────────────
 # torch/torchaudio are still required (STRUM's CRNN onset models, drums
