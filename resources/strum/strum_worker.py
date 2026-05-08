@@ -606,10 +606,16 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
                     "-of", str(out_prefix),
                     "--no-context",               # condition_on_previous_text=False
                     "-ml", "1",                   # max-segment-len 1 → word-level segments
+                    "-nfa",                       # disable flash-attn: incompatible with q5_0 on some cuBLAS builds (silent no-op exit)
                     "-t", str(max(1, (os.cpu_count() or 4) - 1)),
                 ]
 
                 print(f"[OCTAVE] whisper.cpp invoking: {cpp_bin}", file=sys.stderr, flush=True)
+                # Quote each arg for log so the exact command can be replayed.
+                _printable_cmd = " ".join(
+                    f'"{a}"' if (" " in a or "\\" in a) else a for a in cmd
+                )
+                print(f"[OCTAVE] whisper.cpp cmd: {_printable_cmd}", file=sys.stderr, flush=True)
                 try:
                     result = subprocess.run(cmd, capture_output=True, timeout=AUDIO_SEPARATION_TIMEOUT_SEC)
                 except subprocess.TimeoutExpired as exc:
@@ -622,7 +628,14 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
                     f"[OCTAVE] whisper.cpp rc={result.returncode} stdout_len={len(stdout_text)} stderr_len={len(stderr_text)}",
                     file=sys.stderr, flush=True,
                 )
-                print(f"[OCTAVE] whisper.cpp stderr tail: {stderr_text[-2000:]}", file=sys.stderr, flush=True)
+                # The interesting diagnostic (model load, CUDA init, arg
+                # rejection) lives at the START of stderr; whisper-cli's
+                # help dump (when args fail) sits at the bottom and would
+                # otherwise crowd out the real error in a tail-only log.
+                print(f"[OCTAVE] whisper.cpp stderr head: {stderr_text[:2500]}", file=sys.stderr, flush=True)
+                print(f"[OCTAVE] whisper.cpp stderr tail: {stderr_text[-1500:]}", file=sys.stderr, flush=True)
+                if stdout_text:
+                    print(f"[OCTAVE] whisper.cpp stdout head: {stdout_text[:1500]}", file=sys.stderr, flush=True)
                 if result.returncode != 0:
                     raise RuntimeError(
                         f"whisper.cpp failed (rc={result.returncode}): {stderr_text[-2000:]}"
