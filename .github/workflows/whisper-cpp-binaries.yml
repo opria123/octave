@@ -43,7 +43,6 @@ jobs:
       matrix:
         include:
           - { os: ubuntu-latest,  platform: linux,   arch: x64,   exe: whisper-cli }
-          - { os: macos-13,       platform: darwin,  arch: x64,   exe: whisper-cli }
           - { os: macos-14,       platform: darwin,  arch: arm64, exe: whisper-cli }
           - { os: windows-latest, platform: win32,   arch: x64,   exe: whisper-cli.exe }
 
