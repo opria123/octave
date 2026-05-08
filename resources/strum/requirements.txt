@@ -19,15 +19,18 @@
 torch==2.6.0
 torchaudio==2.6.0
 # Python demucs is only invoked on CUDA hosts; demucs.cpp handles CPU.
-# Pinned to the last release that targets torch 2.x.
+# Pinned to the last release that targets torch 2.x. Installed with --no-deps
+# (handled in splitRequirements) so pip does not pull diffq, which has no
+# Python 3.12 wheel and would force users without a C++ toolchain to build
+# from sdist. diffq is only needed for *quantized* demucs checkpoints; the
+# htdemucs_6s model we ship is not quantized.
 demucs==4.0.1
-# demucs's hard deps not already covered above.
+# demucs's runtime deps that aren't already covered above.
 julius==0.2.7
 lameenc==1.7.0
 # dora-search 0.1.12 is the latest on PyPI (0.1.13 only exists as a git tag).
 dora-search==0.1.12
 openunmix==1.3.0
-diffq==0.2.4
 librosa==0.11.0
 mido==1.3.3
 # basic-pitch auto-selects a backend at import time. We bundle onnxruntime

@@ -328,6 +328,7 @@ function runStreaming(
 
 function splitRequirements(requirementsPath: string, accelerator: 'cuda' | 'cpu'): {
   basicPitchRequirement: string | null
+  demucsRequirement: string | null
   torchRequirements: string[]
   baseRequirementsText: string
 } {
@@ -335,6 +336,7 @@ function splitRequirements(requirementsPath: string, accelerator: 'cuda' | 'cpu'
   const lines = raw.split(/\r?\n/)
 
   let basicPitchRequirement: string | null = null
+  let demucsRequirement: string | null = null
   const torchRequirements: string[] = []
   const baseLines = lines.map((line) => {
     const trimmed = line.trim()
@@ -343,6 +345,12 @@ function splitRequirements(requirementsPath: string, accelerator: 'cuda' | 'cpu'
     // basic-pitch is installed last with --no-deps so it can't pull in TF.
     if (requirement.startsWith('basic-pitch')) {
       basicPitchRequirement = requirement
+      return null
+    }
+    // demucs is installed with --no-deps so pip skips diffq (no cp312 wheel,
+    // needs MSVC). Its runtime deps are listed explicitly below.
+    if (requirement.startsWith('demucs==') || requirement === 'demucs') {
+      demucsRequirement = requirement
       return null
     }
     // torch needs the matching CUDA index URL.
@@ -361,6 +369,7 @@ function splitRequirements(requirementsPath: string, accelerator: 'cuda' | 'cpu'
 
   return {
     basicPitchRequirement,
+    demucsRequirement,
     torchRequirements,
     baseRequirementsText: `${baseLines.join('\n')}\n`
   }
@@ -380,7 +389,7 @@ async function installRequirements(
     'pip setuptools'
   )
 
-  const { basicPitchRequirement, torchRequirements, baseRequirementsText } = splitRequirements(requirementsPath, accelerator)
+  const { basicPitchRequirement, demucsRequirement, torchRequirements, baseRequirementsText } = splitRequirements(requirementsPath, accelerator)
 
   if (torchRequirements.length > 0) {
     const isCuda = accelerator === 'cuda'
@@ -422,6 +431,16 @@ async function installRequirements(
       runId,
       'pip base'
     )
+
+    if (demucsRequirement) {
+      emitProgress(runId, 'Installing demucs...', 85)
+      await runStreaming(
+        pythonPath,
+        ['-m', 'pip', 'install', '--upgrade', '--no-deps', '--prefer-binary', demucsRequirement],
+        runId,
+        'pip demucs'
+      )
+    }
 
     if (basicPitchRequirement) {
       emitProgress(runId, 'Installing basic-pitch...', 90)

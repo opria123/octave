@@ -105,12 +105,14 @@ function runPython(pythonExe, args) {
 function splitRequirements(text) {
   const lines = text.split(/\r?\n/)
   let basicPitch = null
+  let demucs = null
   const torch = []
   const baseLines = lines.filter((line) => {
     const t = line.trim()
     if (!t || t.startsWith('#')) return true
     const req = t.split('#')[0].trim()
     if (req.startsWith('basic-pitch')) { basicPitch = req; return false }
+    if (req.startsWith('demucs==') || req === 'demucs') { demucs = req; return false }
     if (req.startsWith('torch==') || req.startsWith('torchaudio==')) { torch.push(req); return false }
     return true
   })
@@ -123,7 +125,7 @@ function splitRequirements(text) {
     if (req.startsWith('tensorflow==')) return line.replace(/tensorflow==/, 'tensorflow-cpu==')
     return line
   })
-  return { basicPitch, torch, base: rewritten.join('\n') + '\n' }
+  return { basicPitch, demucs, torch, base: rewritten.join('\n') + '\n' }
 }
 
 async function main() {
@@ -174,7 +176,14 @@ async function main() {
   runPython(pythonExe, ['-m', 'pip', 'install', '--upgrade', '--prefer-binary', '-r', baseReq])
   rmSync(baseReq, { force: true })
 
-  // 4. basic-pitch (--no-deps)
+  // 4. demucs (--no-deps so pip skips diffq, which has no cp312 wheel and
+  //    requires MSVC to build from sdist; demucs's runtime deps are listed
+  //    explicitly in requirements.txt).
+  if (split.demucs) {
+    runPython(pythonExe, ['-m', 'pip', 'install', '--upgrade', '--no-deps', '--prefer-binary', split.demucs])
+  }
+
+  // 5. basic-pitch (--no-deps)
   if (split.basicPitch) {
     runPython(pythonExe, ['-m', 'pip', 'install', '--upgrade', '--no-deps', '--prefer-binary', split.basicPitch])
   }
