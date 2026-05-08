@@ -7,6 +7,7 @@ import { parseAutoChartProgressLine } from './progress'
 import { ensureBootstrappedPython, isBootstrapTarget } from './runtimeBootstrap'
 import { ensureDemucsCpp } from './demucsCppBootstrap'
 import { ensureWhisperCpp } from './whisperCppBootstrap'
+import { detectAccelerator } from './runtimeBootstrap'
 import type { AutoChartProgressEvent, AutoChartRunOptions, AutoChartRunResult, AutoChartStage } from './types'
 
 const EVENT_PREFIX = '__OCTAVE_EVENT__'
@@ -389,17 +390,25 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
   // `demucs` package. If the binary isn't available for this platform
   // (e.g. CI hasn't published one yet), the worker falls back to
   // `python -m demucs`.
+  // On CUDA hosts we deliberately skip the demucs.cpp provisioning so
+  // the worker uses Python `demucs -d cuda`, which is dramatically
+  // faster than the CPU-only demucs.cpp binary.
+  const accelerator = detectAccelerator()
   let demucsCppEnv: { OCTAVE_DEMUCS_CPP_BIN: string; OCTAVE_DEMUCS_CPP_WEIGHTS: string } | null = null
-  try {
-    const { binaryPath, weightsPath } = await ensureDemucsCpp(runId)
-    demucsCppEnv = {
-      OCTAVE_DEMUCS_CPP_BIN: binaryPath,
-      OCTAVE_DEMUCS_CPP_WEIGHTS: weightsPath
+  if (accelerator === 'cuda') {
+    logStrum(runId, 'CUDA detected; routing demucs separation through Python (torch) instead of demucs.cpp.')
+  } else {
+    try {
+      const { binaryPath, weightsPath } = await ensureDemucsCpp(runId)
+      demucsCppEnv = {
+        OCTAVE_DEMUCS_CPP_BIN: binaryPath,
+        OCTAVE_DEMUCS_CPP_WEIGHTS: weightsPath
+      }
+    } catch (err) {
+      console.warn(
+        `[Runner] demucs.cpp unavailable; falling back to Python demucs. ${err instanceof Error ? err.message : String(err)}`
+      )
     }
-  } catch (err) {
-    console.warn(
-      `[Runner] demucs.cpp unavailable; falling back to Python demucs. ${err instanceof Error ? err.message : String(err)}`
-    )
   }
 
   // Same idea for whisper.cpp — replaces the openai-whisper Python

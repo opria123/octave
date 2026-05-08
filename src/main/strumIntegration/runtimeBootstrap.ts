@@ -89,7 +89,7 @@ type BootstrapState = {
  * advertise CUDA on win/linux x64; Apple Silicon already gets MPS via the
  * default torch wheel.
  */
-function detectAccelerator(): 'cuda' | 'cpu' {
+export function detectAccelerator(): 'cuda' | 'cpu' {
   if (process.platform !== 'win32' && process.platform !== 'linux') return 'cpu'
   if (process.arch !== 'x64') return 'cpu'
   try {
@@ -300,7 +300,7 @@ function runStreaming(
   })
 }
 
-function splitRequirements(requirementsPath: string): {
+function splitRequirements(requirementsPath: string, accelerator: 'cuda' | 'cpu'): {
   basicPitchRequirement: string | null
   torchRequirements: string[]
   baseRequirementsText: string
@@ -310,20 +310,28 @@ function splitRequirements(requirementsPath: string): {
 
   let basicPitchRequirement: string | null = null
   const torchRequirements: string[] = []
-  const baseLines = lines.filter((line) => {
+  const baseLines = lines.map((line) => {
     const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) return true
+    if (!trimmed || trimmed.startsWith('#')) return line
     const requirement = trimmed.split('#')[0].trim()
+    // basic-pitch is installed last with --no-deps so it can't pull in TF.
     if (requirement.startsWith('basic-pitch')) {
       basicPitchRequirement = requirement
-      return false
+      return null
     }
+    // torch needs the matching CUDA index URL.
     if (requirement.startsWith('torch==') || requirement.startsWith('torchaudio==')) {
       torchRequirements.push(requirement)
-      return false
+      return null
     }
-    return true
-  })
+    // Swap the onnxruntime variant on CUDA hosts so basic-pitch can run
+    // its ONNX model on the GPU. Both packages publish the same import
+    // name (`onnxruntime`).
+    if (accelerator === 'cuda' && /^onnxruntime==/.test(requirement)) {
+      return line.replace('onnxruntime==', 'onnxruntime-gpu==')
+    }
+    return line
+  }).filter((line): line is string => line !== null)
 
   return {
     basicPitchRequirement,
@@ -346,7 +354,7 @@ async function installRequirements(
     'pip setuptools'
   )
 
-  const { basicPitchRequirement, torchRequirements, baseRequirementsText } = splitRequirements(requirementsPath)
+  const { basicPitchRequirement, torchRequirements, baseRequirementsText } = splitRequirements(requirementsPath, accelerator)
 
   if (torchRequirements.length > 0) {
     const isCuda = accelerator === 'cuda'

@@ -8,9 +8,11 @@ name: Build whisper.cpp binaries
 # Bump WHISPER_CPP_BIN_VERSION in whisperCppBootstrap.ts and BIN_VERSION below
 # in lockstep when changing the upstream commit, build flags, or output layout.
 #
-# CPU-only builds (no Metal/CUDA/BLAS) — whisper.cpp on CPU with a quantised
-# large-v3 q5_0 model is fast enough for our use case and keeps the build
-# matrix simple and the binaries small (~5 MB each, no runtime DLL deps).
+# We publish two variants per platform that supports both:
+#   * cpu  — pure CPU build (no Metal/CUDA/BLAS), small + portable.
+#   * cuda — cuBLAS-accelerated build for Windows/Linux x64. Bundles the
+#            cuBLAS/cudart DLLs alongside the executable so the user does
+#            not need a CUDA toolkit installed (just a recent NVIDIA driver).
 #
 # NOTE: Currently UNVALIDATED on Windows + macOS. Linux follows the upstream
 # README verbatim. Trigger manually via workflow_dispatch to test.
@@ -29,7 +31,7 @@ on:
       - 'src/main/strumIntegration/whisperCppBootstrap.ts'
 
 env:
-  BIN_VERSION: '1'
+  BIN_VERSION: '2'
   UPSTREAM_REPO: 'ggerganov/whisper.cpp'
   UPSTREAM_REF: ${{ github.event.inputs.upstream_ref || 'master' }}
 
@@ -42,15 +44,25 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,  platform: linux,   arch: x64,   exe: whisper-cli }
-          - { os: macos-14,       platform: darwin,  arch: arm64, exe: whisper-cli }
-          - { os: windows-latest, platform: win32,   arch: x64,   exe: whisper-cli.exe }
+          - { os: ubuntu-latest,  platform: linux,   arch: x64,   variant: cpu,  exe: whisper-cli }
+          - { os: ubuntu-latest,  platform: linux,   arch: x64,   variant: cuda, exe: whisper-cli }
+          - { os: macos-14,       platform: darwin,  arch: arm64, variant: cpu,  exe: whisper-cli }
+          - { os: windows-latest, platform: win32,   arch: x64,   variant: cpu,  exe: whisper-cli.exe }
+          - { os: windows-latest, platform: win32,   arch: x64,   variant: cuda, exe: whisper-cli.exe }
 
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout chart-editor
         uses: actions/checkout@v4
+
+      - name: Install CUDA toolkit
+        if: matrix.variant == 'cuda'
+        uses: Jimver/cuda-toolkit@v0.2.19
+        with:
+          cuda: '12.4.0'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust", "visual_studio_integration"]'
 
       - name: Clone whisper.cpp
         shell: bash
@@ -59,7 +71,7 @@ jobs:
           (cd upstream && git rev-parse HEAD)
 
       - name: Configure (Linux)
-        if: matrix.platform == 'linux'
+        if: matrix.platform == 'linux' && matrix.variant == 'cpu'
         shell: bash
         run: |
           cd upstream
@@ -68,6 +80,19 @@ jobs:
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_BLAS=OFF \
             -DGGML_CUDA=OFF \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=ON
+
+      - name: Configure (Linux CUDA)
+        if: matrix.platform == 'linux' && matrix.variant == 'cuda'
+        shell: bash
+        run: |
+          cd upstream
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_CUDA=ON \
+            -DCMAKE_CUDA_ARCHITECTURES="75;86;89;90" \
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_EXAMPLES=ON
 
@@ -87,7 +112,7 @@ jobs:
             -DWHISPER_BUILD_EXAMPLES=ON
 
       - name: Configure (Windows)
-        if: matrix.platform == 'win32'
+        if: matrix.platform == 'win32' && matrix.variant == 'cpu'
         shell: bash
         run: |
           cd upstream
@@ -96,6 +121,19 @@ jobs:
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_BLAS=OFF \
             -DGGML_CUDA=OFF \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=ON
+
+      - name: Configure (Windows CUDA)
+        if: matrix.platform == 'win32' && matrix.variant == 'cuda'
+        shell: bash
+        run: |
+          cd upstream
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DGGML_CUDA=ON \
+            -DCMAKE_CUDA_ARCHITECTURES="75;86;89;90" \
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_EXAMPLES=ON
 
@@ -115,9 +153,22 @@ jobs:
             for candidate in upstream/build/bin/Release/whisper-cli.exe upstream/build/Release/whisper-cli.exe upstream/build/bin/whisper-cli.exe; do
               if [[ -f "$candidate" ]]; then
                 cp "$candidate" staged/whisper-cli.exe
+                # Copy any DLLs in the same folder (shared ggml/whisper
+                # libs from the CUDA build).
+                cp "$(dirname "$candidate")"/*.dll staged/ 2>/dev/null || true
                 break
               fi
             done
+            # Bundle cuBLAS/cudart runtime DLLs so end users don't need
+            # a CUDA toolkit installed (just a recent NVIDIA driver).
+            if [[ "${{ matrix.variant }}" == "cuda" ]]; then
+              CUDA_BIN="${CUDA_PATH}/bin"
+              for dll in cublas64_12.dll cublasLt64_12.dll cudart64_12.dll; do
+                if [[ -f "${CUDA_BIN}/${dll}" ]]; then
+                  cp "${CUDA_BIN}/${dll}" staged/
+                fi
+              done
+            fi
           else
             for candidate in upstream/build/bin/whisper-cli upstream/build/whisper-cli; do
               if [[ -f "$candidate" ]]; then
@@ -133,7 +184,7 @@ jobs:
         shell: bash
         run: |
           cd staged
-          ASSET="whisper-cpp-bin-${{ matrix.platform }}-${{ matrix.arch }}-v${BIN_VERSION}.tar.gz"
+          ASSET="whisper-cpp-bin-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.variant }}-v${BIN_VERSION}.tar.gz"
           tar -czf "../${ASSET}" .
           cd ..
           ls -la "${ASSET}"
