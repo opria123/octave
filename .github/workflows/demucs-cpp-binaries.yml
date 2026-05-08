@@ -109,6 +109,22 @@ jobs:
                   )
                   ny.write_text(text + inject)
                   print('injected /EHsc into libnyquist CMakeLists.txt')
+
+          # cli-apps/demucs_mt.cpp passes a std::filesystem::path directly
+          # into write_audio_file(..., std::string). On POSIX this works
+          # because path::value_type is char and there is an implicit
+          # conversion; on Windows path::value_type is wchar_t and the call
+          # fails to compile. Patch the call sites to call .string().
+          mt = pathlib.Path('cli-apps/demucs_mt.cpp')
+          if mt.exists():
+              text = mt.read_text()
+              new = text.replace(
+                  'write_audio_file(target_waveform, p_target);',
+                  'write_audio_file(target_waveform, p_target.string());',
+              )
+              if new != text:
+                  mt.write_text(new)
+                  print('patched cli-apps/demucs_mt.cpp for Windows path conversion')
           PY
 
       - name: Install OpenBLAS (Linux)
