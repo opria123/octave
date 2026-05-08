@@ -121,13 +121,21 @@ class ForwardToOctaveHandler(logging.Handler):
 
 
 def install_logging_bridge(run_id: str) -> None:
-    handler = ForwardToOctaveHandler(run_id)
-    handler.setFormatter(logging.Formatter("%(message)s"))
+    # Force-reset root logger so any later `logging.basicConfig()` (e.g.
+    # batch_pipeline.py at import time) cannot replace our handler. Also
+    # mirror records to stderr so per-instrument log lines survive even if
+    # the bridge gets unexpectedly detached.
     root_logger = logging.getLogger()
-    for existing in root_logger.handlers:
-        if isinstance(existing, ForwardToOctaveHandler):
-            return
+    for existing in list(root_logger.handlers):
+        root_logger.removeHandler(existing)
+    handler = ForwardToOctaveHandler(run_id)
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setLevel(logging.INFO)
+    stderr_handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
     root_logger.addHandler(handler)
+    root_logger.addHandler(stderr_handler)
     root_logger.setLevel(logging.INFO)
 
 
@@ -868,10 +876,61 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
             # (matches the STRUM benchmark). CREPE capacity is left at its
             # default unless OCTAVE_CREPE_MODEL is set. Forward *args/**kwargs
             # so newer upstream signatures (e.g. full_mix=...) keep working.
-            return self._with_fast_crepe(super().transcribe_guitar, other_stem, tempo_bpm, *args, **kwargs)
+            print(f"[OCTAVE] >>> transcribe_guitar(stem={other_stem.name})", file=sys.stderr, flush=True)
+            try:
+                result = self._with_fast_crepe(super().transcribe_guitar, other_stem, tempo_bpm, *args, **kwargs)
+                n = len(result.notes) if result and getattr(result, "notes", None) is not None else 0
+                print(f"[OCTAVE] <<< transcribe_guitar produced {n} notes", file=sys.stderr, flush=True)
+                return result
+            except Exception as exc:
+                import traceback as _tb
+                print(f"[OCTAVE] !!! transcribe_guitar EXCEPTION: {exc}", file=sys.stderr, flush=True)
+                _tb.print_exc(file=sys.stderr)
+                sys.stderr.flush()
+                raise
 
         def transcribe_bass(self, bass_stem: Path, tempo_bpm: float, *args, **kwargs):
-            return self._with_fast_crepe(super().transcribe_bass, bass_stem, tempo_bpm, *args, **kwargs)
+            print(f"[OCTAVE] >>> transcribe_bass(stem={bass_stem.name})", file=sys.stderr, flush=True)
+            try:
+                result = self._with_fast_crepe(super().transcribe_bass, bass_stem, tempo_bpm, *args, **kwargs)
+                n = len(result.notes) if result and getattr(result, "notes", None) is not None else 0
+                print(f"[OCTAVE] <<< transcribe_bass produced {n} notes", file=sys.stderr, flush=True)
+                return result
+            except Exception as exc:
+                import traceback as _tb
+                print(f"[OCTAVE] !!! transcribe_bass EXCEPTION: {exc}", file=sys.stderr, flush=True)
+                _tb.print_exc(file=sys.stderr)
+                sys.stderr.flush()
+                raise
+
+        def transcribe_vocals(self, vocals_stem: Path, artist: str, title: str):
+            print(f"[OCTAVE] >>> transcribe_vocals(stem={vocals_stem.name})", file=sys.stderr, flush=True)
+            try:
+                result = super().transcribe_vocals(vocals_stem, artist, title)
+                lead = result[0] if isinstance(result, tuple) and len(result) > 0 else None
+                n = len(lead) if lead else 0
+                print(f"[OCTAVE] <<< transcribe_vocals produced {n} lead phrases", file=sys.stderr, flush=True)
+                return result
+            except Exception as exc:
+                import traceback as _tb
+                print(f"[OCTAVE] !!! transcribe_vocals EXCEPTION: {exc}", file=sys.stderr, flush=True)
+                _tb.print_exc(file=sys.stderr)
+                sys.stderr.flush()
+                raise
+
+        def transcribe_keys(self, other_stem: Path, guitar_stem: Path | None = None):
+            print(f"[OCTAVE] >>> transcribe_keys(stem={other_stem.name})", file=sys.stderr, flush=True)
+            try:
+                result = super().transcribe_keys(other_stem, guitar_stem=guitar_stem)
+                n = len(result) if result else 0
+                print(f"[OCTAVE] <<< transcribe_keys produced {n} notes", file=sys.stderr, flush=True)
+                return result
+            except Exception as exc:
+                import traceback as _tb
+                print(f"[OCTAVE] !!! transcribe_keys EXCEPTION: {exc}", file=sys.stderr, flush=True)
+                _tb.print_exc(file=sys.stderr)
+                sys.stderr.flush()
+                raise
 
         def analyze_audio(self, audio_path: Path, artist: str = '', title: str = ''):
             if not FAST_AUDIO_ANALYSIS:

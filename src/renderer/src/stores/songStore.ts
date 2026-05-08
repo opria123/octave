@@ -160,6 +160,18 @@ const createDefaultSong = (id: string, folderPath: string): SongData => ({
   sourceFormat: 'midi'
 })
 
+const ALL_INSTRUMENTS: Instrument[] = ['drums', 'guitar', 'bass', 'vocals', 'keys', 'proKeys', 'proGuitar', 'proBass']
+
+// Derive which instruments should be visible: only ones the song actually has notes for.
+// Falls back to all instruments when the song is empty (e.g. brand-new untitled song).
+const deriveVisibleInstruments = (song: SongData): Set<Instrument> => {
+  const charted = new Set<Instrument>()
+  for (const note of song.notes) charted.add(note.instrument)
+  if (song.vocalNotes.length > 0) charted.add('vocals')
+  if (charted.size === 0) return new Set(ALL_INSTRUMENTS)
+  return charted
+}
+
 // Create default editor state
 const createDefaultEditorState = (song: SongData): SongEditorState => ({
   song,
@@ -173,7 +185,7 @@ const createDefaultEditorState = (song: SongData): SongEditorState => ({
   zoomLevel: 1.0,
   isPlaying: false,
   isDirty: false,
-  visibleInstruments: new Set(['drums', 'guitar', 'bass', 'vocals', 'keys', 'proKeys', 'proGuitar', 'proBass'] as Instrument[]),
+  visibleInstruments: deriveVisibleInstruments(song),
   activeDifficulty: 'expert',
   snapDivision: 4
 })
