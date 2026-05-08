@@ -92,6 +92,7 @@ interface ChartEditorAPI {
     pythonPath: string
     pythonBuildTag: string
     pythonVersion: string
+    isUpgrade: boolean
   }>
   bootstrapRuntime: () => Promise<{ ok: boolean; skipped?: boolean; message?: string }>
 

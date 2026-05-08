@@ -8,6 +8,7 @@ type RuntimeStatus = {
   pythonPath: string
   pythonBuildTag: string
   pythonVersion: string
+  isUpgrade: boolean
 }
 
 type ProgressState = {
@@ -108,17 +109,29 @@ export function SetupModal(): React.JSX.Element | null {
   if (status.ready) return null
   if (dismissed && !installing) return null
 
+  const isUpgrade = status.isUpgrade
   const percent = Math.max(0, Math.min(100, Math.round(progress?.percent ?? 0)))
 
   return (
     <div className="setup-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="setup-modal-title">
       <div className="setup-modal">
-        <h2 id="setup-modal-title">Set up AI features</h2>
+        <h2 id="setup-modal-title">{isUpgrade ? 'Update AI runtime' : 'Set up AI features'}</h2>
         <p className="setup-modal-body">
-          OCTAVE uses a self-contained Python runtime to power Auto-Chart, stem
-          separation, and lyric transcription. This is a one-time download
-          (~1.5 GB) installed in your user data folder. Updates to OCTAVE will
-          not need to re-download it.
+          {isUpgrade ? (
+            <>
+              OCTAVE was updated and the bundled AI runtime needs to be refreshed
+              to match (new dependency versions, GPU support, or a Python upgrade).
+              Your existing runtime will be replaced. This may take several minutes
+              on first launch; future updates only re-run when something changes.
+            </>
+          ) : (
+            <>
+              OCTAVE uses a self-contained Python runtime to power Auto-Chart, stem
+              separation, and lyric transcription. This is a one-time download
+              (~1.5 GB) installed in your user data folder. Updates to OCTAVE will
+              not need to re-download it.
+            </>
+          )}
         </p>
 
         {installing ? (
@@ -137,7 +150,7 @@ export function SetupModal(): React.JSX.Element | null {
               Not now
             </button>
             <button type="button" className="setup-modal-primary" onClick={handleInstall}>
-              Set up now
+              {isUpgrade ? 'Update now' : 'Set up now'}
             </button>
           </div>
         )}

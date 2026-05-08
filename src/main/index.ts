@@ -636,7 +636,8 @@ ipcMain.handle('runtime:status', async () => {
       installing: false,
       pythonPath: '',
       pythonBuildTag: '',
-      pythonVersion: ''
+      pythonVersion: '',
+      isUpgrade: false
     }
   }
   const status = getRuntimeStatus(getStrumRequirementsPath())

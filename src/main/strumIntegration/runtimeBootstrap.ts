@@ -542,6 +542,12 @@ export type RuntimeStatus = {
   pythonBuildTag: string
   /** Python version this build targets. */
   pythonVersion: string
+  /**
+   * True when a previously-installed runtime exists but no longer matches the
+   * current python version / requirements hash / detected accelerator, so the
+   * next bootstrap will replace it instead of being a clean first install.
+   */
+  isUpgrade: boolean
 }
 
 /**
@@ -555,7 +561,8 @@ export function getRuntimeStatus(requirementsPath: string): RuntimeStatus {
     ready: false,
     installing: bootstrapInflight !== null,
     pythonBuildTag: PYTHON_BUILD_STANDALONE_TAG,
-    pythonVersion: PYTHON_VERSION
+    pythonVersion: PYTHON_VERSION,
+    isUpgrade: false
   }
   if (!existsSync(pythonPath)) return status
   if (!existsSync(requirementsPath)) return status
@@ -569,5 +576,8 @@ export function getRuntimeStatus(requirementsPath: string): RuntimeStatus {
     && state.pythonVersion === PYTHON_VERSION
     && (state.accelerator ?? 'cpu') === accelerator
   )
+  // A state file exists but doesn't match → next bootstrap will wipe and
+  // replace the runtime rather than installing fresh.
+  status.isUpgrade = !status.ready
   return status
 }

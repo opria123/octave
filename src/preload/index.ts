@@ -191,6 +191,7 @@ const api = {
     pythonPath: string
     pythonBuildTag: string
     pythonVersion: string
+    isUpgrade: boolean
   }> => ipcRenderer.invoke('runtime:status'),
 
   bootstrapRuntime: (): Promise<{ ok: boolean; skipped?: boolean; message?: string }> =>
