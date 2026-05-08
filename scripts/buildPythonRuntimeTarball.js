@@ -185,7 +185,12 @@ async function main() {
 
   // 6. tarball
   log(`Tarballing -> ${assetName}`)
-  execFileSync('tar', ['-czf', assetPath, '-C', OUT_DIR, 'python-runtime'], { stdio: 'inherit' })
+  // Run from OUT_DIR with a relative archive name so no arg contains a
+  // drive-letter colon (GNU tar on Windows would treat it as host:path).
+  execFileSync('tar', ['-czf', assetName, 'python-runtime'], {
+    stdio: 'inherit',
+    cwd: OUT_DIR
+  })
 
   log(`DONE: ${assetPath}`)
   // Surface to GitHub Actions via $GITHUB_OUTPUT.
