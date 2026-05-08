@@ -705,8 +705,9 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
                 shutil.rmtree(demucs_out, ignore_errors=True)
             demucs_out.mkdir(parents=True, exist_ok=True)
 
-            # demucs.cpp.main signature: <model.bin> <input.wav> <output_dir>
-            cmd = [cpp_bin, cpp_weights, str(audio_path), str(demucs_out)]
+            # demucs_mt.cpp.main signature: <model.bin> <input.wav> <output_dir> <num_threads>
+            num_threads = max(1, (os.cpu_count() or 4) - 1)
+            cmd = [cpp_bin, cpp_weights, str(audio_path), str(demucs_out), str(num_threads)]
 
             started_at = time.time()
             try:
