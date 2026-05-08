@@ -9,6 +9,7 @@ import { autoUpdater, type UpdateDownloadedEvent } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
 import ffmpeg from 'fluent-ffmpeg'
 import { cancelAutoChart, getStrumRequirementsPath, killAllRunningJobs, openStrumLogsFolder, runAutoChart } from './strumIntegration/runner'
+import { ensureBootstrappedPython, getRuntimeStatus, isBootstrapTarget } from './strumIntegration/runtimeBootstrap'
 
 // Point fluent-ffmpeg at the bundled static binary
 try {
@@ -623,6 +624,43 @@ ipcMain.handle('strum:start', async (_event, options: {
 
 ipcMain.handle('strum:cancel', async (_event, runId: string) => {
   return await cancelAutoChart(runId)
+})
+
+ipcMain.handle('runtime:status', async () => {
+  if (!isBootstrapTarget()) {
+    // In dev we use the system / configured Python — runtime is always "ready"
+    // from the renderer's POV.
+    return {
+      managed: false,
+      ready: true,
+      installing: false,
+      pythonPath: '',
+      pythonBuildTag: '',
+      pythonVersion: ''
+    }
+  }
+  const status = getRuntimeStatus(getStrumRequirementsPath())
+  return { managed: true, ...status }
+})
+
+ipcMain.handle('runtime:bootstrap', async () => {
+  if (!isBootstrapTarget()) {
+    return { ok: true, skipped: true }
+  }
+  try {
+    await ensureBootstrappedPython(getStrumRequirementsPath(), 'runtime-setup')
+    return { ok: true, skipped: false }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('strum:error', {
+        runId: 'runtime-setup',
+        message,
+        requirementsPath: getStrumRequirementsPath()
+      })
+    }
+    return { ok: false, message }
+  }
 })
 
 ipcMain.handle('strum:openLogs', async () => {

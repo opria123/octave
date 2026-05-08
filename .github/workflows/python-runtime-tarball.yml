@@ -1,0 +1,72 @@
+name: Build Python runtime tarballs
+
+# Builds pre-provisioned Python runtimes (python-build-standalone + pip-installed
+# AI deps) and uploads them to the persistent `runtime-cache` GitHub release so
+# packaged OCTAVE clients can skip the multi-minute first-launch pip install.
+#
+# Asset name: python-runtime-<platform>-<arch>-<requirementsShortHash>.tar.gz
+# - <platform>: process.platform from Node (win32 / darwin / linux)
+# - <arch>: process.arch (x64 / arm64)
+# - <requirementsShortHash>: first 12 chars of sha256(resources/strum/requirements.txt)
+#
+# Each requirements.txt change creates new assets without invalidating older
+# app builds; old assets stay attached to the same release indefinitely.
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'resources/strum/requirements.txt'
+      - 'scripts/buildPythonRuntimeTarball.js'
+      - '.github/workflows/python-runtime-tarball.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: win32-x64
+          - os: macos-13
+            label: darwin-x64
+          - os: macos-14
+            label: darwin-arm64
+          - os: ubuntu-latest
+            label: linux-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build runtime tarball
+        id: build
+        shell: bash
+        run: node scripts/buildPythonRuntimeTarball.js
+
+      - name: Ensure runtime-cache release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          if ! gh release view runtime-cache >/dev/null 2>&1; then
+            gh release create runtime-cache \
+              --title "Python runtime cache" \
+              --notes "Pre-built Python runtime tarballs for OCTAVE first-launch setup. Assets are appended automatically by .github/workflows/python-runtime-tarball.yml whenever resources/strum/requirements.txt changes." \
+              --latest=false
+          fi
+
+      - name: Upload tarball asset (clobber existing for same hash)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release upload runtime-cache "${{ steps.build.outputs.asset_path }}" --clobber

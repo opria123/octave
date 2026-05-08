@@ -1,6 +1,7 @@
 import { useEffect, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { Layout } from './components'
+import { SetupModal } from './components/SetupModal'
 import { AutosaveProvider, useKeyboardShortcuts } from './hooks'
 import { init as initAudio } from './services/audioService'
 
@@ -62,7 +63,12 @@ function AppContent(): React.JSX.Element {
     }
   }, [])
 
-  return <Layout />
+  return (
+    <>
+      <Layout />
+      <SetupModal />
+    </>
+  )
 }
 
 function App(): React.JSX.Element {

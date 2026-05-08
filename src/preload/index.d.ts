@@ -83,6 +83,17 @@ interface ChartEditorAPI {
     requirementsPath?: string
   }) => void) => () => void
 
+  // Bootstrapped Python runtime (managed in userData on packaged builds)
+  getRuntimeStatus: () => Promise<{
+    managed: boolean
+    ready: boolean
+    installing: boolean
+    pythonPath: string
+    pythonBuildTag: string
+    pythonVersion: string
+  }>
+  bootstrapRuntime: () => Promise<{ ok: boolean; skipped?: boolean; message?: string }>
+
   // App updater events
   onUpdaterStatus: (callback: (status: {
     state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error'

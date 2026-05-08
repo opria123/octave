@@ -68,26 +68,8 @@ jobs:
           git tag ${{ steps.bump.outputs.tag }}
           git push origin master --tags
 
-  ensure-python-runtime:
-    needs: tag
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.tag.outputs.tag }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Wait for matching python-runtime release (build & wait if missing)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/waitForPythonRuntime.js
-
   build:
-    needs: [tag, ensure-python-runtime]
+    needs: tag
     strategy:
       matrix:
         include:
@@ -109,40 +91,16 @@ jobs:
           node-version: 20
           cache: npm
 
-      - if: matrix.platform != 'linux'
-        uses: actions/setup-python@v5
-        id: setup-python
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: resources/strum/requirements.txt
-
-      - if: matrix.platform != 'linux'
-        name: Cache bundled Python runtime
-        uses: actions/cache@v4
-        with:
-          path: resources/python
-          key: bundled-python-${{ matrix.platform }}-py3.12-${{ hashFiles('resources/strum/requirements.txt', 'scripts/prepareBundledPython.js') }}
-          restore-keys: |
-            bundled-python-${{ matrix.platform }}-py3.12-
-
       - name: Install dependencies
         run: npm ci
 
       - name: Build app
         run: npm run build
 
-      - if: matrix.platform != 'linux'
-        name: Download pre-built Python runtime (if available)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/downloadBundledPython.js
-
       - name: Package (${{ matrix.platform }})
         run: npx electron-builder --${{ matrix.platform }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OCTAVE_BUNDLED_PYTHON: ${{ steps.setup-python.outputs.python-path }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -154,6 +112,7 @@ jobs:
             dist/*.AppImage
             dist/*.deb
             dist/*.zip
+            dist/*.blockmap
             dist/latest*.yml
           if-no-files-found: warn
 
@@ -191,9 +150,11 @@ jobs:
             echo "$COMMITS"
             echo ""
             echo "### Downloads"
-            echo "- **Windows**: \`.exe\` installer"
+            echo "- **Windows**: \`.exe\` installer (with \`.blockmap\` for differential updates)"
             echo "- **macOS**: \`.dmg\` disk image"
-            echo "- **Linux**: \`.AppImage\` (Python is bootstrapped on first launch — requires \`python3.11\` or \`python3.12\` on PATH and ~3 GB free in your home directory)"
+            echo "- **Linux**: \`.AppImage\`"
+            echo ""
+            echo "On first launch OCTAVE downloads a self-contained Python runtime (~1.5 GB) into your user-data folder. The runtime survives app updates and is shared across versions."
             echo ""
             echo "---"
             echo "*Built automatically from \`master\`*"

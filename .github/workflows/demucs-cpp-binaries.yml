@@ -1,0 +1,208 @@
+name: Build demucs.cpp binaries
+
+# Build sevagh/demucs.cpp's multi-threaded CLI for each platform we ship and
+# upload it to a persistent `demucs-cpp-cache` GitHub release. The chart-editor
+# downloads from this release on first stem-separation job
+# (src/main/strumIntegration/demucsCppBootstrap.ts).
+#
+# Bump DEMUCS_CPP_BIN_VERSION in demucsCppBootstrap.ts and BIN_VERSION below
+# in lockstep when changing the upstream commit, build flags, or output layout.
+#
+# NOTE: This workflow is currently UNVALIDATED on Windows + macOS. Linux
+# follows the upstream README verbatim. Trigger manually via workflow_dispatch
+# to test before relying on it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: 'sevagh/demucs.cpp git ref (branch, tag, or sha)'
+        required: false
+        default: 'main'
+  push:
+    branches: [master, main]
+    paths:
+      - '.github/workflows/demucs-cpp-binaries.yml'
+      - 'src/main/strumIntegration/demucsCppBootstrap.ts'
+
+env:
+  BIN_VERSION: '1'
+  UPSTREAM_REPO: 'sevagh/demucs.cpp'
+  UPSTREAM_REF: ${{ github.event.inputs.upstream_ref || 'main' }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  platform: linux,   arch: x64,   exe: demucs_mt.cpp.main }
+          - { os: macos-13,       platform: darwin,  arch: x64,   exe: demucs_mt.cpp.main }
+          - { os: macos-14,       platform: darwin,  arch: arm64, exe: demucs_mt.cpp.main }
+          - { os: windows-latest, platform: win32,   arch: x64,   exe: demucs_mt.cpp.main.exe }
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout chart-editor
+        uses: actions/checkout@v4
+
+      - name: Clone demucs.cpp
+        shell: bash
+        run: |
+          git clone --recurse-submodules https://github.com/${UPSTREAM_REPO} demucs-cpp-src
+          cd demucs-cpp-src
+          git checkout "${UPSTREAM_REF}"
+          git submodule update --init --recursive
+          git rev-parse HEAD > ../UPSTREAM_SHA
+
+      - name: Install OpenBLAS (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenblas0-openmp libopenblas-openmp-dev cmake clang-tools
+
+      - name: Install OpenBLAS (macOS)
+        if: matrix.platform == 'darwin'
+        run: |
+          brew install openblas libomp
+          echo "OPENBLAS_PATH=$(brew --prefix openblas)" >> "$GITHUB_ENV"
+          echo "LIBOMP_PATH=$(brew --prefix libomp)" >> "$GITHUB_ENV"
+
+      - name: Install OpenBLAS (Windows / vcpkg)
+        if: matrix.platform == 'win32'
+        shell: pwsh
+        run: |
+          # vcpkg is preinstalled on windows-latest runners under VCPKG_INSTALLATION_ROOT.
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install openblas:x64-windows
+          "VCPKG_TOOLCHAIN=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" | Out-File -Append $env:GITHUB_ENV
+
+      - name: Configure (Linux)
+        if: matrix.platform == 'linux'
+        working-directory: demucs-cpp-src
+        run: |
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release ..
+
+      - name: Configure (macOS)
+        if: matrix.platform == 'darwin'
+        working-directory: demucs-cpp-src
+        env:
+          OpenBLAS_HOME: ${{ env.OPENBLAS_PATH }}
+        run: |
+          mkdir -p build
+          cd build
+          cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${OPENBLAS_PATH};${LIBOMP_PATH}" \
+            -DOpenMP_CXX_FLAGS="-Xpreprocessor -fopenmp -I${LIBOMP_PATH}/include" \
+            -DOpenMP_CXX_LIB_NAMES="omp" \
+            -DOpenMP_omp_LIBRARY="${LIBOMP_PATH}/lib/libomp.dylib" \
+            ..
+
+      - name: Configure (Windows)
+        if: matrix.platform == 'win32'
+        working-directory: demucs-cpp-src
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_TOOLCHAIN" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            ..
+
+      - name: Build
+        working-directory: demucs-cpp-src
+        shell: bash
+        run: |
+          cmake --build build --config Release --target demucs_mt.cpp.main --parallel
+
+      - name: Locate binary
+        id: locate
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            CANDIDATES=(
+              "demucs-cpp-src/build/Release/${{ matrix.exe }}"
+              "demucs-cpp-src/build/${{ matrix.exe }}"
+            )
+          else
+            CANDIDATES=(
+              "demucs-cpp-src/build/${{ matrix.exe }}"
+              "demucs-cpp-src/build/cli-apps/${{ matrix.exe }}"
+            )
+          fi
+          for c in "${CANDIDATES[@]}"; do
+            if [ -f "$c" ]; then
+              echo "found=$c" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "Could not locate built binary. Searched:" >&2
+          printf '  %s\n' "${CANDIDATES[@]}" >&2
+          echo "Build dir contents:" >&2
+          find demucs-cpp-src/build -maxdepth 3 -type f >&2 || true
+          exit 1
+
+      - name: Stage tarball contents
+        shell: bash
+        run: |
+          mkdir -p staged
+          cp "${{ steps.locate.outputs.found }}" "staged/${{ matrix.exe }}"
+          # Bundle any required runtime libraries next to the exe so users
+          # don't need them on PATH.
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            BIN_DIR="$VCPKG_INSTALLATION_ROOT/installed/x64-windows/bin"
+            for dll in openblas.dll libomp140.x86_64.dll libgcc_s_seh-1.dll libgfortran-5.dll libquadmath-0.dll libwinpthread-1.dll; do
+              if [ -f "$BIN_DIR/$dll" ]; then
+                cp "$BIN_DIR/$dll" staged/
+              fi
+            done
+          elif [ "${{ matrix.platform }}" = "darwin" ]; then
+            # Copy libomp + openblas dylibs and rewrite RPATH to look in the
+            # tarball's own directory.
+            for dylib_dir in "$LIBOMP_PATH/lib" "$OPENBLAS_PATH/lib"; do
+              cp "$dylib_dir"/libomp*.dylib staged/ 2>/dev/null || true
+              cp "$dylib_dir"/libopenblas*.dylib staged/ 2>/dev/null || true
+            done
+            install_name_tool -add_rpath "@executable_path" "staged/${{ matrix.exe }}" || true
+          fi
+
+      - name: Create tarball
+        shell: bash
+        run: |
+          ASSET="demucs-cpp-bin-${{ matrix.platform }}-${{ matrix.arch }}-v${BIN_VERSION}.tar.gz"
+          tar -czf "$ASSET" -C staged .
+          ls -lh "$ASSET"
+          echo "ASSET=$ASSET" >> "$GITHUB_ENV"
+
+      - name: Ensure release exists
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          if ! gh release view demucs-cpp-cache --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release create demucs-cpp-cache \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "demucs.cpp binary cache" \
+              --notes "Persistent cache of native demucs.cpp binaries downloaded by OCTAVE on first launch. Do not delete; users are pinned to specific versions via DEMUCS_CPP_BIN_VERSION." \
+              --prerelease=false
+          fi
+
+      - name: Upload to release
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release upload demucs-cpp-cache "${ASSET}" --repo "${GITHUB_REPOSITORY}" --clobber
+
+      - name: Upload artifact (always, for inspection)
+        uses: actions/upload-artifact@v4
+        with:
+          name: demucs-cpp-${{ matrix.platform }}-${{ matrix.arch }}
+          path: ${{ env.ASSET }}
+          if-no-files-found: error

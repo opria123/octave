@@ -42,9 +42,7 @@ DIRECT_AUDIO_URL_EXTENSIONS = AUDIO_EXTENSIONS | {".m4a"}
 REQUIRED_MODULES = {
     "torch": "torch",
     "torchaudio": "torchaudio",
-    "demucs": "demucs",
     "librosa": "librosa",
-    "whisper": "openai-whisper",
     "mido": "mido",
     "basic_pitch": "basic-pitch",
     "huggingface_hub": "huggingface_hub",
@@ -479,6 +477,124 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
     batch_pipeline_cls = getattr(batch_pipeline_module, "BatchPipeline")
     vocals_charter_cls = getattr(vocals_module, "VocalsCharter")
 
+    class OctaveVocalsCharter(vocals_charter_cls):
+        """VocalsCharter that prefers a native whisper.cpp binary when the
+        main process has provisioned one (OCTAVE_WHISPER_CPP_BIN +
+        OCTAVE_WHISPER_CPP_MODEL env vars). Falls back to the Python
+        `whisper` package otherwise.
+        """
+
+        def transcribe_lyrics(self, audio_path):
+            cpp_bin = os.environ.get("OCTAVE_WHISPER_CPP_BIN", "").strip()
+            cpp_model = os.environ.get("OCTAVE_WHISPER_CPP_MODEL", "").strip()
+            if cpp_bin and cpp_model and Path(cpp_bin).exists() and Path(cpp_model).exists():
+                return self._transcribe_lyrics_cpp(str(audio_path), cpp_bin, cpp_model)
+            return super().transcribe_lyrics(audio_path)
+
+        def _transcribe_lyrics_cpp(self, audio_path: str, cpp_bin: str, cpp_model: str):
+            """Drive whisper.cpp's `whisper-cli` and reshape its output into
+            the same `[{word, start, end}, ...]` contract VocalsCharter's
+            downstream alignment code expects.
+
+            Honours user constraints:
+              * model is whatever the bootstrap downloaded (large-v3-q5_0)
+              * --no-context disables condition_on_previous_text, the source
+                of cross-phrase lyric hallucination
+              * -ml 1 + token-level offsets give us word-level timings
+                without the experimental DTW path
+            """
+            logger = logging.getLogger(__name__)
+            logger.info(f"Transcribing lyrics via whisper.cpp ({Path(cpp_bin).name})...")
+
+            # whisper.cpp's bundled audio loader is finicky (no ffmpeg in
+            # our packaged Python env) so resample to 16 kHz mono PCM
+            # ourselves and hand it a plain WAV.
+            import tempfile
+            import json
+            import librosa
+            import soundfile as sf
+
+            with tempfile.TemporaryDirectory(prefix="octave_whisper_") as tmpdir:
+                tmp = Path(tmpdir)
+                wav_path = tmp / "input.wav"
+                audio, _ = librosa.load(audio_path, sr=16000, mono=True)
+                sf.write(str(wav_path), audio, 16000, subtype="PCM_16")
+
+                out_prefix = tmp / "out"
+                cmd = [
+                    cpp_bin,
+                    "-m", cpp_model,
+                    "-f", str(wav_path),
+                    "-l", "en",
+                    "-ojf",                       # output-json-full (token-level)
+                    "-of", str(out_prefix),
+                    "--no-context",               # condition_on_previous_text=False
+                    "-ml", "1",                   # max-segment-len 1 → word-level segments
+                    "-t", str(max(1, (os.cpu_count() or 4) - 1)),
+                ]
+
+                try:
+                    result = subprocess.run(cmd, capture_output=True, timeout=AUDIO_SEPARATION_TIMEOUT_SEC)
+                except subprocess.TimeoutExpired as exc:
+                    raise RuntimeError(
+                        f"whisper.cpp timed out after {AUDIO_SEPARATION_TIMEOUT_SEC}s."
+                    ) from exc
+                if result.returncode != 0:
+                    stderr = (result.stderr or b"").decode("utf-8", errors="replace")[-2000:]
+                    raise RuntimeError(
+                        f"whisper.cpp failed (rc={result.returncode}): {stderr}"
+                    )
+
+                json_path = Path(str(out_prefix) + ".json")
+                if not json_path.exists():
+                    raise RuntimeError(f"whisper.cpp produced no JSON output at {json_path}")
+                payload = json.loads(json_path.read_text(encoding="utf-8"))
+
+            # whisper.cpp -ojf JSON shape (current upstream):
+            #   { "transcription": [
+            #       { "offsets": {"from": ms, "to": ms},
+            #         "text": " word",
+            #         "tokens": [
+            #           { "text": " word", "offsets": {"from": ms, "to": ms}, ... },
+            #           ...
+            #         ]
+            #       }, ... ]
+            #   }
+            # We iterate tokens (per user constraint) and skip whisper's
+            # special tokens (those whose text starts with "[" — e.g.
+            # [_BEG_], [_TT_123]).
+            words = []
+            for entry in payload.get("transcription", []):
+                for tok in entry.get("tokens", []):
+                    text = (tok.get("text") or "").strip()
+                    if not text or text.startswith("["):
+                        continue
+                    offsets = tok.get("offsets") or {}
+                    start_ms = offsets.get("from")
+                    end_ms = offsets.get("to")
+                    if start_ms is None or end_ms is None:
+                        # Some token entries omit offsets; fall back to the
+                        # parent transcription entry's offsets.
+                        parent = entry.get("offsets") or {}
+                        start_ms = parent.get("from", 0)
+                        end_ms = parent.get("to", start_ms + 10)
+                    start = max(0.0, start_ms / 1000.0 + self.timing_offset)
+                    end = max(start + 0.01, end_ms / 1000.0 + self.timing_offset)
+                    words.append({"word": text, "start": start, "end": end})
+
+            logger.info(
+                f"whisper.cpp transcribed {len(words)} words "
+                f"(timing offset: {self.timing_offset:+.3f}s)"
+            )
+
+            # Re-use the parent class's harmony-duplicate filter so the
+            # downstream alignment behaves identically to the Python path.
+            try:
+                words = self._filter_harmony_duplicates(words)
+            except AttributeError:
+                pass
+            return words
+
     class OctaveBatchPipeline(batch_pipeline_cls):
         def parse_filename(self, path: Path):
             """Prefer Artist-Title parsing for downloaded media and strip YouTube ID suffixes."""
@@ -505,19 +621,31 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
         def vocals_charter(self):
             if self._vocals_charter is None and self.include_vocals:
                 logging.getLogger(__name__).info("Loading vocals charter (Whisper)...")
-                # Use VocalsCharter's default whisper model to match the STRUM
-                # benchmark transcription quality. Override with
-                # OCTAVE_WHISPER_MODEL if a smaller model is needed for speed.
+                # OctaveVocalsCharter prefers the native whisper.cpp binary
+                # provisioned by the main process; falls back to the Python
+                # `whisper` package if the env vars aren't set.
                 whisper_kwargs = {}
                 whisper_override = os.environ.get("OCTAVE_WHISPER_MODEL", "").strip()
                 if whisper_override:
                     whisper_kwargs["whisper_model"] = whisper_override
-                self._vocals_charter = vocals_charter_cls(device=device, **whisper_kwargs)
+                self._vocals_charter = OctaveVocalsCharter(device=device, **whisper_kwargs)
             return self._vocals_charter
 
         def separate_stems(self, audio_path: Path, work_dir: Path):
             logger = logging.getLogger(__name__)
-            logger.info(f"  Separating stems with Demucs on device={device}...")
+
+            # Native demucs.cpp path (preferred): the main process provisions
+            # a binary + ggml weights into userData and exports the paths via
+            # env vars. ~10× smaller install footprint than the Python demucs
+            # package and ~2× faster on CPU. Falls back to `python -m demucs`
+            # below if env vars are not set (dev environments without the
+            # binary, or platforms where CI hasn't published one yet).
+            cpp_bin = os.environ.get("OCTAVE_DEMUCS_CPP_BIN", "").strip()
+            cpp_weights = os.environ.get("OCTAVE_DEMUCS_CPP_WEIGHTS", "").strip()
+            if cpp_bin and cpp_weights and Path(cpp_bin).exists() and Path(cpp_weights).exists():
+                return self._separate_stems_cpp(audio_path, work_dir, cpp_bin, cpp_weights)
+
+            logger.info(f"  Separating stems with Demucs (Python) on device={device}...")
 
             demucs_out = work_dir / "demucs_temp"
             demucs_out.mkdir(parents=True, exist_ok=True)
@@ -555,6 +683,69 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
                 stem_path = stem_dir / f"{stem}.wav"
                 if stem_path.exists():
                     stems[stem] = stem_path
+
+            logger.info(f"    Separated stems: {list(stems.keys())}")
+            return stems
+
+        def _separate_stems_cpp(
+            self,
+            audio_path: Path,
+            work_dir: Path,
+            cpp_bin: str,
+            cpp_weights: str,
+        ):
+            """Run demucs.cpp's multi-threaded CLI with the htdemucs_6s ggml
+            weights and remap target_N_*.wav outputs to STRUM's stem names.
+            """
+            logger = logging.getLogger(__name__)
+            logger.info(f"  Separating stems with demucs.cpp ({Path(cpp_bin).name})...")
+
+            demucs_out = work_dir / "demucs_cpp_temp"
+            if demucs_out.exists():
+                shutil.rmtree(demucs_out, ignore_errors=True)
+            demucs_out.mkdir(parents=True, exist_ok=True)
+
+            # demucs.cpp.main signature: <model.bin> <input.wav> <output_dir>
+            cmd = [cpp_bin, cpp_weights, str(audio_path), str(demucs_out)]
+
+            started_at = time.time()
+            try:
+                result = subprocess.run(cmd, timeout=AUDIO_SEPARATION_TIMEOUT_SEC)
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(
+                    f"demucs.cpp separation timed out after {AUDIO_SEPARATION_TIMEOUT_SEC}s."
+                ) from exc
+
+            elapsed = int(time.time() - started_at)
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"demucs.cpp failed with return code {result.returncode} after {elapsed}s"
+                )
+
+            logger.info(f"    demucs.cpp separation complete in {elapsed}s")
+
+            # Per upstream README, the 6s output target indices are:
+            #   0=drums, 1=bass, 2=other, 3=vocals, 4=guitar, 5=piano
+            stem_order = ["drums", "bass", "other", "vocals", "guitar", "piano"]
+            stems: dict[str, Path] = {}
+            for idx, name in enumerate(stem_order):
+                src = demucs_out / f"target_{idx}_{name}.wav"
+                if not src.exists():
+                    continue
+                # Rename to the same layout the Python-demucs path produces so
+                # downstream stages are agnostic to the backend.
+                dest = demucs_out / f"{name}.wav"
+                src.rename(dest)
+                stems[name] = dest
+
+            if not stems:
+                # Surface diagnostic info so a missing tarball / wrong weights
+                # is obvious in logs.
+                produced = sorted(p.name for p in demucs_out.iterdir())
+                raise RuntimeError(
+                    "demucs.cpp produced no recognisable stems. "
+                    f"Output dir contained: {produced}"
+                )
 
             logger.info(f"    Separated stems: {list(stems.keys())}")
             return stems

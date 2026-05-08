@@ -10,14 +10,14 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
-  - resources/**
+  - resources/strum/**
   # ffmpeg-static ships a binary that must be executable on disk; asar-packed
   # binaries cannot be exec'd directly, so unpack it. STRUM's Whisper /
   # demucs / yt-dlp shell out to this ffmpeg via PATH.
   - node_modules/ffmpeg-static/**
 extraResources:
-  - from: resources/
-    to: resources/
+  - from: resources/strum
+    to: resources/strum
 win:
   executableName: octave
 nsis:
@@ -25,6 +25,11 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  # Differential updates: electron-updater downloads only the changed blocks
+  # of the installer instead of the full ~150 MB binary on every patch
+  # release. Now safe to enable since we no longer bundle Python (the runtime
+  # lives in userData, outside the installer), so installer churn is small.
+  differentialPackage: true
   # Custom NSIS hooks force-kill any leftover OCTAVE.exe / bundled python.exe
   # instances before install so auto-update doesn't fail with
   # "OCTAVE cannot be closed".
@@ -51,7 +56,6 @@ linux:
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-beforePack: scripts/beforePack.js
 afterPack: scripts/afterPack.js
 publish:
   provider: github

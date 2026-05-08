@@ -1,0 +1,164 @@
+name: Build whisper.cpp binaries
+
+# Build ggerganov/whisper.cpp's `whisper-cli` for each platform we ship and
+# upload it to a persistent `whisper-cpp-cache` GitHub release. The
+# chart-editor downloads from this release on first vocals-charting job
+# (src/main/strumIntegration/whisperCppBootstrap.ts).
+#
+# Bump WHISPER_CPP_BIN_VERSION in whisperCppBootstrap.ts and BIN_VERSION below
+# in lockstep when changing the upstream commit, build flags, or output layout.
+#
+# CPU-only builds (no Metal/CUDA/BLAS) — whisper.cpp on CPU with a quantised
+# large-v3 q5_0 model is fast enough for our use case and keeps the build
+# matrix simple and the binaries small (~5 MB each, no runtime DLL deps).
+#
+# NOTE: Currently UNVALIDATED on Windows + macOS. Linux follows the upstream
+# README verbatim. Trigger manually via workflow_dispatch to test.
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: 'ggerganov/whisper.cpp git ref (branch, tag, or sha)'
+        required: false
+        default: 'master'
+  push:
+    branches: [master, main]
+    paths:
+      - '.github/workflows/whisper-cpp-binaries.yml'
+      - 'src/main/strumIntegration/whisperCppBootstrap.ts'
+
+env:
+  BIN_VERSION: '1'
+  UPSTREAM_REPO: 'ggerganov/whisper.cpp'
+  UPSTREAM_REF: ${{ github.event.inputs.upstream_ref || 'master' }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  platform: linux,   arch: x64,   exe: whisper-cli }
+          - { os: macos-13,       platform: darwin,  arch: x64,   exe: whisper-cli }
+          - { os: macos-14,       platform: darwin,  arch: arm64, exe: whisper-cli }
+          - { os: windows-latest, platform: win32,   arch: x64,   exe: whisper-cli.exe }
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout chart-editor
+        uses: actions/checkout@v4
+
+      - name: Clone whisper.cpp
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "${UPSTREAM_REF}" "https://github.com/${UPSTREAM_REPO}.git" upstream
+          (cd upstream && git rev-parse HEAD)
+
+      - name: Configure (Linux)
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          cd upstream
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_BLAS=OFF \
+            -DGGML_CUDA=OFF \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=ON
+
+      - name: Configure (macOS)
+        if: matrix.platform == 'darwin'
+        shell: bash
+        run: |
+          cd upstream
+          # Disable Metal so the binary is self-contained (no .metallib
+          # sidecar to ship). CPU is plenty for q5_0 large-v3.
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_METAL=OFF \
+            -DGGML_BLAS=OFF \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=ON
+
+      - name: Configure (Windows)
+        if: matrix.platform == 'win32'
+        shell: bash
+        run: |
+          cd upstream
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_BLAS=OFF \
+            -DGGML_CUDA=OFF \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=ON
+
+      - name: Build whisper-cli
+        shell: bash
+        run: |
+          cd upstream
+          cmake --build build --config Release --target whisper-cli --parallel
+
+      - name: Stage binary
+        shell: bash
+        run: |
+          mkdir -p staged
+          if [[ "${{ matrix.platform }}" == "win32" ]]; then
+            # MSVC drops the binary in build/bin/Release; cli sources put it
+            # in build/Release. Try both.
+            for candidate in upstream/build/bin/Release/whisper-cli.exe upstream/build/Release/whisper-cli.exe upstream/build/bin/whisper-cli.exe; do
+              if [[ -f "$candidate" ]]; then
+                cp "$candidate" staged/whisper-cli.exe
+                break
+              fi
+            done
+          else
+            for candidate in upstream/build/bin/whisper-cli upstream/build/whisper-cli; do
+              if [[ -f "$candidate" ]]; then
+                cp "$candidate" staged/whisper-cli
+                break
+              fi
+            done
+          fi
+          ls -la staged
+          test -f "staged/${{ matrix.exe }}"
+
+      - name: Tar
+        shell: bash
+        run: |
+          cd staged
+          ASSET="whisper-cpp-bin-${{ matrix.platform }}-${{ matrix.arch }}-v${BIN_VERSION}.tar.gz"
+          tar -czf "../${ASSET}" .
+          cd ..
+          ls -la "${ASSET}"
+          echo "ASSET=${ASSET}" >> "${GITHUB_ENV}"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ASSET }}
+          path: ${{ env.ASSET }}
+          if-no-files-found: error
+
+      - name: Ensure whisper-cpp-cache release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          if ! gh release view whisper-cpp-cache >/dev/null 2>&1; then
+            gh release create whisper-cpp-cache \
+              --title "whisper.cpp binary cache" \
+              --notes "Automatically populated by .github/workflows/whisper-cpp-binaries.yml. Do not delete." \
+              --prerelease
+          fi
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release upload whisper-cpp-cache "${ASSET}" --clobber

@@ -2,9 +2,11 @@ import { app, BrowserWindow, shell } from 'electron'
 import { execFile, spawn } from 'child_process'
 import { dirname, join } from 'path'
 import { mkdir, unlink, writeFile } from 'fs/promises'
-import { existsSync, readFileSync, mkdirSync, createWriteStream, type WriteStream } from 'fs'
+import { existsSync, mkdirSync, createWriteStream, type WriteStream } from 'fs'
 import { parseAutoChartProgressLine } from './progress'
-import { ensureLinuxBootstrappedPython, isLinuxBootstrapTarget } from './linuxBootstrap'
+import { ensureBootstrappedPython, isBootstrapTarget } from './runtimeBootstrap'
+import { ensureDemucsCpp } from './demucsCppBootstrap'
+import { ensureWhisperCpp } from './whisperCppBootstrap'
 import type { AutoChartProgressEvent, AutoChartRunOptions, AutoChartRunResult, AutoChartStage } from './types'
 
 const EVENT_PREFIX = '__OCTAVE_EVENT__'
@@ -192,71 +194,11 @@ export function getStrumRequirementsPath(): string {
   return join(getWorkerRoot(), 'requirements.txt')
 }
 
-function getBundledPythonRoot(): string {
-  return join(process.resourcesPath, 'resources', 'python')
-}
-
-function getBundledRuntimeHome(): string {
-  return join(getBundledPythonRoot(), `${process.platform}-${process.arch}`, 'python')
-}
-
-function getBundledPythonMetadata(): { executable: string; sitePackages: string } | null {
-  const metadataPath = join(getBundledPythonRoot(), `${process.platform}-${process.arch}`, 'metadata.json')
-  if (!existsSync(metadataPath)) {
-    return null
-  }
-
-  try {
-    return JSON.parse(readFileSync(metadataPath, 'utf-8')) as { executable: string; sitePackages: string }
-  } catch {
-    return null
-  }
-}
-
-function getBundledPythonCandidates(): PythonCommand[] {
-  const metadata = getBundledPythonMetadata()
-  if (metadata) {
-    return [
-      {
-        command: join(getBundledRuntimeHome(), metadata.executable),
-        baseArgs: []
-      }
-    ]
-  }
-
-  const key = `${process.platform}-${process.arch}`
-  const runtimeRoot = getBundledPythonRoot()
-  const candidatesByPlatform: Record<string, PythonCommand[]> = {
-    'win32-x64': [
-      { command: join(runtimeRoot, 'win32-x64', 'python', 'python.exe'), baseArgs: [] }
-    ],
-    'win32-arm64': [
-      { command: join(runtimeRoot, 'win32-arm64', 'python', 'python.exe'), baseArgs: [] }
-    ],
-    'darwin-x64': [
-      { command: join(runtimeRoot, 'darwin-x64', 'python', 'bin', 'python3'), baseArgs: [] }
-    ],
-    'darwin-arm64': [
-      { command: join(runtimeRoot, 'darwin-arm64', 'python', 'bin', 'python3'), baseArgs: [] }
-    ],
-    'linux-x64': [
-      { command: join(runtimeRoot, 'linux-x64', 'python', 'bin', 'python3'), baseArgs: [] }
-    ],
-    'linux-arm64': [
-      { command: join(runtimeRoot, 'linux-arm64', 'python', 'bin', 'python3'), baseArgs: [] }
-    ]
-  }
-
-  return candidatesByPlatform[key] ?? []
-}
-
 function getBundledPythonEnv(): NodeJS.ProcessEnv {
-  // On Linux the runtime is a venv created at first launch (see
-  // linuxBootstrap.ts), not a self-contained bundled prefix. The venv's
-  // own pyvenv.cfg already points the interpreter at the right site-packages,
-  // and forcing PYTHONHOME/PYTHONPATH from a bundle metadata.json would
-  // break it. Only return the bundled env when a metadata.json exists.
-  const metadata = getBundledPythonMetadata()
+  // The bootstrapped runtime under userData is a self-contained
+  // python-build-standalone install. Its sysconfig already points at the
+  // right site-packages, so we do NOT set PYTHONHOME / PYTHONPATH here
+  // (overriding them would break wheel discovery).
   const pathSeparator = process.platform === 'win32' ? ';' : ':'
   // Prepend bundled ffmpeg dir to PATH so Whisper / yt-dlp / demucs can find
   // ffmpeg without the user installing it system-wide.
@@ -266,24 +208,9 @@ function getBundledPythonEnv(): NodeJS.ProcessEnv {
     ? `${ffmpegDir}${pathSeparator}${existingPath}`
     : existingPath
 
-  if (!metadata) {
-    return {
-      ...process.env,
-      PATH: augmentedPath,
-      PYTHONUTF8: '1',
-      OCTAVE_PACKAGED: '1'
-    }
-  }
-
-  const runtimeHome = getBundledRuntimeHome()
-  const sitePackages = join(runtimeHome, metadata.sitePackages)
-  const pythonPath = process.env.PYTHONPATH
-
   return {
     ...process.env,
     PATH: augmentedPath,
-    PYTHONHOME: runtimeHome,
-    PYTHONPATH: pythonPath ? `${sitePackages}${pathSeparator}${pythonPath}` : sitePackages,
     PYTHONUTF8: '1',
     OCTAVE_PACKAGED: '1'
   }
@@ -298,27 +225,13 @@ async function commandExists(candidate: PythonCommand): Promise<boolean> {
 }
 
 async function findPythonCommand(runId?: string): Promise<PythonCommand> {
-  if (app.isPackaged) {
-    if (isLinuxBootstrapTarget()) {
-      const requirementsPath = getStrumRequirementsPath()
-      if (!existsSync(requirementsPath)) {
-        throw new Error(`STRUM requirements file not found at ${requirementsPath}`)
-      }
-      const venvPython = await ensureLinuxBootstrappedPython(requirementsPath, runId)
-      return { command: venvPython, baseArgs: [] }
+  if (isBootstrapTarget()) {
+    const requirementsPath = getStrumRequirementsPath()
+    if (!existsSync(requirementsPath)) {
+      throw new Error(`STRUM requirements file not found at ${requirementsPath}`)
     }
-
-    const bundledCandidates = getBundledPythonCandidates()
-    for (const candidate of bundledCandidates) {
-      if (existsSync(candidate.command) && await commandExists(candidate)) {
-        return candidate
-      }
-    }
-
-    throw new Error(
-      'A bundled Python runtime was not found for this packaged build. '
-      + `Expected it under ${getBundledPythonRoot()} for ${process.platform}-${process.arch}.`
-    )
+    const bootstrapped = await ensureBootstrappedPython(requirementsPath, runId)
+    return { command: bootstrapped, baseArgs: [] }
   }
 
   const configured = process.env.OCTAVE_STRUM_PYTHON?.trim()
@@ -471,11 +384,48 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
     percent: 0
   } satisfies AutoChartProgressEvent)
 
+  // Best-effort: provision demucs.cpp before spawning the worker so the
+  // separate_stems step uses the native binary instead of the Python
+  // `demucs` package. If the binary isn't available for this platform
+  // (e.g. CI hasn't published one yet), the worker falls back to
+  // `python -m demucs`.
+  let demucsCppEnv: { OCTAVE_DEMUCS_CPP_BIN: string; OCTAVE_DEMUCS_CPP_WEIGHTS: string } | null = null
+  try {
+    const { binaryPath, weightsPath } = await ensureDemucsCpp(runId)
+    demucsCppEnv = {
+      OCTAVE_DEMUCS_CPP_BIN: binaryPath,
+      OCTAVE_DEMUCS_CPP_WEIGHTS: weightsPath
+    }
+  } catch (err) {
+    console.warn(
+      `[Runner] demucs.cpp unavailable; falling back to Python demucs. ${err instanceof Error ? err.message : String(err)}`
+    )
+  }
+
+  // Same idea for whisper.cpp — replaces the openai-whisper Python
+  // package for vocals transcription. Only relevant when the user
+  // actually charts vocals; the bootstrap is cheap to skip if the model
+  // is already on disk.
+  let whisperCppEnv: { OCTAVE_WHISPER_CPP_BIN: string; OCTAVE_WHISPER_CPP_MODEL: string } | null = null
+  try {
+    const { binaryPath, modelPath } = await ensureWhisperCpp(runId)
+    whisperCppEnv = {
+      OCTAVE_WHISPER_CPP_BIN: binaryPath,
+      OCTAVE_WHISPER_CPP_MODEL: modelPath
+    }
+  } catch (err) {
+    console.warn(
+      `[Runner] whisper.cpp unavailable; falling back to Python whisper. ${err instanceof Error ? err.message : String(err)}`
+    )
+  }
+
   return await new Promise<AutoChartRunResult>((resolve, reject) => {
     const verboseDebug = isVerboseDebug()
     const devEnv: NodeJS.ProcessEnv = {
       ...process.env,
-      PYTHONUTF8: '1'
+      PYTHONUTF8: '1',
+      ...(demucsCppEnv ?? {}),
+      ...(whisperCppEnv ?? {})
     }
     const sourceOverride = getDevStrumSourceOverride()
     if (sourceOverride) {
@@ -498,7 +448,7 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
       {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: app.isPackaged
-          ? getBundledPythonEnv()
+          ? { ...getBundledPythonEnv(), ...(demucsCppEnv ?? {}), ...(whisperCppEnv ?? {}) }
           : devEnv
       }
     )

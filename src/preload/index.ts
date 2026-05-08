@@ -183,6 +183,18 @@ const api = {
     return () => ipcRenderer.removeListener('strum:error', handler)
   },
 
+  getRuntimeStatus: (): Promise<{
+    managed: boolean
+    ready: boolean
+    installing: boolean
+    pythonPath: string
+    pythonBuildTag: string
+    pythonVersion: string
+  }> => ipcRenderer.invoke('runtime:status'),
+
+  bootstrapRuntime: (): Promise<{ ok: boolean; skipped?: boolean; message?: string }> =>
+    ipcRenderer.invoke('runtime:bootstrap'),
+
   // App updater events
   onUpdaterStatus: (callback: (status: {
     state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error'

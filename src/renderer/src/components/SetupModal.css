@@ -1,0 +1,119 @@
+.setup-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+  backdrop-filter: blur(4px);
+}
+
+.setup-modal {
+  background: #1f1f23;
+  color: #f4f4f5;
+  border: 1px solid #2f2f35;
+  border-radius: 10px;
+  padding: 24px 28px;
+  width: min(520px, 92vw);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+  font-family: inherit;
+}
+
+.setup-modal h2 {
+  margin: 0 0 12px 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.setup-modal-body {
+  margin: 0 0 20px 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #c8c8cf;
+}
+
+.setup-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.setup-modal-primary,
+.setup-modal-secondary {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.setup-modal-primary {
+  background: #4f7cff;
+  color: #fff;
+}
+
+.setup-modal-primary:hover {
+  background: #5e89ff;
+}
+
+.setup-modal-secondary {
+  background: transparent;
+  color: #c8c8cf;
+  border: 1px solid #3a3a42;
+}
+
+.setup-modal-secondary:hover {
+  background: #2a2a30;
+  color: #fff;
+}
+
+.setup-modal-progress {
+  width: 100%;
+  height: 6px;
+  background: #2a2a30;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.setup-modal-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #4f7cff, #7d9cff);
+  transition: width 0.25s ease;
+}
+
+.setup-modal-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #b0b0b8;
+}
+
+.setup-modal-progress-stage {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 12px;
+}
+
+.setup-modal-progress-percent {
+  font-variant-numeric: tabular-nums;
+  color: #e6e6eb;
+}
+
+.setup-modal-error {
+  margin-top: 16px;
+  padding: 10px 12px;
+  background: #2a1417;
+  color: #ff9aa2;
+  border: 1px solid #5a2129;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow: auto;
+}
