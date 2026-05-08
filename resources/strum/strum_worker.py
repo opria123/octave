@@ -604,7 +604,7 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
                     "-l", "en",
                     "-ojf",                       # output-json-full (token-level)
                     "-of", str(out_prefix),
-                    "--no-context",               # condition_on_previous_text=False
+                    "-mc", "0",                   # max-context=0 → no prior-text conditioning (was --no-context in older builds)
                     "-ml", "1",                   # max-segment-len 1 → word-level segments
                     "-nfa",                       # disable flash-attn: incompatible with q5_0 on some cuBLAS builds (silent no-op exit)
                     "-t", str(max(1, (os.cpu_count() or 4) - 1)),
@@ -649,7 +649,14 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
                         listing = sorted(p.name for p in tmp.iterdir())
                     except Exception:
                         listing = []
-                    raise RuntimeError(f"whisper.cpp produced no JSON output at {json_path}; tmpdir contents={listing}")
+                    # whisper-cli exits 0 and dumps `usage:` to stderr when an
+                    # arg is unknown; surface the head of stderr so the caller
+                    # sees the actual `error: unknown argument: ...` line.
+                    err_excerpt = stderr_text[:1500] if stderr_text else "(no stderr captured)"
+                    raise RuntimeError(
+                        f"whisper.cpp produced no JSON output at {json_path}; "
+                        f"tmpdir contents={listing}; stderr head:\n{err_excerpt}"
+                    )
                 try:
                     payload = json.loads(json_path.read_text(encoding="utf-8"))
                 except Exception as exc:
