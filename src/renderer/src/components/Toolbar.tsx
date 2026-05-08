@@ -72,6 +72,7 @@ export function Toolbar(): React.JSX.Element {
   } | null>(null)
   const [isInstallingRuntime, setIsInstallingRuntime] = useState(false)
   const [runtimeSetupError, setRuntimeSetupError] = useState<string | null>(null)
+  const [runtimeSetupErrorCopied, setRuntimeSetupErrorCopied] = useState(false)
 
   const refreshRuntimeStatus = useCallback(async (): Promise<void> => {
     try {
@@ -86,6 +87,7 @@ export function Toolbar(): React.JSX.Element {
   const handleSetupRuntime = useCallback(async (): Promise<void> => {
     setIsInstallingRuntime(true)
     setRuntimeSetupError(null)
+    setRuntimeSetupErrorCopied(false)
     try {
       const result = await window.api.bootstrapRuntime()
       if (!result.ok) setRuntimeSetupError(result.message ?? 'Setup failed.')
@@ -96,6 +98,17 @@ export function Toolbar(): React.JSX.Element {
       await refreshRuntimeStatus()
     }
   }, [refreshRuntimeStatus])
+
+  const handleCopyRuntimeSetupError = useCallback(async (): Promise<void> => {
+    if (!runtimeSetupError) return
+    try {
+      await navigator.clipboard.writeText(runtimeSetupError)
+      setRuntimeSetupErrorCopied(true)
+      window.setTimeout(() => setRuntimeSetupErrorCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy runtime setup error:', err)
+    }
+  }, [runtimeSetupError])
 
   const getPreferredAutoChartOutputDir = useCallback((): string => {
     return autoChartOutputDir?.trim() || defaultAutoChartOutputDir
@@ -913,7 +926,19 @@ export function Toolbar(): React.JSX.Element {
                     </button>
                   </div>
                   {runtimeSetupError && (
-                    <pre className="auto-chart-error-text">{runtimeSetupError}</pre>
+                    <div className="auto-chart-error">
+                      <div className="auto-chart-error-header">
+                        <strong>Setup Error</strong>
+                        <button
+                          className="auto-chart-error-copy"
+                          onClick={() => void handleCopyRuntimeSetupError()}
+                          type="button"
+                        >
+                          {runtimeSetupErrorCopied ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <pre className="auto-chart-error-text">{runtimeSetupError}</pre>
+                    </div>
                   )}
                 </div>
               )}

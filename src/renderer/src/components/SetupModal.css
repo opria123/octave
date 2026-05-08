@@ -106,7 +106,7 @@
 }
 
 .setup-modal-error {
-  margin-top: 16px;
+  margin-top: 0;
   padding: 10px 12px;
   background: #2a1417;
   color: #ff9aa2;
@@ -114,6 +114,37 @@
   border-radius: 6px;
   font-size: 12px;
   white-space: pre-wrap;
-  max-height: 200px;
+  max-height: 240px;
   overflow: auto;
+  user-select: text;
+}
+
+.setup-modal-error-block {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setup-modal-error-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #ff9aa2;
+  font-size: 12px;
+}
+
+.setup-modal-error-copy {
+  background: #5a2129;
+  color: #ffd9dc;
+  border: 1px solid #7a2a35;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.setup-modal-error-copy:hover {
+  background: #7a2a35;
 }

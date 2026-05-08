@@ -31,6 +31,7 @@ export function SetupModal(): React.JSX.Element | null {
   const [status, setStatus] = useState<RuntimeStatus | null>(null)
   const [progress, setProgress] = useState<ProgressState | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [errorCopied, setErrorCopied] = useState(false)
   const [installing, setInstalling] = useState(false)
   const [dismissed, setDismissed] = useState(false)
   const startedRef = useRef(false)
@@ -91,6 +92,17 @@ export function SetupModal(): React.JSX.Element | null {
     setDismissed(true)
   }, [])
 
+  const handleCopyError = useCallback(async () => {
+    if (!error) return
+    try {
+      await navigator.clipboard.writeText(error)
+      setErrorCopied(true)
+      window.setTimeout(() => setErrorCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy setup error:', err)
+    }
+  }, [error])
+
   if (!status) return null
   if (!status.managed) return null
   if (status.ready) return null
@@ -131,7 +143,19 @@ export function SetupModal(): React.JSX.Element | null {
         )}
 
         {error ? (
-          <pre className="setup-modal-error">{error}</pre>
+          <div className="setup-modal-error-block">
+            <div className="setup-modal-error-header">
+              <strong>Setup failed</strong>
+              <button
+                type="button"
+                className="setup-modal-error-copy"
+                onClick={() => void handleCopyError()}
+              >
+                {errorCopied ? 'Copied' : 'Copy error'}
+              </button>
+            </div>
+            <pre className="setup-modal-error">{error}</pre>
+          </div>
         ) : null}
       </div>
     </div>
