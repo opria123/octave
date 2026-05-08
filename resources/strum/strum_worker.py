@@ -675,10 +675,28 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
             # We iterate tokens (per user constraint) and skip whisper's
             # special tokens (those whose text starts with "[" — e.g.
             # [_BEG_], [_TT_123]).
+            # Upstream STRUM's chart writer (mido MetaMessage('lyrics'))
+            # encodes lyric text as latin-1 and crashes on chars outside
+            # that range. Whisper happily emits ♪ (U+266A) for musical
+            # interludes plus smart quotes / em-dashes. Sanitize here so
+            # the chart-creation step downstream never sees them.
+            _SMART_MAP = {
+                "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'",
+                "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u201f": '"',
+                "\u2013": "-", "\u2014": "-", "\u2026": "...",
+                "\u266a": "", "\u266b": "", "\u266c": "", "\u2669": "",
+                "\xa0": " ",
+            }
+            def _sanitize_lyric(s: str) -> str:
+                for k, v in _SMART_MAP.items():
+                    if k in s:
+                        s = s.replace(k, v)
+                return s.encode("latin-1", errors="ignore").decode("latin-1")
+
             words = []
             for entry in payload.get("transcription", []):
                 for tok in entry.get("tokens", []):
-                    text = (tok.get("text") or "").strip()
+                    text = _sanitize_lyric((tok.get("text") or "").strip())
                     if not text or text.startswith("["):
                         continue
                     offsets = tok.get("offsets") or {}
