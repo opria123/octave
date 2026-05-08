@@ -352,6 +352,34 @@
   gap: 16px;
 }
 
+.auto-chart-runtime-warning {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(255, 196, 79, 0.08);
+  border: 1px solid rgba(255, 196, 79, 0.35);
+  color: #ffe2a8;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auto-chart-runtime-warning h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.auto-chart-runtime-warning p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #f3d8a3;
+}
+
+.auto-chart-runtime-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .auto-chart-inputs {
   gap: 12px;
 }

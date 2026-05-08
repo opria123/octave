@@ -64,6 +64,37 @@ export function Toolbar(): React.JSX.Element {
     error: null,
     warnings: []
   })
+  const [runtimeStatus, setRuntimeStatus] = useState<{
+    managed: boolean
+    ready: boolean
+    installing: boolean
+  } | null>(null)
+  const [isInstallingRuntime, setIsInstallingRuntime] = useState(false)
+  const [runtimeSetupError, setRuntimeSetupError] = useState<string | null>(null)
+
+  const refreshRuntimeStatus = useCallback(async (): Promise<void> => {
+    try {
+      const next = await window.api.getRuntimeStatus()
+      setRuntimeStatus({ managed: next.managed, ready: next.ready, installing: next.installing })
+      if (!next.installing) setIsInstallingRuntime(false)
+    } catch (err) {
+      console.error('runtime:status failed', err)
+    }
+  }, [])
+
+  const handleSetupRuntime = useCallback(async (): Promise<void> => {
+    setIsInstallingRuntime(true)
+    setRuntimeSetupError(null)
+    try {
+      const result = await window.api.bootstrapRuntime()
+      if (!result.ok) setRuntimeSetupError(result.message ?? 'Setup failed.')
+    } catch (err) {
+      setRuntimeSetupError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setIsInstallingRuntime(false)
+      await refreshRuntimeStatus()
+    }
+  }, [refreshRuntimeStatus])
 
   const getPreferredAutoChartOutputDir = useCallback((): string => {
     return autoChartOutputDir?.trim() || defaultAutoChartOutputDir
@@ -359,8 +390,10 @@ export function Toolbar(): React.JSX.Element {
       error: null
     }))
     setAutoChartUrls((prev) => (prev.length > 0 ? prev : [EMPTY_AUTO_CHART_URL]))
+    setRuntimeSetupError(null)
+    void refreshRuntimeStatus()
     setIsAutoChartModalOpen(true)
-  }, [getPreferredAutoChartOutputDir])
+  }, [getPreferredAutoChartOutputDir, refreshRuntimeStatus])
 
   const handleAddAutoChartUrl = useCallback((): void => {
     setAutoChartUrls((prev) => [...prev, EMPTY_AUTO_CHART_URL])
@@ -395,6 +428,14 @@ export function Toolbar(): React.JSX.Element {
   const handleStartAutoChart = useCallback(async (): Promise<void> => {
     const outputDir = autoChartProgress.outputDir.trim()
     const urls = autoChartUrls.map((entry) => entry.trim()).filter(Boolean)
+
+    if (runtimeStatus && runtimeStatus.managed && !runtimeStatus.ready) {
+      setAutoChartProgress((prev) => ({
+        ...prev,
+        error: 'Set up the Python runtime before starting Auto-Chart.'
+      }))
+      return
+    }
 
     if (!outputDir) {
       setAutoChartProgress((prev) => ({ ...prev, error: 'Choose an output folder before starting.' }))
@@ -433,7 +474,7 @@ export function Toolbar(): React.JSX.Element {
         error: error instanceof Error ? error.message : String(error)
       }))
     }
-  }, [autoChartFiles, autoChartFolders, autoChartProgress.outputDir, autoChartUrls, updateSettings])
+  }, [autoChartFiles, autoChartFolders, autoChartProgress.outputDir, autoChartUrls, runtimeStatus, updateSettings])
 
   const handleCancelAutoChart = useCallback(async (): Promise<void> => {
     if (!autoChartProgress.runId) return
@@ -852,6 +893,28 @@ export function Toolbar(): React.JSX.Element {
             </div>
 
             <div className="settings-modal-body auto-chart-body">
+              {runtimeStatus && runtimeStatus.managed && !runtimeStatus.ready && (
+                <div className="auto-chart-runtime-warning">
+                  <h3>Python runtime not installed</h3>
+                  <p>
+                    Auto-Chart needs the bundled Python runtime (one-time download, ~1.5 GB).
+                    Install it now to enable charting.
+                  </p>
+                  <div className="auto-chart-runtime-actions">
+                    <button
+                      type="button"
+                      className="settings-modal-primary"
+                      onClick={() => void handleSetupRuntime()}
+                      disabled={isInstallingRuntime || runtimeStatus.installing}
+                    >
+                      {isInstallingRuntime || runtimeStatus.installing ? 'Installing\u2026' : 'Set up Python runtime'}
+                    </button>
+                  </div>
+                  {runtimeSetupError && (
+                    <pre className="auto-chart-error-text">{runtimeSetupError}</pre>
+                  )}
+                </div>
+              )}
               <section className="settings-preferences-group">
                 <h3 className="settings-hotkey-group-title">Inputs</h3>
                 <div className="settings-preferences-body auto-chart-inputs">
@@ -992,7 +1055,7 @@ export function Toolbar(): React.JSX.Element {
               <button className="settings-modal-secondary" onClick={() => autoChartProgress.isRunning ? void handleCancelAutoChart() : setIsAutoChartModalOpen(false)}>
                 {autoChartProgress.isRunning ? 'Cancel Run' : 'Close'}
               </button>
-              <button className="settings-modal-primary" onClick={() => void handleStartAutoChart()} disabled={autoChartProgress.isRunning}>
+              <button className="settings-modal-primary" onClick={() => void handleStartAutoChart()} disabled={autoChartProgress.isRunning || (runtimeStatus?.managed === true && !runtimeStatus.ready)}>
                 Start Auto-Chart
               </button>
             </div>

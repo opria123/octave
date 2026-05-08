@@ -16,9 +16,6 @@ type ProgressState = {
   percent?: number
 }
 
-const DISMISS_KEY = 'octave.setupModal.dismissedAt'
-const DISMISS_TTL_MS = 1000 * 60 * 60 * 24 * 7 // 7 days
-
 /**
  * First-launch setup banner / modal that proactively offers to provision the
  * managed Python runtime (python-build-standalone + AI dependencies) so the
@@ -26,17 +23,16 @@ const DISMISS_TTL_MS = 1000 * 60 * 60 * 24 * 7 // 7 days
  *
  * - Only renders when the runtime is `managed` (packaged build) and not ready.
  * - Listens to `strum:progress` for `bootstrap` stage events while installing.
- * - Can be dismissed; reappears after a week or when triggered from Auto-Chart.
+ * - "Not now" only hides for the current session; the modal returns next launch
+ *   so the user always has a path back in. The auto-chart modal also exposes
+ *   an inline setup CTA when the runtime isn't ready.
  */
 export function SetupModal(): React.JSX.Element | null {
   const [status, setStatus] = useState<RuntimeStatus | null>(null)
   const [progress, setProgress] = useState<ProgressState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [installing, setInstalling] = useState(false)
-  const [dismissed, setDismissed] = useState<boolean>(() => {
-    const ts = Number(window.localStorage.getItem(DISMISS_KEY) ?? '0')
-    return ts > 0 && Date.now() - ts < DISMISS_TTL_MS
-  })
+  const [dismissed, setDismissed] = useState(false)
   const startedRef = useRef(false)
 
   const refreshStatus = useCallback(async () => {
@@ -92,7 +88,6 @@ export function SetupModal(): React.JSX.Element | null {
   }, [refreshStatus])
 
   const handleDismiss = useCallback(() => {
-    window.localStorage.setItem(DISMISS_KEY, String(Date.now()))
     setDismissed(true)
   }, [])
 
