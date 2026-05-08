@@ -470,8 +470,9 @@ def patch_hybrid_device(device: str) -> None:
     if original is None or getattr(original, "__octave_patched__", False):
         return
 
-    def wrapped(device_arg: str | None = None):
-        return original(device=device_arg or device)
+    def wrapped(device: str | None = None):
+        return original(device=device or wrapped.__octave_default_device__)
+    wrapped.__octave_default_device__ = device  # type: ignore[attr-defined]
 
     setattr(wrapped, "__octave_patched__", True)
     guitar_hybrid_v2._get_hybrid_charter = wrapped
