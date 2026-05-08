@@ -88,9 +88,8 @@ jobs:
           # libnyquist's CMakeLists overwrites CMAKE_CXX_FLAGS wholesale,
           # which strips the default /EHsc that CMake injects for MSVC-like
           # compilers (including ClangCL). Without it, clang-cl rejects the
-          # try/throw blocks in vendor/libnyquist/src/Common.cpp. Inject an
-          # explicit add_compile_options(/EHsc) for MSVC at the top of
-          # libnyquist's project.
+          # try/throw blocks in vendor/libnyquist/src/Common.cpp. Append a
+          # target_compile_options that runs after the target exists.
           ny = pathlib.Path('vendor/libnyquist/CMakeLists.txt')
           if ny.exists():
               text = ny.read_text()
@@ -99,7 +98,7 @@ jobs:
                   inject = (
                       f'\n{guard}\n'
                       'if(MSVC)\n'
-                      '    add_compile_options(/EHsc)\n'
+                      '    target_compile_options(libnyquist PRIVATE /EHsc)\n'
                       'endif()\n'
                   )
                   ny.write_text(text + inject)
