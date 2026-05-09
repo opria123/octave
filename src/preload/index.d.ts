@@ -77,6 +77,13 @@ interface ChartEditorAPI {
       keys?: boolean
       proKeys?: boolean
     }
+    /**
+     * Optional user-supplied tempo map. If provided, the first event
+     * (sorted by timeSec) overrides STRUM's auto-detected BPM and the
+     * full list is written to notes.mid; note ticks are retimed so
+     * real-world note positions stay aligned with the audio.
+     */
+    tempoMap?: Array<{ timeSec: number; bpm: number }>
   }) => Promise<{ runId: string }>
   cancelAutoChart: (runId: string) => Promise<boolean>
   onAutoChartProgress: (callback: (event: {

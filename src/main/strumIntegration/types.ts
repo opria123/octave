@@ -72,6 +72,14 @@ export interface AutoChartRunOptions {
     keys?: boolean
     proKeys?: boolean
   }
+  /**
+   * Optional user-supplied tempo map: a sorted (by `timeSec`) list of
+   * tempo events. When provided, the first event's BPM overrides STRUM's
+   * auto-detected initial tempo and the full list is written to the
+   * resulting notes.mid; note ticks are retimed so real-world note
+   * positions stay aligned with the audio.
+   */
+  tempoMap?: Array<{ timeSec: number; bpm: number }>
 }
 
 export interface AutoChartRunResult {

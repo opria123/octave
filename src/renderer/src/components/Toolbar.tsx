@@ -68,6 +68,9 @@ export function Toolbar(): React.JSX.Element {
   const [autoChartUrls, setAutoChartUrls] = useState<string[]>([EMPTY_AUTO_CHART_URL])
   const [autoChartDisableOnlineLookup, setAutoChartDisableOnlineLookup] = useState(false)
   const [autoChartAdvancedOpen, setAutoChartAdvancedOpen] = useState(false)
+  // Optional user-supplied tempo map. Empty = use STRUM's auto-detection.
+  // First entry's BPM (sorted by timeSec) overrides initial detected tempo.
+  const [autoChartTempoEvents, setAutoChartTempoEvents] = useState<Array<{ timeSec: string; bpm: string }>>([])
   const [autoChartEnabledTracks, setAutoChartEnabledTracks] = useState<{
     drums: boolean
     guitar: boolean
@@ -560,7 +563,14 @@ export function Toolbar(): React.JSX.Element {
         includeKeys: autoChartEnabledTracks.keys,
         disableOnlineLookup: autoChartDisableOnlineLookup,
         skipHarmonies: !autoChartEnabledTracks.harmonies,
-        enabledTracks: autoChartEnabledTracks
+        enabledTracks: autoChartEnabledTracks,
+        tempoMap: (() => {
+          const parsed = autoChartTempoEvents
+            .map((e) => ({ timeSec: parseFloat(e.timeSec), bpm: parseFloat(e.bpm) }))
+            .filter((e) => Number.isFinite(e.timeSec) && Number.isFinite(e.bpm) && e.bpm > 0 && e.timeSec >= 0)
+            .sort((a, b) => a.timeSec - b.timeSec)
+          return parsed.length > 0 ? parsed : undefined
+        })()
       })
       setAutoChartProgress((prev) => ({ ...prev, runId }))
     } catch (error) {
@@ -570,7 +580,7 @@ export function Toolbar(): React.JSX.Element {
         error: error instanceof Error ? error.message : String(error)
       }))
     }
-  }, [autoChartDisableOnlineLookup, autoChartEnabledTracks, autoChartFiles, autoChartFolders, autoChartStemFolders, autoChartStemSongs, autoChartProgress.outputDir, autoChartUrls, runtimeStatus, updateSettings])
+  }, [autoChartDisableOnlineLookup, autoChartEnabledTracks, autoChartFiles, autoChartFolders, autoChartStemFolders, autoChartStemSongs, autoChartProgress.outputDir, autoChartTempoEvents, autoChartUrls, runtimeStatus, updateSettings])
 
   const handleCancelAutoChart = useCallback(async (): Promise<void> => {
     if (!autoChartProgress.runId) return
@@ -903,6 +913,7 @@ export function Toolbar(): React.JSX.Element {
         >
           <span className="toolbar-icon">🤖</span>
           <span className="toolbar-label">Auto-Chart</span>
+          <span className="toolbar-experimental-tag" title="Auto-charting is experimental — results vary by song.">experimental</span>
         </button>
       </div>
 
@@ -1396,6 +1407,69 @@ export function Toolbar(): React.JSX.Element {
                           ))}
                         </div>
                       </>
+                    )}
+                  </div>
+
+                  <div className="auto-chart-tempo-override">
+                    <div className="auto-chart-tempo-header">
+                      <strong>Tempo override</strong>
+                      <button
+                        type="button"
+                        className="settings-modal-secondary"
+                        style={{ fontSize: 11, padding: '2px 8px' }}
+                        disabled={autoChartProgress.isRunning}
+                        onClick={() => setAutoChartTempoEvents((prev) => [
+                          ...prev,
+                          { timeSec: prev.length === 0 ? '0' : '', bpm: '' }
+                        ])}
+                      >+ Add tempo</button>
+                    </div>
+                    <p className="auto-chart-tempo-help">
+                      Leave empty to auto-detect. Add a row with time 0 to override the initial BPM, plus more rows to declare tempo changes at specific timestamps (in seconds). Note positions are retimed to keep audio sync.
+                    </p>
+                    {autoChartTempoEvents.length > 0 && (
+                      <div className="auto-chart-tempo-list">
+                        <div className="auto-chart-tempo-row auto-chart-tempo-row-head">
+                          <span>Time (s)</span>
+                          <span>BPM</span>
+                          <span />
+                        </div>
+                        {autoChartTempoEvents.map((event, index) => (
+                          <div key={index} className="auto-chart-tempo-row">
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              value={event.timeSec}
+                              placeholder="0"
+                              disabled={autoChartProgress.isRunning}
+                              onChange={(e) => {
+                                const v = e.target.value
+                                setAutoChartTempoEvents((prev) => prev.map((row, i) => i === index ? { ...row, timeSec: v } : row))
+                              }}
+                            />
+                            <input
+                              type="number"
+                              min={1}
+                              step={0.001}
+                              value={event.bpm}
+                              placeholder="120"
+                              disabled={autoChartProgress.isRunning}
+                              onChange={(e) => {
+                                const v = e.target.value
+                                setAutoChartTempoEvents((prev) => prev.map((row, i) => i === index ? { ...row, bpm: v } : row))
+                              }}
+                            />
+                            <button
+                              type="button"
+                              className="auto-chart-tempo-remove"
+                              title="Remove"
+                              disabled={autoChartProgress.isRunning}
+                              onClick={() => setAutoChartTempoEvents((prev) => prev.filter((_, i) => i !== index))}
+                            >×</button>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>

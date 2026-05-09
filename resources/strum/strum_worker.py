@@ -46,6 +46,11 @@ SKIP_HARMONIES = os.environ.get("OCTAVE_STRUM_SKIP_HARMONIES", "0") == "1"
 # collect_audio_sources() when the user provides a pre-split stems folder;
 # consulted by OctaveBatchPipeline.separate_stems() to skip Demucs.
 PRESPLIT_STEM_REGISTRY: dict[Path, dict[str, Path]] = {}
+# User-supplied tempo map (sorted by timeSec). When non-empty, the first
+# entry's BPM overrides STRUM's auto-detected initial tempo and the full list
+# is written to each song's notes.mid (note ticks are retimed so real-world
+# note positions stay aligned with the audio). See _retime_midi_to_tempo_map.
+USER_TEMPO_MAP: list[tuple[float, float]] = []
 if DISABLE_ONLINE_LOOKUP:
     FAST_AUDIO_METADATA_LOOKUP = False
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".ogg", ".opus", ".flac"}
@@ -1184,7 +1189,10 @@ def build_pipeline(
 
         def analyze_audio(self, audio_path: Path, artist: str = '', title: str = ''):
             if not FAST_AUDIO_ANALYSIS:
-                return super().analyze_audio(audio_path, artist, title)
+                result = super().analyze_audio(audio_path, artist, title)
+                if USER_TEMPO_MAP and isinstance(result, dict):
+                    result["tempo_bpm"] = round(USER_TEMPO_MAP[0][1], 3)
+                return result
 
             logger = logging.getLogger(__name__)
             logger.info("  Analyzing audio (fast mode)...")
@@ -1227,8 +1235,10 @@ def build_pipeline(
 
             logger.info(f"  Tempo (fast default): 120 BPM, Duration: {duration_sec:.1f}s")
 
+            tempo_bpm = round(USER_TEMPO_MAP[0][1], 3) if USER_TEMPO_MAP else 120
+
             return {
-                "tempo_bpm": 120,
+                "tempo_bpm": tempo_bpm,
                 "duration_ms": int(duration_sec * 1000),
                 "duration_sec": duration_sec,
                 "preview_start_ms": int(preview_sec * 1000),
@@ -1514,6 +1524,76 @@ def collect_audio_sources(payload: dict[str, Any], cache_dir: Path, run_id: str)
     return unique_sources
 
 
+def _retime_midi_to_tempo_map(midi_path: Path, init_bpm: float, tempo_map: list[tuple[float, float]]) -> None:
+    """Rewrite a STRUM-generated notes.mid (written with constant `init_bpm`)
+    so it uses `tempo_map` while preserving each event's real-world time.
+    `tempo_map` must already be normalized: sorted by time, deduped, and
+    starting at timeSec=0.
+    """
+    if not tempo_map or init_bpm <= 0:
+        return
+    try:
+        import mido
+    except Exception as exc:  # pragma: no cover - mido is bundled
+        logging.getLogger(__name__).warning(
+            "Skipping tempo-map retime: mido import failed (%s)", exc
+        )
+        return
+
+    mid = mido.MidiFile(str(midi_path))
+    tpb = mid.ticks_per_beat
+    sec_per_tick_old = 60.0 / (init_bpm * tpb)
+
+    def realtime_to_tick(t_sec: float) -> int:
+        if t_sec <= 0:
+            return 0
+        ticks = 0.0
+        for i, (t_i, bpm_i) in enumerate(tempo_map):
+            t_next = tempo_map[i + 1][0] if i + 1 < len(tempo_map) else float('inf')
+            if t_sec < t_next:
+                ticks += (t_sec - t_i) * bpm_i * tpb / 60.0
+                return int(round(ticks))
+            ticks += (t_next - t_i) * bpm_i * tpb / 60.0
+        return int(round(ticks))
+
+    new_tracks = []
+    for track_idx, track in enumerate(mid.tracks):
+        abs_tick = 0
+        timed_msgs: list[tuple[float, int, Any]] = []
+        for msg in track:
+            abs_tick += msg.time
+            if msg.is_meta and msg.type == 'set_tempo':
+                # Drop existing tempo events; the user's map replaces them.
+                continue
+            real_time = abs_tick * sec_per_tick_old
+            timed_msgs.append((real_time, 1, msg))
+
+        # Inject the user's tempo events on the first track (STRUM's tempo track).
+        if track_idx == 0:
+            for t_i, bpm_i in tempo_map:
+                tempo_msg = mido.MetaMessage('set_tempo', tempo=mido.bpm2tempo(bpm_i), time=0)
+                timed_msgs.append((t_i, 0, tempo_msg))
+
+        # Sort by real_time, then by priority (0=tempo, 1=note, 2=end_of_track).
+        def _prio(msg) -> int:
+            if msg.is_meta and msg.type == 'end_of_track':
+                return 2
+            return 1
+        timed_msgs.sort(key=lambda item: (item[0], item[1] if item[1] == 0 else _prio(item[2])))
+
+        new_track = mido.MidiTrack()
+        prev_tick = 0
+        for t_real, _prio_set, msg in timed_msgs:
+            new_abs_tick = realtime_to_tick(t_real)
+            delta = max(0, new_abs_tick - prev_tick)
+            new_track.append(msg.copy(time=delta))
+            prev_tick = new_abs_tick
+        new_tracks.append(new_track)
+
+    mid.tracks = new_tracks
+    mid.save(str(midi_path))
+
+
 def run_pipeline(payload: dict[str, Any]) -> int:
     run_id = str(payload["runId"])
     cache_dir = Path(payload["cacheDir"]).expanduser().resolve()
@@ -1521,6 +1601,36 @@ def run_pipeline(payload: dict[str, Any]) -> int:
     include_keys = bool(payload.get("includeKeys", True))
     enabled_tracks_raw = payload.get("enabledTracks") or {}
     enabled_tracks = {k: bool(v) for k, v in enabled_tracks_raw.items()} if isinstance(enabled_tracks_raw, dict) else None
+
+    # Optional user-supplied tempo map. Each entry: {"timeSec": float, "bpm": float}.
+    # If the first event has timeSec > 0, an implicit (0, first.bpm) is prepended.
+    global USER_TEMPO_MAP
+    USER_TEMPO_MAP = []
+    raw_tempo_map = payload.get("tempoMap") or []
+    if isinstance(raw_tempo_map, list):
+        cleaned: list[tuple[float, float]] = []
+        for entry in raw_tempo_map:
+            if not isinstance(entry, dict):
+                continue
+            try:
+                t = float(entry.get("timeSec", 0))
+                b = float(entry.get("bpm", 0))
+            except (TypeError, ValueError):
+                continue
+            if b <= 0 or t < 0:
+                continue
+            cleaned.append((t, b))
+        cleaned.sort(key=lambda x: x[0])
+        # Dedupe identical timestamps (keep last).
+        deduped: list[tuple[float, float]] = []
+        for t, b in cleaned:
+            if deduped and abs(deduped[-1][0] - t) < 1e-9:
+                deduped[-1] = (t, b)
+            else:
+                deduped.append((t, b))
+        if deduped and deduped[0][0] > 0:
+            deduped.insert(0, (0.0, deduped[0][1]))
+        USER_TEMPO_MAP = deduped
 
     modules = ensure_dependencies()
     torch_module = modules["torch"]
@@ -1566,6 +1676,20 @@ def run_pipeline(payload: dict[str, Any]) -> int:
         )
         if result.success:
             song_folders.append(result.output_path)
+            if USER_TEMPO_MAP:
+                try:
+                    notes_mid = Path(result.output_path) / "notes.mid"
+                    if notes_mid.exists():
+                        _retime_midi_to_tempo_map(notes_mid, USER_TEMPO_MAP[0][1], USER_TEMPO_MAP)
+                        emit_progress(
+                            run_id,
+                            "merge",
+                            f"Applied user tempo map ({len(USER_TEMPO_MAP)} event(s)) to {notes_mid.name}",
+                            percent=min(96, source_start_percent + 65),
+                            current_item=source.name,
+                        )
+                except Exception as exc:
+                    errors.append(f"{source.name}: tempo-map post-process failed: {exc}")
         if result.error:
             errors.append(f"{source.name}: {result.error}")
 

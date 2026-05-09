@@ -113,6 +113,27 @@
   line-height: 1;
 }
 
+.toolbar-experimental-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #1f1a13;
+  background-color: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(0, 0, 0, 0.28);
+  border-radius: 999px;
+  line-height: 1.4;
+}
+
+.toolbar-button:not(.toolbar-button-accent) .toolbar-experimental-tag {
+  color: var(--accent-color);
+  background-color: var(--accent-color-transparent);
+  border-color: var(--accent-color-transparent);
+}
+
 .toolbar-label {
   font-weight: 500;
 }
@@ -762,4 +783,86 @@
   background: var(--accent-color-transparent);
   border-color: var(--accent-color);
   color: var(--accent-color-hover);
+}
+
+/* Auto-chart tempo override editor */
+.auto-chart-tempo-override {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.auto-chart-tempo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.auto-chart-tempo-help {
+  font-size: 12px;
+  opacity: 0.7;
+  margin: 0 0 8px;
+}
+
+.auto-chart-tempo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.auto-chart-tempo-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 28px;
+  gap: 6px;
+  align-items: center;
+}
+
+.auto-chart-tempo-row-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.65;
+  margin-bottom: 2px;
+}
+
+.auto-chart-tempo-row input[type='number'] {
+  width: 100%;
+  padding: 4px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.auto-chart-tempo-row input[type='number']:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.auto-chart-tempo-remove {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.auto-chart-tempo-remove:hover:not(:disabled) {
+  color: #ffb2b2;
+  border-color: rgba(240, 109, 109, 0.55);
+  background: rgba(240, 109, 109, 0.12);
+}
+
+.auto-chart-tempo-remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
