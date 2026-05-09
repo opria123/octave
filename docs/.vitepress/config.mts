@@ -6,18 +6,19 @@ export default defineConfig({
   title: 'OCTAVE',
   description: 'Orchestrated Chart & Track Authoring Visual Editor — a desktop chart editor for rhythm games like YARG and Clone Hero.',
   lang: 'en-US',
-  base: '/octave/',
+  base: '/',
   cleanUrls: true,
   lastUpdated: true,
   appearance: 'dark',
 
   head: [
-    ['link', { rel: 'icon', href: '/octave/favicon.svg', type: 'image/svg+xml' }],
+    ['link', { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' }],
     ['meta', { name: 'theme-color', content: '#f2a65a' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'OCTAVE — Chart Editor' }],
     ['meta', { property: 'og:description', content: 'A desktop chart editor for rhythm games like YARG and Clone Hero.' }],
-    ['meta', { property: 'og:image', content: `https://${REPO.split('/')[0]}.github.io/octave/screenshots/editor-overview.png` }]
+    ['meta', { property: 'og:image', content: 'https://octavestudio.tools/screenshots/editor-overview.png' }],
+    ['meta', { property: 'og:url', content: 'https://octavestudio.tools/' }]
   ],
 
   themeConfig: {
