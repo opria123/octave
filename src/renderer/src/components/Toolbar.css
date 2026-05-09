@@ -569,3 +569,111 @@
   width: 12px;
   height: 12px;
 }
+
+
+/* Stem Mixer popover (toolbar volume area) */
+.stem-mixer-wrapper {
+  position: relative;
+  margin-left: 4px;
+}
+
+.stem-mixer-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 60;
+  margin-top: 6px;
+  min-width: 260px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.stem-mixer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.stem-mixer-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.stem-mixer-close:hover {
+  color: var(--text-primary);
+}
+
+.stem-mixer-empty {
+  opacity: 0.6;
+  font-size: 12px;
+  padding: 8px 0;
+  text-align: center;
+}
+
+.stem-mixer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stem-mixer-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.stem-mixer-row-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.stem-mixer-toggle {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.stem-mixer-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.stem-mixer-toggle.is-mute-active {
+  background: rgba(240, 109, 109, 0.18);
+  border-color: rgba(240, 109, 109, 0.55);
+  color: #ffb2b2;
+}
+
+.stem-mixer-toggle.is-solo-active {
+  background: var(--accent-color-transparent);
+  border-color: var(--accent-color);
+  color: var(--accent-color-hover);
+}

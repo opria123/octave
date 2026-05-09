@@ -827,6 +827,39 @@ def build_pipeline(
                 self._vocals_charter = OctaveVocalsCharter(device=device, **whisper_kwargs)
             return self._vocals_charter
 
+        def convert_to_ogg(self, input_path: Path, output_path: Path):
+            # Always write the combined song.ogg via the parent implementation.
+            super().convert_to_ogg(input_path, output_path)
+            # When the user supplied pre-split stems for this mix, also export
+            # each stem as `{stem}.ogg` alongside song.ogg so Clone Hero / YARG
+            # can mute the corresponding instrument when notes are missed.
+            preset = PRESPLIT_STEM_REGISTRY.get(Path(input_path).resolve())
+            if not preset:
+                return
+            logger = logging.getLogger(__name__)
+            song_folder = output_path.parent
+            # Map our internal stem names to the filenames recognised by
+            # Clone Hero / YARG. "other" stays as other.ogg (the bucket of
+            # whatever is not drums/bass/vocals — typically guitar+keys).
+            stem_filenames = {
+                "drums": "drums.ogg",
+                "bass": "bass.ogg",
+                "vocals": "vocals.ogg",
+                "other": "other.ogg",
+                "guitar": "guitar.ogg",
+                "piano": "keys.ogg",
+            }
+            for stem_name, src_path in preset.items():
+                dest_name = stem_filenames.get(stem_name)
+                if not dest_name:
+                    continue
+                dest = song_folder / dest_name
+                try:
+                    super().convert_to_ogg(src_path, dest)
+                    logger.info(f"  Exported stem: {dest.name}")
+                except Exception as exc:
+                    logger.warning(f"  ⚠ Failed to export stem {dest_name}: {exc}")
+
         def separate_stems(self, audio_path: Path, work_dir: Path):
             logger = logging.getLogger(__name__)
 

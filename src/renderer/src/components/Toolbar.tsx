@@ -1503,7 +1503,7 @@ function StemMixerButton({ activeSongId }: { activeSongId: string | null }): Rea
   if (!activeSongId) return null
 
   return (
-    <div style={{ position: 'relative', marginLeft: 4 }}>
+    <div className="stem-mixer-wrapper">
       <button
         className="toolbar-icon-button"
         onClick={() => {
@@ -1516,78 +1516,31 @@ function StemMixerButton({ activeSongId }: { activeSongId: string | null }): Rea
         🎚️
       </button>
       {open && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '100%',
-            right: 0,
-            zIndex: 60,
-            marginTop: 4,
-            padding: 8,
-            background: '#1f1f1f',
-            border: '1px solid #444',
-            borderRadius: 4,
-            minWidth: 240,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <strong style={{ fontSize: 12 }}>Stem Mixer</strong>
-            <button onClick={() => setOpen(false)} style={{ padding: '2px 6px' }}>×</button>
+        <div className="stem-mixer-popover">
+          <div className="stem-mixer-header">
+            <span>Stem Mixer</span>
+            <button className="stem-mixer-close" onClick={() => setOpen(false)} aria-label="Close">×</button>
           </div>
           {stems.length === 0 ? (
-            <div style={{ opacity: 0.6, fontSize: 12, padding: '8px 0' }}>
-              No stems loaded.
-            </div>
+            <div className="stem-mixer-empty">No stems loaded.</div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div className="stem-mixer-list">
               {stems.map((s) => (
-                <div
-                  key={s.filePath}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    fontSize: 12,
-                    padding: '2px 0'
-                  }}
-                >
-                  <span
-                    style={{
-                      flex: 1,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}
-                    title={s.filename}
-                  >
+                <div key={s.filePath} className="stem-mixer-row">
+                  <span className="stem-mixer-row-name" title={s.filename}>
                     {s.filename}
                   </span>
                   <button
+                    className={`stem-mixer-toggle${s.muted ? ' is-mute-active' : ''}`}
                     onClick={() => audioService.setStemMute(activeSongId, s.filePath, !s.muted)}
                     title="Mute"
-                    style={{
-                      padding: '2px 6px',
-                      background: s.muted ? '#a33' : '#333',
-                      color: '#fff',
-                      border: '1px solid #555',
-                      borderRadius: 3,
-                      cursor: 'pointer'
-                    }}
                   >
                     M
                   </button>
                   <button
+                    className={`stem-mixer-toggle${s.soloed ? ' is-solo-active' : ''}`}
                     onClick={() => audioService.setStemSolo(activeSongId, s.filePath, !s.soloed)}
                     title="Solo"
-                    style={{
-                      padding: '2px 6px',
-                      background: s.soloed ? '#aa3' : '#333',
-                      color: '#fff',
-                      border: '1px solid #555',
-                      borderRadius: 3,
-                      cursor: 'pointer'
-                    }}
                   >
                     S
                   </button>
