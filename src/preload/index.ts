@@ -130,6 +130,15 @@ const api = {
     includeKeys?: boolean
     disableOnlineLookup?: boolean
     skipHarmonies?: boolean
+    enabledTracks?: {
+      drums?: boolean
+      guitar?: boolean
+      bass?: boolean
+      vocals?: boolean
+      harmonies?: boolean
+      keys?: boolean
+      proKeys?: boolean
+    }
   }): Promise<{ runId: string }> =>
     ipcRenderer.invoke('strum:start', options),
 

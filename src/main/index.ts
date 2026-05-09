@@ -590,8 +590,20 @@ ipcMain.handle('strum:start', async (_event, options: {
   outputDir: string
   files: string[]
   folders: string[]
+  stemFolders?: string[]
   urls: string[]
   includeKeys?: boolean
+  disableOnlineLookup?: boolean
+  skipHarmonies?: boolean
+  enabledTracks?: {
+    drums?: boolean
+    guitar?: boolean
+    bass?: boolean
+    vocals?: boolean
+    harmonies?: boolean
+    keys?: boolean
+    proKeys?: boolean
+  }
 }) => {
   const runId = randomUUID()
 
@@ -600,8 +612,12 @@ ipcMain.handle('strum:start', async (_event, options: {
     outputDir: options.outputDir,
     files: options.files,
     folders: options.folders,
+    stemFolders: options.stemFolders ?? [],
     urls: options.urls,
-    includeKeys: options.includeKeys
+    includeKeys: options.includeKeys,
+    disableOnlineLookup: options.disableOnlineLookup,
+    skipHarmonies: options.skipHarmonies,
+    enabledTracks: options.enabledTracks
   })
     .then((result) => {
       for (const win of BrowserWindow.getAllWindows()) {

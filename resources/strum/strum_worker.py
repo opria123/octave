@@ -569,7 +569,13 @@ def _install_offline_lookup_stubs(batch_pipeline_cls) -> None:
         pass
 
 
-def build_pipeline(source_root: Path, output_dir: Path, device: str, include_keys: bool):
+def build_pipeline(
+    source_root: Path,
+    output_dir: Path,
+    device: str,
+    include_keys: bool,
+    enabled_tracks: dict[str, bool] | None = None,
+):
     add_source_paths(source_root)
     batch_pipeline_module = importlib.import_module("batch_pipeline")
     vocals_module = importlib.import_module("vocals_charter")
@@ -1198,13 +1204,14 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
                 "genre": metadata.get("genre", ""),
             }
 
+    tracks = enabled_tracks or {}
     return OctaveBatchPipeline(
         output_dir=output_dir,
-        include_drums=True,
-        include_guitar=True,
-        include_bass=True,
-        include_vocals=True,
-        include_keys=include_keys,
+        include_drums=tracks.get('drums', True),
+        include_guitar=tracks.get('guitar', True),
+        include_bass=tracks.get('bass', True),
+        include_vocals=tracks.get('vocals', True),
+        include_keys=include_keys and tracks.get('keys', True),
         include_video=False,
         device=device,
     )
@@ -1364,6 +1371,8 @@ def run_pipeline(payload: dict[str, Any]) -> int:
     cache_dir = Path(payload["cacheDir"]).expanduser().resolve()
     output_dir = Path(payload["outputDir"]).expanduser().resolve()
     include_keys = bool(payload.get("includeKeys", True))
+    enabled_tracks_raw = payload.get("enabledTracks") or {}
+    enabled_tracks = {k: bool(v) for k, v in enabled_tracks_raw.items()} if isinstance(enabled_tracks_raw, dict) else None
 
     modules = ensure_dependencies()
     torch_module = modules["torch"]
@@ -1378,7 +1387,7 @@ def run_pipeline(payload: dict[str, Any]) -> int:
     bootstrap_checkpoints(modules, cache_dir, source_root, run_id)
     # STRUM uses relative paths (e.g. checkpoints/drums_v11/best.pt), so CWD must be source root.
     os.chdir(source_root)
-    pipeline = build_pipeline(source_root, output_dir, device, include_keys)
+    pipeline = build_pipeline(source_root, output_dir, device, include_keys, enabled_tracks)
     sources = collect_audio_sources(payload, cache_dir, run_id)
     if not sources:
         raise IntegrationError("No input audio sources were provided.")

@@ -19,7 +19,9 @@ export const GUITAR_INNER = ['#3E6A02', '#801012', '#807500', '#00608C', '#80420
 // Drums: 4 lanes (red, yellow, blue, green) — kick is separate full-width bar
 export const DRUM_COLORS = ['#FF1D23', '#FFE900', '#00BFFF', '#79D304']
 export const DRUM_INNER = ['#801012', '#807500', '#00608C', '#3E6A02']
-export const DRUM_KICK_COLOR = '#C800FF'
+// Kick = RB orange; 2x kick = deeper orange so 2x bars stand out at a glance.
+export const DRUM_KICK_COLOR = '#FF8400'
+export const DOUBLE_KICK_COLOR = '#B85100'
 // Pro Guitar/Bass: 6 strings (high E → low E) — RB3 string colors
 export const PRO_GUITAR_COLORS = ['#FF1D23', '#FFE900', '#00BFFF', '#FF8400', '#79D304', '#C800FF']
 export const PRO_GUITAR_INNER = ['#801012', '#807500', '#00608C', '#804200', '#3E6A02', '#640080']

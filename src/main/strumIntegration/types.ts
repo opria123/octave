@@ -47,6 +47,20 @@ export interface AutoChartRunOptions {
    * Saves a second whisper pass on the backing-vocals stem.
    */
   skipHarmonies?: boolean
+  /**
+   * Per-instrument enable flags. When omitted all tracks are charted.
+   * `keys` here means standard 5-lane keys; pro-keys is currently always
+   * generated alongside keys when enabled.
+   */
+  enabledTracks?: {
+    drums?: boolean
+    guitar?: boolean
+    bass?: boolean
+    vocals?: boolean
+    harmonies?: boolean
+    keys?: boolean
+    proKeys?: boolean
+  }
 }
 
 export interface AutoChartRunResult {

@@ -70,8 +70,8 @@ const MIDI_EDITOR_CONFIG = {
   // (see chartPreviewModules/constants.ts) so notes look the same
   // in the MIDI editor as they do on the highway.
   laneColors: {
-    kick: '#C800FF',
-    doubleKick: '#C800FF',
+    kick: '#FF8400',
+    doubleKick: '#B85100',
     snare: '#FF1D23',
     yellowTom: '#FFE900',
     yellowCymbal: '#FFE900',
