@@ -673,9 +673,21 @@
 
 .stem-mixer-row {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.stem-mixer-row:first-child {
+  border-top: none;
+  padding-top: 4px;
+}
+
+.stem-mixer-row-header {
+  display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 0;
 }
 
 .stem-mixer-row-name {
@@ -684,6 +696,24 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-primary);
+}
+
+.stem-mixer-row-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stem-mixer-volume-slider {
+  flex: 1;
+}
+
+.stem-mixer-volume-value {
+  min-width: 36px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .stem-mixer-toggle {

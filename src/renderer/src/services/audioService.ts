@@ -64,6 +64,7 @@ interface AudioState {
   // its own GainNode → master gainNode → destination so we can mute/solo
   // individual stems without recreating audio sources.
   stemGains: Map<string, GainNode>
+  stemVolumes: Map<string, number>
   mutedStems: Set<string>
   soloedStems: Set<string>
   isLoaded: boolean
@@ -112,6 +113,7 @@ function getAudioState(songId: string): AudioState {
       sourceNodes: [],
       gainNode: null,
       stemGains: new Map(),
+      stemVolumes: new Map(),
       mutedStems: new Set(),
       soloedStems: new Set(),
       isLoaded: false,
@@ -491,16 +493,24 @@ function notifyStemControlsChanged(songId: string): void {
 }
 
 function applyStemGains(state: AudioState): void {
-  const ctx = sharedContext
-  const now = ctx?.currentTime ?? 0
   const hasSolo = state.soloedStems.size > 0
   for (const [filePath, gain] of state.stemGains) {
-    const audible = hasSolo
-      ? state.soloedStems.has(filePath)
-      : !state.mutedStems.has(filePath)
-    gain.gain.cancelScheduledValues(now)
-    gain.gain.setValueAtTime(audible ? 1 : 0, now)
+    const muted = state.mutedStems.has(filePath)
+    const audible = hasSolo ? state.soloedStems.has(filePath) : !muted
+    const volume = state.stemVolumes.get(filePath) ?? 1
+    // Set value directly so the change applies immediately even if the
+    // AudioContext clock is paused or the node was just created.
+    gain.gain.value = audible ? volume : 0
   }
+}
+
+export function setStemVolume(songId: string, filePath: string, volume: number): void {
+  const state = audioRegistry.get(songId)
+  if (!state) return
+  const clamped = Math.max(0, Math.min(1, volume))
+  state.stemVolumes.set(filePath, clamped)
+  applyStemGains(state)
+  notifyStemControlsChanged(songId)
 }
 
 export function setStemMute(songId: string, filePath: string, muted: boolean): void {
@@ -526,6 +536,7 @@ export interface StemControl {
   filename: string
   muted: boolean
   soloed: boolean
+  volume: number
 }
 
 export function getStemControls(songId: string): StemControl[] {
@@ -535,7 +546,8 @@ export function getStemControls(songId: string): StemControl[] {
     filePath: s.filePath,
     filename: s.filename,
     muted: state.mutedStems.has(s.filePath),
-    soloed: state.soloedStems.has(s.filePath)
+    soloed: state.soloedStems.has(s.filePath),
+    volume: state.stemVolumes.get(s.filePath) ?? 1
   }))
 }
 

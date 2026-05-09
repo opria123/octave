@@ -1553,23 +1553,40 @@ function StemMixerButton({ activeSongId }: { activeSongId: string | null }): Rea
             <div className="stem-mixer-list">
               {stems.map((s) => (
                 <div key={s.filePath} className="stem-mixer-row">
-                  <span className="stem-mixer-row-name" title={s.filename}>
-                    {s.filename}
-                  </span>
-                  <button
-                    className={`stem-mixer-toggle${s.muted ? ' is-mute-active' : ''}`}
-                    onClick={() => audioService.setStemMute(activeSongId, s.filePath, !s.muted)}
-                    title="Mute"
-                  >
-                    M
-                  </button>
-                  <button
-                    className={`stem-mixer-toggle${s.soloed ? ' is-solo-active' : ''}`}
-                    onClick={() => audioService.setStemSolo(activeSongId, s.filePath, !s.soloed)}
-                    title="Solo"
-                  >
-                    S
-                  </button>
+                  <div className="stem-mixer-row-header">
+                    <span className="stem-mixer-row-name" title={s.filename}>
+                      {s.filename}
+                    </span>
+                    <button
+                      className={`stem-mixer-toggle${s.muted ? ' is-mute-active' : ''}`}
+                      onClick={() => audioService.setStemMute(activeSongId, s.filePath, !s.muted)}
+                      title="Mute"
+                    >
+                      M
+                    </button>
+                    <button
+                      className={`stem-mixer-toggle${s.soloed ? ' is-solo-active' : ''}`}
+                      onClick={() => audioService.setStemSolo(activeSongId, s.filePath, !s.soloed)}
+                      title="Solo"
+                    >
+                      S
+                    </button>
+                  </div>
+                  <div className="stem-mixer-row-volume">
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={s.volume}
+                      onChange={(e) =>
+                        audioService.setStemVolume(activeSongId, s.filePath, parseFloat(e.target.value))
+                      }
+                      className="toolbar-volume-slider stem-mixer-volume-slider"
+                      title={`Volume: ${Math.round(s.volume * 100)}%`}
+                    />
+                    <span className="stem-mixer-volume-value">{Math.round(s.volume * 100)}%</span>
+                  </div>
                 </div>
               ))}
             </div>
