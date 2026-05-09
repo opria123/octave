@@ -1,6 +1,6 @@
 {
   "name": "octave",
-  "version": "0.0.94",
+  "version": "0.0.95",
   "description": "OCTAVE — Orchestrated Chart & Track Authoring Visual Editor for rhythm games",
   "main": "./out/main/index.js",
   "author": "opria123",
