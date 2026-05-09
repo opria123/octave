@@ -1315,17 +1315,31 @@ export function Toolbar(): React.JSX.Element {
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8,
+                    gap: 10,
                     width: '100%',
                     background: 'transparent',
                     border: 'none',
-                    padding: '4px 0',
+                    padding: '6px 4px',
                     cursor: 'pointer',
                     color: 'inherit',
                     textAlign: 'left'
                   }}
                 >
-                  <span style={{ display: 'inline-block', width: 12, transform: autoChartAdvancedOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 120ms' }}>▶</span>
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 14,
+                      height: 14,
+                      fontSize: 10,
+                      lineHeight: 1,
+                      color: '#bbb',
+                      transform: autoChartAdvancedOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                      transition: 'transform 120ms'
+                    }}
+                  >▸</span>
                   <h3 className="settings-hotkey-group-title" style={{ margin: 0 }}>Advanced</h3>
                 </button>
                 {autoChartAdvancedOpen && (
@@ -1346,54 +1360,62 @@ export function Toolbar(): React.JSX.Element {
                   </label>
 
                   <div style={{ marginTop: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <strong style={{ fontSize: 13 }}>Tracks to chart</strong>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          type="button"
-                          className="settings-modal-secondary"
-                          style={{ fontSize: 11, padding: '2px 8px' }}
-                          disabled={autoChartProgress.isRunning}
-                          onClick={() => setAutoChartEnabledTracks({ drums: true, guitar: true, bass: true, vocals: true, harmonies: true, keys: true, proKeys: true })}
-                        >All</button>
-                        <button
-                          type="button"
-                          className="settings-modal-secondary"
-                          style={{ fontSize: 11, padding: '2px 8px' }}
-                          disabled={autoChartProgress.isRunning}
-                          onClick={() => setAutoChartEnabledTracks({ drums: false, guitar: false, bass: false, vocals: false, harmonies: false, keys: false, proKeys: false })}
-                        >None</button>
-                      </div>
-                    </div>
-                    <p style={{ fontSize: 12, opacity: 0.7, margin: '0 0 8px' }}>
-                      Uncheck any track you do not want STRUM to generate. All are charted by default.
-                    </p>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '6px 16px' }}>
-                      {([
-                        { key: 'drums', label: 'Drums' },
-                        { key: 'guitar', label: 'Guitar' },
-                        { key: 'bass', label: 'Bass' },
-                        { key: 'keys', label: 'Keys' },
-                        { key: 'proKeys', label: 'Pro Keys' },
-                        { key: 'vocals', label: 'Vocals' },
-                        { key: 'harmonies', label: 'Vocal Harmonies (HARM2/3)' }
-                      ] as const).map((track) => (
-                        <label key={track.key} className="settings-checkbox-row" style={{ margin: 0 }}>
-                          <input
-                            type="checkbox"
-                            checked={autoChartEnabledTracks[track.key]}
-                            disabled={autoChartProgress.isRunning || (track.key === 'harmonies' && !autoChartEnabledTracks.vocals)}
-                            onChange={(event) => setAutoChartEnabledTracks((prev) => {
-                              const next = { ...prev, [track.key]: event.target.checked }
-                              // Disabling vocals also disables harmonies.
-                              if (track.key === 'vocals' && !event.target.checked) next.harmonies = false
-                              return next
-                            })}
-                          />
-                          <span>{track.label}</span>
-                        </label>
-                      ))}
-                    </div>
+                    {autoChartInputTab === 'stems' ? (
+                      <p style={{ fontSize: 12, opacity: 0.7, margin: 0 }}>
+                        Tracks to chart are determined automatically from the stems you provide on the Stems tab — only instruments with a stem will be charted.
+                      </p>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <strong style={{ fontSize: 13 }}>Tracks to chart</strong>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              type="button"
+                              className="settings-modal-secondary"
+                              style={{ fontSize: 11, padding: '2px 8px' }}
+                              disabled={autoChartProgress.isRunning}
+                              onClick={() => setAutoChartEnabledTracks({ drums: true, guitar: true, bass: true, vocals: true, harmonies: true, keys: true, proKeys: true })}
+                            >All</button>
+                            <button
+                              type="button"
+                              className="settings-modal-secondary"
+                              style={{ fontSize: 11, padding: '2px 8px' }}
+                              disabled={autoChartProgress.isRunning}
+                              onClick={() => setAutoChartEnabledTracks({ drums: false, guitar: false, bass: false, vocals: false, harmonies: false, keys: false, proKeys: false })}
+                            >None</button>
+                          </div>
+                        </div>
+                        <p style={{ fontSize: 12, opacity: 0.7, margin: '0 0 8px' }}>
+                          Uncheck any track you do not want STRUM to generate. All are charted by default.
+                        </p>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '6px 16px' }}>
+                          {([
+                            { key: 'drums', label: 'Drums' },
+                            { key: 'guitar', label: 'Guitar' },
+                            { key: 'bass', label: 'Bass' },
+                            { key: 'keys', label: 'Keys' },
+                            { key: 'proKeys', label: 'Pro Keys' },
+                            { key: 'vocals', label: 'Vocals' },
+                            { key: 'harmonies', label: 'Vocal Harmonies (HARM2/3)' }
+                          ] as const).map((track) => (
+                            <label key={track.key} className="settings-checkbox-row" style={{ margin: 0 }}>
+                              <input
+                                type="checkbox"
+                                checked={autoChartEnabledTracks[track.key]}
+                                disabled={autoChartProgress.isRunning || (track.key === 'harmonies' && !autoChartEnabledTracks.vocals)}
+                                onChange={(event) => setAutoChartEnabledTracks((prev) => {
+                                  const next = { ...prev, [track.key]: event.target.checked }
+                                  // Disabling vocals also disables harmonies.
+                                  if (track.key === 'vocals' && !event.target.checked) next.harmonies = false
+                                  return next
+                                })}
+                              />
+                              <span>{track.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
                 )}
