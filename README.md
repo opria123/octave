@@ -18,7 +18,7 @@
 </div>
 
 <!-- Screenshot: Full editor view with piano roll + 3D highway -->
-![OCTAVE Editor Overview](docs/screenshots/editor-overview.png)
+![OCTAVE Editor Overview](docs/public/screenshots/editor-overview.png)
 
 ---
 
@@ -63,7 +63,7 @@ npm run build:win    # or build:mac / build:linux
 ### The Editor Layout
 
 <!-- Screenshot: Annotated editor layout -->
-![Editor Layout](docs/screenshots/editor-layout.png)
+![Editor Layout](docs/public/screenshots/editor-layout.png)
 
 The interface has four main areas:
 

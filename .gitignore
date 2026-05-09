@@ -29,3 +29,9 @@ Desktop.ini
 # Cache
 .cache/
 coverage/
+# VitePress
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+
+# Screenshot harness fixtures (local-only sample projects)
+scripts/screenshots/fixtures/
