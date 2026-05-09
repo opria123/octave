@@ -52,6 +52,7 @@ export function Toolbar(): React.JSX.Element {
   const [autoChartFiles, setAutoChartFiles] = useState<string[]>([])
   const [autoChartFolders, setAutoChartFolders] = useState<string[]>([])
   const [autoChartStemFolders, setAutoChartStemFolders] = useState<string[]>([])
+  const [autoChartInputTab, setAutoChartInputTab] = useState<'files' | 'folders' | 'stems' | 'urls'>('files')
   const [autoChartUrls, setAutoChartUrls] = useState<string[]>([EMPTY_AUTO_CHART_URL])
   const [autoChartDisableOnlineLookup, setAutoChartDisableOnlineLookup] = useState(false)
   const [autoChartSkipHarmonies, setAutoChartSkipHarmonies] = useState(false)
@@ -973,93 +974,181 @@ export function Toolbar(): React.JSX.Element {
                   style={{ border: 'none', padding: 0, margin: 0, opacity: autoChartProgress.isRunning ? 0.55 : 1 }}
                 >
                 <div className="settings-preferences-body auto-chart-inputs">
-                  <div className="auto-chart-actions-row">
-                    <button className="settings-modal-secondary" onClick={async () => {
-                      const files = await window.api.openAudioFilesDialog()
-                      if (files.length > 0) {
-                        setAutoChartFiles((prev) => Array.from(new Set([...prev, ...files])))
-                      }
-                    }}>Add Files</button>
-                    <button className="settings-modal-secondary" onClick={async () => {
-                      const folder = await window.api.openAudioFolderDialog()
-                      if (folder) {
-                        setAutoChartFolders((prev) => Array.from(new Set([...prev, folder])))
-                      }
-                    }}>Add Folder</button>
-                    <button
-                      className="settings-modal-secondary"
-                      title="Folder must contain drums/bass/vocals/other (.wav/.flac/.ogg/.mp3) plus a song mix (song.wav/ogg/opus/mp3). Demucs separation is skipped."
-                      onClick={async () => {
-                        const folder = await window.api.openAudioFolderDialog()
-                        if (folder) {
-                          setAutoChartStemFolders((prev) => Array.from(new Set([...prev, folder])))
-                        }
-                      }}
-                    >Add Stems Folder</button>
-                    <button className="settings-modal-secondary" onClick={async () => {
-                      const folder = await window.api.openOutputFolderDialog()
-                      if (folder) {
-                        setAutoChartProgress((prev) => ({ ...prev, outputDir: folder, error: null }))
-                      }
-                    }}>Choose Output</button>
+                  {/* Top-level input source tabs */}
+                  <div
+                    role="tablist"
+                    style={{
+                      display: 'flex',
+                      gap: 2,
+                      borderBottom: '1px solid #444',
+                      marginBottom: 12
+                    }}
+                  >
+                    {([
+                      { id: 'files', label: 'Audio Files', count: autoChartFiles.length },
+                      { id: 'folders', label: 'Audio Folders', count: autoChartFolders.length },
+                      { id: 'stems', label: 'Pre-Split Stems', count: autoChartStemFolders.length },
+                      { id: 'urls', label: 'URLs', count: autoChartUrls.filter((u) => u.trim()).length }
+                    ] as const).map((tab) => {
+                      const active = autoChartInputTab === tab.id
+                      return (
+                        <button
+                          key={tab.id}
+                          role="tab"
+                          aria-selected={active}
+                          onClick={() => setAutoChartInputTab(tab.id)}
+                          style={{
+                            padding: '8px 14px',
+                            border: 'none',
+                            borderBottom: active ? '2px solid #4a9eff' : '2px solid transparent',
+                            background: active ? '#2a2a2a' : 'transparent',
+                            color: active ? '#fff' : '#bbb',
+                            cursor: 'pointer',
+                            fontWeight: active ? 600 : 400
+                          }}
+                        >
+                          {tab.label}
+                          {tab.count > 0 && (
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                padding: '1px 6px',
+                                background: '#4a9eff',
+                                color: '#fff',
+                                borderRadius: 10,
+                                fontSize: 11
+                              }}
+                            >
+                              {tab.count}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
                   </div>
 
-                  <div className="auto-chart-chip-list">
-                    {autoChartFiles.map((file) => (
-                      <button key={file} className="auto-chart-chip" onClick={() => setAutoChartFiles((prev) => prev.filter((entry) => entry !== file))}>
-                        File: {file.split(/[\\/]/).pop()} ×
-                      </button>
-                    ))}
-                    {autoChartFolders.map((folder) => (
-                      <button key={folder} className="auto-chart-chip" onClick={() => setAutoChartFolders((prev) => prev.filter((entry) => entry !== folder))}>
-                        Folder: {folder.split(/[\\/]/).pop()} ×
-                      </button>
-                    ))}
-                    {autoChartStemFolders.map((folder) => (
-                      <button key={folder} className="auto-chart-chip" onClick={() => setAutoChartStemFolders((prev) => prev.filter((entry) => entry !== folder))}>
-                        Stems: {folder.split(/[\\/]/).pop()} ×
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="settings-field-stack">
-                    <label className="settings-field-label" htmlFor="auto-chart-output">Output folder</label>
-                    <input
-                      id="auto-chart-output"
-                      className="settings-folder-input"
-                      type="text"
-                      value={autoChartProgress.outputDir}
-                      onChange={(event) => setAutoChartProgress((prev) => ({ ...prev, outputDir: event.target.value }))}
-                      placeholder="Generated song folders will be written here"
-                    />
-                  </div>
-
-                  <div className="settings-field-stack">
-                    <div className="auto-chart-url-header">
-                      <label className="settings-field-label" htmlFor="auto-chart-url-0">Audio / YouTube URLs</label>
-                      <button className="auto-chart-icon-button" onClick={handleAddAutoChartUrl} title="Add URL row" aria-label="Add URL row">+</button>
-                    </div>
-                    <div className="auto-chart-url-list">
-                      {autoChartUrls.map((url, index) => (
-                        <div key={`auto-chart-url-${index}`} className="auto-chart-url-row">
-                          <input
-                            id={`auto-chart-url-${index}`}
-                            className="settings-folder-input auto-chart-url-input"
-                            type="text"
-                            value={url}
-                            onChange={(event) => handleUpdateAutoChartUrl(index, event.target.value)}
-                            placeholder="Paste an audio or YouTube URL"
-                          />
-                          <button
-                            className="auto-chart-icon-button auto-chart-delete-button"
-                            onClick={() => handleRemoveAutoChartUrl(index)}
-                            title="Remove URL row"
-                            aria-label="Remove URL row"
-                          >
-                            🗑
+                  {autoChartInputTab === 'files' && (
+                    <>
+                      <div className="auto-chart-actions-row">
+                        <button className="settings-modal-secondary" onClick={async () => {
+                          const files = await window.api.openAudioFilesDialog()
+                          if (files.length > 0) {
+                            setAutoChartFiles((prev) => Array.from(new Set([...prev, ...files])))
+                          }
+                        }}>Add Files</button>
+                      </div>
+                      <p style={{ fontSize: 12, opacity: 0.7, margin: '6px 0 4px' }}>
+                        Pick one or more individual audio files (.wav/.ogg/.opus/.mp3/.flac).
+                      </p>
+                      <div className="auto-chart-chip-list">
+                        {autoChartFiles.map((file) => (
+                          <button key={file} className="auto-chart-chip" onClick={() => setAutoChartFiles((prev) => prev.filter((entry) => entry !== file))}>
+                            {file.split(/[\\/]/).pop()} ×
                           </button>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {autoChartInputTab === 'folders' && (
+                    <>
+                      <div className="auto-chart-actions-row">
+                        <button className="settings-modal-secondary" onClick={async () => {
+                          const folder = await window.api.openAudioFolderDialog()
+                          if (folder) {
+                            setAutoChartFolders((prev) => Array.from(new Set([...prev, folder])))
+                          }
+                        }}>Add Folder</button>
+                      </div>
+                      <p style={{ fontSize: 12, opacity: 0.7, margin: '6px 0 4px' }}>
+                        Each folder is scanned for supported audio files; every file is processed as its own song.
+                      </p>
+                      <div className="auto-chart-chip-list">
+                        {autoChartFolders.map((folder) => (
+                          <button key={folder} className="auto-chart-chip" onClick={() => setAutoChartFolders((prev) => prev.filter((entry) => entry !== folder))}>
+                            {folder.split(/[\\/]/).pop()} ×
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {autoChartInputTab === 'stems' && (
+                    <>
+                      <div className="auto-chart-actions-row">
+                        <button
+                          className="settings-modal-secondary"
+                          onClick={async () => {
+                            const folder = await window.api.openAudioFolderDialog()
+                            if (folder) {
+                              setAutoChartStemFolders((prev) => Array.from(new Set([...prev, folder])))
+                            }
+                          }}
+                        >Add Stems Folder</button>
+                      </div>
+                      <p style={{ fontSize: 12, opacity: 0.7, margin: '6px 0 4px' }}>
+                        Folder must contain <code>drums</code>, <code>bass</code>, <code>vocals</code>, <code>other</code> (.wav/.flac/.ogg/.mp3) plus a <code>song</code> mix (song.wav/ogg/opus/mp3/flac).
+                        Demucs separation is skipped — useful when you already have professionally split stems.
+                      </p>
+                      <div className="auto-chart-chip-list">
+                        {autoChartStemFolders.map((folder) => (
+                          <button key={folder} className="auto-chart-chip" onClick={() => setAutoChartStemFolders((prev) => prev.filter((entry) => entry !== folder))}>
+                            {folder.split(/[\\/]/).pop()} ×
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {autoChartInputTab === 'urls' && (
+                    <div className="settings-field-stack">
+                      <div className="auto-chart-url-header">
+                        <label className="settings-field-label" htmlFor="auto-chart-url-0">Audio / YouTube URLs</label>
+                        <button className="auto-chart-icon-button" onClick={handleAddAutoChartUrl} title="Add URL row" aria-label="Add URL row">+</button>
+                      </div>
+                      <div className="auto-chart-url-list">
+                        {autoChartUrls.map((url, index) => (
+                          <div key={`auto-chart-url-${index}`} className="auto-chart-url-row">
+                            <input
+                              id={`auto-chart-url-${index}`}
+                              className="settings-folder-input auto-chart-url-input"
+                              type="text"
+                              value={url}
+                              onChange={(event) => handleUpdateAutoChartUrl(index, event.target.value)}
+                              placeholder="Paste an audio or YouTube URL"
+                            />
+                            <button
+                              className="auto-chart-icon-button auto-chart-delete-button"
+                              onClick={() => handleRemoveAutoChartUrl(index)}
+                              title="Remove URL row"
+                              aria-label="Remove URL row"
+                            >
+                              🗑
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="settings-field-stack" style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #333' }}>
+                    <label className="settings-field-label" htmlFor="auto-chart-output">Output folder</label>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input
+                        id="auto-chart-output"
+                        className="settings-folder-input"
+                        type="text"
+                        value={autoChartProgress.outputDir}
+                        onChange={(event) => setAutoChartProgress((prev) => ({ ...prev, outputDir: event.target.value }))}
+                        placeholder="Generated song folders will be written here"
+                        style={{ flex: 1 }}
+                      />
+                      <button className="settings-modal-secondary" onClick={async () => {
+                        const folder = await window.api.openOutputFolderDialog()
+                        if (folder) {
+                          setAutoChartProgress((prev) => ({ ...prev, outputDir: folder, error: null }))
+                        }
+                      }}>Browse…</button>
                     </div>
                   </div>
                 </div>

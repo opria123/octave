@@ -71,14 +71,14 @@ const MIDI_EDITOR_CONFIG = {
   // in the MIDI editor as they do on the highway.
   laneColors: {
     kick: '#C800FF',
-    doubleKick: '#E580FF',
+    doubleKick: '#C800FF',
     snare: '#FF1D23',
     yellowTom: '#FFE900',
-    yellowCymbal: '#FFF566',
+    yellowCymbal: '#FFE900',
     blueTom: '#00BFFF',
-    blueCymbal: '#66D9FF',
+    blueCymbal: '#00BFFF',
     greenTom: '#79D304',
-    greenCymbal: '#B3E866',
+    greenCymbal: '#79D304',
     green: '#79D304',
     red: '#FF1D23',
     yellow: '#FFE900',
@@ -2142,6 +2142,8 @@ function SwapLanesTool({
   defaultInstrument: Instrument
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
   const [instrument, setInstrument] = useState<Instrument>(
     SWAP_LANE_OPTIONS[defaultInstrument].length > 0 ? defaultInstrument : 'guitar'
   )
@@ -2156,25 +2158,35 @@ function SwapLanesTool({
     if (!next.includes(laneB)) setLaneB(next[2] ?? next[0] ?? '')
   }, [instrument, laneA, laneB])
 
+  const togglePopover = (): void => {
+    if (open) {
+      setOpen(false)
+      return
+    }
+    const rect = buttonRef.current?.getBoundingClientRect()
+    if (rect) setPopoverPos({ top: rect.bottom + 4, left: rect.left })
+    setOpen(true)
+  }
+
   return (
     <div className="midi-swap-tool" style={{ position: 'relative' }}>
       <button
+        ref={buttonRef}
         className="edit-tool-button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={togglePopover}
         title="Swap all notes between two lanes"
       >
         <span>↔</span>
         <span>Swap Lanes</span>
       </button>
-      {open && (
+      {open && popoverPos && (
         <div
           className="midi-swap-popover"
           style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            zIndex: 50,
-            marginTop: 4,
+            position: 'fixed',
+            top: popoverPos.top,
+            left: popoverPos.left,
+            zIndex: 1000,
             padding: 8,
             background: '#1f1f1f',
             border: '1px solid #444',
@@ -2182,7 +2194,8 @@ function SwapLanesTool({
             display: 'flex',
             flexDirection: 'column',
             gap: 6,
-            minWidth: 220,
+            minWidth: 240,
+            color: '#eee',
             boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
           }}
         >
