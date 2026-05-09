@@ -868,9 +868,11 @@ def build_pipeline(
                 self._vocals_charter = OctaveVocalsCharter(device=device, **whisper_kwargs)
             return self._vocals_charter
 
-        def convert_to_ogg(self, input_path: Path, output_path: Path):
+        def convert_to_ogg(self, input_path: Path, output_path: Path, *args, **kwargs):
             # Always write the combined song.ogg via the parent implementation.
-            super().convert_to_ogg(input_path, output_path)
+            # Forward *args/**kwargs so newer upstream signatures (e.g.
+            # trim_start_ms=...) keep working without a worker update.
+            super().convert_to_ogg(input_path, output_path, *args, **kwargs)
             # When the user supplied pre-split stems for this mix, also export
             # each stem as `{stem}.ogg` alongside song.ogg so Clone Hero / YARG
             # can mute the corresponding instrument when notes are missed.
