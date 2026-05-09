@@ -42,6 +42,10 @@ FAST_AUDIO_METADATA_LOOKUP = os.environ.get("OCTAVE_STRUM_FAST_METADATA_LOOKUP",
 # aren't misidentified against MusicBrainz / iTunes / etc.
 DISABLE_ONLINE_LOOKUP = os.environ.get("OCTAVE_STRUM_DISABLE_ONLINE_LOOKUP", "0") == "1"
 SKIP_HARMONIES = os.environ.get("OCTAVE_STRUM_SKIP_HARMONIES", "0") == "1"
+# Maps a song-mix Path to a dict of stem-name → stem Path. Populated by
+# collect_audio_sources() when the user provides a pre-split stems folder;
+# consulted by OctaveBatchPipeline.separate_stems() to skip Demucs.
+PRESPLIT_STEM_REGISTRY: dict[Path, dict[str, Path]] = {}
 if DISABLE_ONLINE_LOOKUP:
     FAST_AUDIO_METADATA_LOOKUP = False
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".ogg", ".opus", ".flac"}
@@ -820,6 +824,14 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
         def separate_stems(self, audio_path: Path, work_dir: Path):
             logger = logging.getLogger(__name__)
 
+            # Pre-split stems supplied by the user — skip Demucs entirely.
+            preset = PRESPLIT_STEM_REGISTRY.get(Path(audio_path).resolve())
+            if preset:
+                logger.info(
+                    f"  Using pre-split stems for {audio_path.name}: {sorted(preset.keys())}"
+                )
+                return dict(preset)
+
             # Native demucs.cpp path (preferred): the main process provisions
             # a binary + ggml weights into userData and exports the paths via
             # env vars. ~10× smaller install footprint than the Python demucs
@@ -1287,6 +1299,42 @@ def collect_audio_sources(payload: dict[str, Any], cache_dir: Path, run_id: str)
         if not folder_sources:
             raise IntegrationError(f"No supported audio files were found in {folder}")
         sources.extend(folder_sources)
+
+    # Pre-split stem folders. Each folder must contain drums/bass/vocals/other
+    # plus a song mix (song.wav/ogg/opus/mp3). The mix is used as the audio
+    # source; the stems are recorded so OctaveBatchPipeline.separate_stems
+    # can return them directly instead of running Demucs.
+    for raw_stem_folder in payload.get("stemFolders", []):
+        folder = Path(raw_stem_folder).expanduser().resolve()
+        if not folder.exists() or not folder.is_dir():
+            raise IntegrationError(f"Stem folder does not exist: {folder}")
+        stem_map: dict[str, Path] = {}
+        for stem_name in ("drums", "bass", "vocals", "other", "guitar", "piano"):
+            for ext in (".wav", ".flac", ".ogg", ".mp3"):
+                candidate = folder / f"{stem_name}{ext}"
+                if candidate.exists():
+                    stem_map[stem_name] = candidate.resolve()
+                    break
+        required = {"drums", "bass", "vocals", "other"}
+        missing = required - stem_map.keys()
+        if missing:
+            raise IntegrationError(
+                f"Stem folder {folder} is missing required stems: {sorted(missing)}. "
+                f"Need at least drums, bass, vocals, other (.wav/.flac/.ogg/.mp3)."
+            )
+        # Locate the song mix.
+        mix: Path | None = None
+        for ext in (".wav", ".flac", ".ogg", ".opus", ".mp3"):
+            candidate = folder / f"song{ext}"
+            if candidate.exists():
+                mix = candidate.resolve()
+                break
+        if mix is None:
+            raise IntegrationError(
+                f"Stem folder {folder} must contain a song mix (song.wav/ogg/opus/mp3 or song.flac)."
+            )
+        PRESPLIT_STEM_REGISTRY[mix] = stem_map
+        sources.append(mix)
 
     url_inputs = [url.strip() for url in payload.get("urls", []) if str(url).strip()]
     if url_inputs:

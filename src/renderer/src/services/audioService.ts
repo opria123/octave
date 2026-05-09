@@ -60,6 +60,12 @@ interface AudioState {
   buffers: AudioBuffer[]
   sourceNodes: AudioBufferSourceNode[]
   gainNode: GainNode | null
+  // Per-stem gain nodes keyed by filePath. Each stem source routes through
+  // its own GainNode → master gainNode → destination so we can mute/solo
+  // individual stems without recreating audio sources.
+  stemGains: Map<string, GainNode>
+  mutedStems: Set<string>
+  soloedStems: Set<string>
   isLoaded: boolean
   duration: number
   isPlaying: boolean
@@ -105,6 +111,9 @@ function getAudioState(songId: string): AudioState {
       buffers: [],
       sourceNodes: [],
       gainNode: null,
+      stemGains: new Map(),
+      mutedStems: new Set(),
+      soloedStems: new Set(),
       isLoaded: false,
       duration: 0,
       isPlaying: false,
@@ -181,6 +190,15 @@ export async function loadAudio(songId: string, songPath: string): Promise<boole
     const sources = await Promise.all(loadPromises)
     state.sources = sources
     state.buffers = sources.map((source) => source.buffer)
+    // Allocate one gain node per loaded stem and wire it to the master gain.
+    for (const source of sources) {
+      if (!state.stemGains.has(source.filePath)) {
+        const stemGain = ctx.createGain()
+        stemGain.connect(state.gainNode!)
+        state.stemGains.set(source.filePath, stemGain)
+      }
+    }
+    applyStemGains(state)
     state.isLoaded = true
     state.duration = Math.max(...sources.map((source) => source.buffer.duration))
 
@@ -266,7 +284,8 @@ function scheduleClipSources(
     const source = ctx.createBufferSource()
     source.buffer = sourceData.buffer
     source.playbackRate.value = speed
-    source.connect(state.gainNode || ctx.destination)
+    const stemGain = state.stemGains.get(sourceData.filePath)
+    source.connect(stemGain ?? state.gainNode ?? ctx.destination)
     source.start(ctx.currentTime + delaySec, bufferOffsetSec, playbackDurationSec)
     sourceNodes.push(source)
   }
@@ -462,6 +481,70 @@ export function setVolume(volume: number): void {
   }
 }
 
+// ── Per-stem mute / solo ─────────────────────────────────────────────
+// If any stems are soloed, only those play; otherwise all play except muted.
+
+const stemControlListeners = new Map<string, Set<() => void>>()
+
+function notifyStemControlsChanged(songId: string): void {
+  stemControlListeners.get(songId)?.forEach((cb) => cb())
+}
+
+function applyStemGains(state: AudioState): void {
+  const ctx = sharedContext
+  const now = ctx?.currentTime ?? 0
+  const hasSolo = state.soloedStems.size > 0
+  for (const [filePath, gain] of state.stemGains) {
+    const audible = hasSolo
+      ? state.soloedStems.has(filePath)
+      : !state.mutedStems.has(filePath)
+    gain.gain.cancelScheduledValues(now)
+    gain.gain.setValueAtTime(audible ? 1 : 0, now)
+  }
+}
+
+export function setStemMute(songId: string, filePath: string, muted: boolean): void {
+  const state = audioRegistry.get(songId)
+  if (!state) return
+  if (muted) state.mutedStems.add(filePath)
+  else state.mutedStems.delete(filePath)
+  applyStemGains(state)
+  notifyStemControlsChanged(songId)
+}
+
+export function setStemSolo(songId: string, filePath: string, soloed: boolean): void {
+  const state = audioRegistry.get(songId)
+  if (!state) return
+  if (soloed) state.soloedStems.add(filePath)
+  else state.soloedStems.delete(filePath)
+  applyStemGains(state)
+  notifyStemControlsChanged(songId)
+}
+
+export interface StemControl {
+  filePath: string
+  filename: string
+  muted: boolean
+  soloed: boolean
+}
+
+export function getStemControls(songId: string): StemControl[] {
+  const state = audioRegistry.get(songId)
+  if (!state) return []
+  return state.sources.map((s) => ({
+    filePath: s.filePath,
+    filename: s.filename,
+    muted: state.mutedStems.has(s.filePath),
+    soloed: state.soloedStems.has(s.filePath)
+  }))
+}
+
+export function onStemControlsChange(songId: string, cb: () => void): () => void {
+  if (!stemControlListeners.has(songId)) stemControlListeners.set(songId, new Set())
+  stemControlListeners.get(songId)!.add(cb)
+  return () => stemControlListeners.get(songId)?.delete(cb)
+}
+
 // Check if audio is loaded
 export function isAudioLoaded(songId: string): boolean {
   return audioRegistry.get(songId)?.isLoaded ?? false
@@ -496,7 +579,12 @@ export function unloadAudio(songId: string): void {
   const state = audioRegistry.get(songId)
   if (state) {
     stopInternal(state)
+    for (const gain of state.stemGains.values()) {
+      try { gain.disconnect() } catch { /* noop */ }
+    }
+    state.stemGains.clear()
     audioRegistry.delete(songId)
+    stemControlListeners.delete(songId)
   }
 }
 

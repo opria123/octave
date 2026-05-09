@@ -59,6 +59,7 @@ interface ChartEditorAPI {
     outputDir: string
     files: string[]
     folders: string[]
+    stemFolders?: string[]
     urls: string[]
     includeKeys?: boolean
     disableOnlineLookup?: boolean

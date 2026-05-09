@@ -27,6 +27,13 @@ export interface AutoChartRunOptions {
   outputDir: string
   files: string[]
   folders: string[]
+  /**
+   * Pre-split stem folders. Each folder must contain individual stem files
+   * (drums.wav, bass.wav, vocals.wav, other.wav) plus a song mix file
+   * (song.wav / song.ogg / song.opus / song.mp3). The Python pipeline will
+   * skip Demucs separation and use the user-supplied stems directly.
+   */
+  stemFolders: string[]
   urls: string[]
   includeKeys?: boolean
   /**

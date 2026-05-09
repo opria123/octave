@@ -51,6 +51,7 @@ export function Toolbar(): React.JSX.Element {
   const [isAutoChartModalOpen, setIsAutoChartModalOpen] = useState(false)
   const [autoChartFiles, setAutoChartFiles] = useState<string[]>([])
   const [autoChartFolders, setAutoChartFolders] = useState<string[]>([])
+  const [autoChartStemFolders, setAutoChartStemFolders] = useState<string[]>([])
   const [autoChartUrls, setAutoChartUrls] = useState<string[]>([EMPTY_AUTO_CHART_URL])
   const [autoChartDisableOnlineLookup, setAutoChartDisableOnlineLookup] = useState(false)
   const [autoChartSkipHarmonies, setAutoChartSkipHarmonies] = useState(false)
@@ -476,7 +477,7 @@ export function Toolbar(): React.JSX.Element {
       return
     }
 
-    if (autoChartFiles.length === 0 && autoChartFolders.length === 0 && urls.length === 0) {
+    if (autoChartFiles.length === 0 && autoChartFolders.length === 0 && autoChartStemFolders.length === 0 && urls.length === 0) {
       setAutoChartProgress((prev) => ({ ...prev, error: 'Add at least one audio file, folder, or URL.' }))
       return
     }
@@ -497,6 +498,7 @@ export function Toolbar(): React.JSX.Element {
         outputDir,
         files: autoChartFiles,
         folders: autoChartFolders,
+        stemFolders: autoChartStemFolders,
         urls,
         includeKeys: true,
         disableOnlineLookup: autoChartDisableOnlineLookup,
@@ -510,7 +512,7 @@ export function Toolbar(): React.JSX.Element {
         error: error instanceof Error ? error.message : String(error)
       }))
     }
-  }, [autoChartDisableOnlineLookup, autoChartSkipHarmonies, autoChartFiles, autoChartFolders, autoChartProgress.outputDir, autoChartUrls, runtimeStatus, updateSettings])
+  }, [autoChartDisableOnlineLookup, autoChartSkipHarmonies, autoChartFiles, autoChartFolders, autoChartStemFolders, autoChartProgress.outputDir, autoChartUrls, runtimeStatus, updateSettings])
 
   const handleCancelAutoChart = useCallback(async (): Promise<void> => {
     if (!autoChartProgress.runId) return
@@ -740,6 +742,7 @@ export function Toolbar(): React.JSX.Element {
           className="toolbar-volume-slider"
           title={`Volume: ${Math.round(volume * 100)}%`}
         />
+        <StemMixerButton activeSongId={activeSongId} />
       </div>
 
       <div className="toolbar-separator" />
@@ -983,6 +986,16 @@ export function Toolbar(): React.JSX.Element {
                         setAutoChartFolders((prev) => Array.from(new Set([...prev, folder])))
                       }
                     }}>Add Folder</button>
+                    <button
+                      className="settings-modal-secondary"
+                      title="Folder must contain drums/bass/vocals/other (.wav/.flac/.ogg/.mp3) plus a song mix (song.wav/ogg/opus/mp3). Demucs separation is skipped."
+                      onClick={async () => {
+                        const folder = await window.api.openAudioFolderDialog()
+                        if (folder) {
+                          setAutoChartStemFolders((prev) => Array.from(new Set([...prev, folder])))
+                        }
+                      }}
+                    >Add Stems Folder</button>
                     <button className="settings-modal-secondary" onClick={async () => {
                       const folder = await window.api.openOutputFolderDialog()
                       if (folder) {
@@ -1000,6 +1013,11 @@ export function Toolbar(): React.JSX.Element {
                     {autoChartFolders.map((folder) => (
                       <button key={folder} className="auto-chart-chip" onClick={() => setAutoChartFolders((prev) => prev.filter((entry) => entry !== folder))}>
                         Folder: {folder.split(/[\\/]/).pop()} ×
+                      </button>
+                    ))}
+                    {autoChartStemFolders.map((folder) => (
+                      <button key={folder} className="auto-chart-chip" onClick={() => setAutoChartStemFolders((prev) => prev.filter((entry) => entry !== folder))}>
+                        Stems: {folder.split(/[\\/]/).pop()} ×
                       </button>
                     ))}
                   </div>
@@ -1130,6 +1148,7 @@ export function Toolbar(): React.JSX.Element {
               <button className="settings-modal-secondary" onClick={() => {
                 setAutoChartFiles([])
                 setAutoChartFolders([])
+                setAutoChartStemFolders([])
                 setAutoChartUrls([EMPTY_AUTO_CHART_URL])
                 setAutoChartErrorCopied(false)
                 setAutoChartProgress({
@@ -1155,6 +1174,128 @@ export function Toolbar(): React.JSX.Element {
       )}
 
       <SettingsModal />
+    </div>
+  )
+}
+
+// Stem mixer popover button — lets the user mute/solo individual audio
+// stems (drums.ogg, bass.ogg, vocals.ogg, etc.) loaded for the song.
+function StemMixerButton({ activeSongId }: { activeSongId: string | null }): React.JSX.Element | null {
+  const [open, setOpen] = useState(false)
+  const [stems, setStems] = useState<audioService.StemControl[]>([])
+
+  useEffect(() => {
+    if (!activeSongId) {
+      setStems([])
+      return
+    }
+    const refresh = (): void => setStems(audioService.getStemControls(activeSongId))
+    refresh()
+    const off = audioService.onStemControlsChange(activeSongId, refresh)
+    const offLoad = audioService.onAudioLoaded(activeSongId, refresh)
+    return () => {
+      off()
+      offLoad()
+    }
+  }, [activeSongId])
+
+  if (!activeSongId) return null
+
+  return (
+    <div style={{ position: 'relative', marginLeft: 4 }}>
+      <button
+        className="toolbar-icon-button"
+        onClick={() => {
+          setStems(audioService.getStemControls(activeSongId))
+          setOpen((v) => !v)
+        }}
+        title="Stem mixer (mute / solo individual tracks)"
+        style={{ padding: '2px 6px' }}
+      >
+        🎚️
+      </button>
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            right: 0,
+            zIndex: 60,
+            marginTop: 4,
+            padding: 8,
+            background: '#1f1f1f',
+            border: '1px solid #444',
+            borderRadius: 4,
+            minWidth: 240,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <strong style={{ fontSize: 12 }}>Stem Mixer</strong>
+            <button onClick={() => setOpen(false)} style={{ padding: '2px 6px' }}>×</button>
+          </div>
+          {stems.length === 0 ? (
+            <div style={{ opacity: 0.6, fontSize: 12, padding: '8px 0' }}>
+              No stems loaded.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {stems.map((s) => (
+                <div
+                  key={s.filePath}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 12,
+                    padding: '2px 0'
+                  }}
+                >
+                  <span
+                    style={{
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title={s.filename}
+                  >
+                    {s.filename}
+                  </span>
+                  <button
+                    onClick={() => audioService.setStemMute(activeSongId, s.filePath, !s.muted)}
+                    title="Mute"
+                    style={{
+                      padding: '2px 6px',
+                      background: s.muted ? '#a33' : '#333',
+                      color: '#fff',
+                      border: '1px solid #555',
+                      borderRadius: 3,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    M
+                  </button>
+                  <button
+                    onClick={() => audioService.setStemSolo(activeSongId, s.filePath, !s.soloed)}
+                    title="Solo"
+                    style={{
+                      padding: '2px 6px',
+                      background: s.soloed ? '#aa3' : '#333',
+                      color: '#fff',
+                      border: '1px solid #555',
+                      borderRadius: 3,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    S
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
