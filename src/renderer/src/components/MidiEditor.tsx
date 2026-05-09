@@ -66,29 +66,32 @@ const MIDI_EDITOR_CONFIG = {
     proBass: '#EF4444',
     vocals: '#E879F9'
   } as Record<string, string>,
+  // Lane colors mirror Rock Band / chart-preview palette
+  // (see chartPreviewModules/constants.ts) so notes look the same
+  // in the MIDI editor as they do on the highway.
   laneColors: {
-    kick: '#FF4444',
-    doubleKick: '#FF66AA',
-    snare: '#FFAA44',
-    yellowTom: '#FFFF44',
-    yellowCymbal: '#FFFF88',
-    blueTom: '#4488FF',
-    blueCymbal: '#88BBFF',
-    greenTom: '#44FF44',
-    greenCymbal: '#88FF88',
-    green: '#44FF44',
-    red: '#FF4444',
-    yellow: '#FFFF44',
-    blue: '#4488FF',
-    orange: '#FF8844',
-    open: '#CC44FF',
-    // Pro Guitar/Bass string colors (1=high E ... 6=low E)
-    '1': '#FF4444',
-    '2': '#FFAA44',
-    '3': '#FFFF44',
-    '4': '#4488FF',
-    '5': '#44FF44',
-    '6': '#FF8844'
+    kick: '#C800FF',
+    doubleKick: '#E580FF',
+    snare: '#FF1D23',
+    yellowTom: '#FFE900',
+    yellowCymbal: '#FFF566',
+    blueTom: '#00BFFF',
+    blueCymbal: '#66D9FF',
+    greenTom: '#79D304',
+    greenCymbal: '#B3E866',
+    green: '#79D304',
+    red: '#FF1D23',
+    yellow: '#FFE900',
+    blue: '#00BFFF',
+    orange: '#FF8400',
+    open: '#C800FF',
+    // Pro Guitar/Bass string colors (1=high E ... 6=low E) — RB3 string palette
+    '1': '#FF1D23',
+    '2': '#FFE900',
+    '3': '#00BFFF',
+    '4': '#FF8400',
+    '5': '#79D304',
+    '6': '#C800FF'
   } as Record<string, string>
 }
 
@@ -2115,6 +2118,135 @@ function SnapSelector({
   )
 }
 
+// Per-instrument lane sets used by the Swap Lanes tool.
+const SWAP_LANE_OPTIONS: Record<Instrument, string[]> = {
+  guitar: ['open', 'green', 'red', 'yellow', 'blue', 'orange'],
+  bass: ['open', 'green', 'red', 'yellow', 'blue', 'orange'],
+  keys: ['open', 'green', 'red', 'yellow', 'blue', 'orange'],
+  drums: ['kick', 'snare', 'yellowTom', 'yellowCymbal', 'blueTom', 'blueCymbal', 'greenTom', 'greenCymbal'],
+  proGuitar: ['1', '2', '3', '4', '5', '6'],
+  proBass: ['1', '2', '3', '4', '5', '6'],
+  proKeys: [],
+  vocals: []
+}
+
+// Swap Lanes tool — pick an instrument + two lanes, swap all notes between them.
+// Defaults to applying across all difficulties; toggle to limit to the active one.
+function SwapLanesTool({
+  onSwap,
+  activeDifficulty,
+  defaultInstrument
+}: {
+  onSwap: (instrument: Instrument, laneA: string, laneB: string, scope: Difficulty | 'all') => void
+  activeDifficulty: Difficulty
+  defaultInstrument: Instrument
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [instrument, setInstrument] = useState<Instrument>(
+    SWAP_LANE_OPTIONS[defaultInstrument].length > 0 ? defaultInstrument : 'guitar'
+  )
+  const lanes = SWAP_LANE_OPTIONS[instrument]
+  const [laneA, setLaneA] = useState<string>(lanes[1] ?? lanes[0] ?? '')
+  const [laneB, setLaneB] = useState<string>(lanes[2] ?? lanes[0] ?? '')
+  const [scopeAll, setScopeAll] = useState(true)
+
+  useEffect(() => {
+    const next = SWAP_LANE_OPTIONS[instrument]
+    if (!next.includes(laneA)) setLaneA(next[1] ?? next[0] ?? '')
+    if (!next.includes(laneB)) setLaneB(next[2] ?? next[0] ?? '')
+  }, [instrument, laneA, laneB])
+
+  return (
+    <div className="midi-swap-tool" style={{ position: 'relative' }}>
+      <button
+        className="edit-tool-button"
+        onClick={() => setOpen((v) => !v)}
+        title="Swap all notes between two lanes"
+      >
+        <span>↔</span>
+        <span>Swap Lanes</span>
+      </button>
+      {open && (
+        <div
+          className="midi-swap-popover"
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            zIndex: 50,
+            marginTop: 4,
+            padding: 8,
+            background: '#1f1f1f',
+            border: '1px solid #444',
+            borderRadius: 4,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            minWidth: 220,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
+          }}
+        >
+          <label style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+            <span>Instrument</span>
+            <select
+              value={instrument}
+              onChange={(e) => setInstrument(e.target.value as Instrument)}
+            >
+              {(Object.keys(SWAP_LANE_OPTIONS) as Instrument[])
+                .filter((i) => SWAP_LANE_OPTIONS[i].length > 0)
+                .map((i) => (
+                  <option key={i} value={i}>
+                    {i}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+            <span>Lane A</span>
+            <select value={laneA} onChange={(e) => setLaneA(e.target.value)}>
+              {lanes.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+            <span>Lane B</span>
+            <select value={laneB} onChange={(e) => setLaneB(e.target.value)}>
+              {lanes.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={scopeAll}
+              onChange={(e) => setScopeAll(e.target.checked)}
+            />
+            <span>All difficulties</span>
+          </label>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+            <button onClick={() => setOpen(false)}>Cancel</button>
+            <button
+              disabled={laneA === laneB}
+              onClick={() => {
+                onSwap(instrument, laneA, laneB, scopeAll ? 'all' : activeDifficulty)
+                setOpen(false)
+              }}
+            >
+              Swap
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Main MIDI Editor component
 export function MidiEditor(): React.JSX.Element {
   const { activeSongId } = useProjectStore()
@@ -3403,6 +3535,13 @@ export function MidiEditor(): React.JSX.Element {
             songStore?.getState().setSnapDivision(v)
             useSettingsStore.getState().updateSettings({ snapDivision: v })
           }}
+        />
+        <SwapLanesTool
+          activeDifficulty={activeDifficulty}
+          defaultInstrument={Array.from(visibleInstruments)[0] ?? 'guitar'}
+          onSwap={(instrument, laneA, laneB, scope) =>
+            songStore?.getState().swapLanes(instrument, laneA, laneB, scope)
+          }
         />
         <div className="midi-zoom-controls">
           <label>Zoom:</label>

@@ -34,6 +34,7 @@ interface SongStoreState extends SongEditorState {
   updateNote: (noteId: string, updates: Partial<Note>) => void
   deleteNote: (noteId: string) => void
   deleteSelectedNotes: () => void
+  swapLanes: (instrument: Instrument, laneA: string, laneB: string, difficulty?: Difficulty | 'all') => void
 
   // Selection actions
   selectNote: (noteId: string, addToSelection?: boolean) => void
@@ -243,6 +244,24 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
             notes: state.song.notes.filter((note) => !selectedSet.has(note.id))
           },
           selectedNoteIds: [],
+          isDirty: true
+        }
+      }),
+
+    swapLanes: (instrument, laneA, laneB, difficulty = 'all') =>
+      set((state) => {
+        if (laneA === laneB) return {}
+        return {
+          song: {
+            ...state.song,
+            notes: state.song.notes.map((note) => {
+              if (note.instrument !== instrument) return note
+              if (difficulty !== 'all' && note.difficulty !== difficulty) return note
+              if (note.lane === laneA) return { ...note, lane: laneB as typeof note.lane }
+              if (note.lane === laneB) return { ...note, lane: laneA as typeof note.lane }
+              return note
+            })
+          },
           isDirty: true
         }
       }),
