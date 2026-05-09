@@ -52,7 +52,19 @@ export function Toolbar(): React.JSX.Element {
   const [autoChartFiles, setAutoChartFiles] = useState<string[]>([])
   const [autoChartFolders, setAutoChartFolders] = useState<string[]>([])
   const [autoChartStemFolders, setAutoChartStemFolders] = useState<string[]>([])
-  const [autoChartInputTab, setAutoChartInputTab] = useState<'files' | 'folders' | 'stems' | 'urls'>('files')
+  const [autoChartInputTab, setAutoChartInputTab] = useState<'mix' | 'stems'>('mix')
+  const [autoChartFullMixSubTab, setAutoChartFullMixSubTab] = useState<'files' | 'folders' | 'urls'>('files')
+  type StemSong = {
+    id: string
+    name: string
+    stems: { drums: string; bass: string; vocals: string; other: string; guitar: string; piano: string; mix: string }
+  }
+  const makeEmptyStemSong = (): StemSong => ({
+    id: `stem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: '',
+    stems: { drums: '', bass: '', vocals: '', other: '', guitar: '', piano: '', mix: '' }
+  })
+  const [autoChartStemSongs, setAutoChartStemSongs] = useState<StemSong[]>([makeEmptyStemSong()])
   const [autoChartUrls, setAutoChartUrls] = useState<string[]>([EMPTY_AUTO_CHART_URL])
   const [autoChartDisableOnlineLookup, setAutoChartDisableOnlineLookup] = useState(false)
   const [autoChartAdvancedOpen, setAutoChartAdvancedOpen] = useState(false)
@@ -474,6 +486,20 @@ export function Toolbar(): React.JSX.Element {
     const outputDir = autoChartProgress.outputDir.trim()
     const urls = autoChartUrls.map((entry) => entry.trim()).filter(Boolean)
 
+    // Build payload-ready stem songs: drop entries that don't have at least
+    // a name and one stem, and trim empty stem slots so the worker doesn't
+    // try to ingest blank paths.
+    const stemSongs = autoChartStemSongs
+      .map((song) => {
+        const stems: Record<string, string> = {}
+        for (const [key, value] of Object.entries(song.stems)) {
+          const trimmed = value.trim()
+          if (trimmed) stems[key] = trimmed
+        }
+        return { name: song.name.trim(), stems }
+      })
+      .filter((song) => Object.keys(song.stems).length > 0)
+
     if (runtimeStatus && runtimeStatus.managed && !runtimeStatus.ready) {
       setAutoChartProgress((prev) => ({
         ...prev,
@@ -487,9 +513,29 @@ export function Toolbar(): React.JSX.Element {
       return
     }
 
-    if (autoChartFiles.length === 0 && autoChartFolders.length === 0 && autoChartStemFolders.length === 0 && urls.length === 0) {
-      setAutoChartProgress((prev) => ({ ...prev, error: 'Add at least one audio file, folder, or URL.' }))
+    if (
+      autoChartFiles.length === 0 &&
+      autoChartFolders.length === 0 &&
+      autoChartStemFolders.length === 0 &&
+      stemSongs.length === 0 &&
+      urls.length === 0
+    ) {
+      setAutoChartProgress((prev) => ({ ...prev, error: 'Add at least one audio file, folder, URL, or stem song.' }))
       return
+    }
+
+    // Each stem song needs a name and at least one of drums/bass/vocals/other
+    // so the pipeline can produce a usable mix.
+    for (const song of stemSongs) {
+      if (!song.name) {
+        setAutoChartProgress((prev) => ({ ...prev, error: 'Every stem song needs a name.' }))
+        return
+      }
+      const hasInstrument = ['drums', 'bass', 'vocals', 'other', 'guitar', 'piano', 'mix'].some((k) => song.stems[k])
+      if (!hasInstrument) {
+        setAutoChartProgress((prev) => ({ ...prev, error: `Stem song "${song.name}" has no stems selected.` }))
+        return
+      }
     }
 
     updateSettings({ autoChartOutputDir: outputDir })
@@ -509,6 +555,7 @@ export function Toolbar(): React.JSX.Element {
         files: autoChartFiles,
         folders: autoChartFolders,
         stemFolders: autoChartStemFolders,
+        stemSongs,
         urls,
         includeKeys: autoChartEnabledTracks.keys,
         disableOnlineLookup: autoChartDisableOnlineLookup,
@@ -523,7 +570,7 @@ export function Toolbar(): React.JSX.Element {
         error: error instanceof Error ? error.message : String(error)
       }))
     }
-  }, [autoChartDisableOnlineLookup, autoChartEnabledTracks, autoChartFiles, autoChartFolders, autoChartStemFolders, autoChartProgress.outputDir, autoChartUrls, runtimeStatus, updateSettings])
+  }, [autoChartDisableOnlineLookup, autoChartEnabledTracks, autoChartFiles, autoChartFolders, autoChartStemFolders, autoChartStemSongs, autoChartProgress.outputDir, autoChartUrls, runtimeStatus, updateSettings])
 
   const handleCancelAutoChart = useCallback(async (): Promise<void> => {
     if (!autoChartProgress.runId) return
@@ -984,7 +1031,7 @@ export function Toolbar(): React.JSX.Element {
                   style={{ border: 'none', padding: 0, margin: 0, opacity: autoChartProgress.isRunning ? 0.55 : 1 }}
                 >
                 <div className="settings-preferences-body auto-chart-inputs">
-                  {/* Top-level input source tabs */}
+                  {/* Top-level: Full Mix vs Stems */}
                   <div
                     role="tablist"
                     style={{
@@ -995,10 +1042,8 @@ export function Toolbar(): React.JSX.Element {
                     }}
                   >
                     {([
-                      { id: 'files', label: 'Audio Files', count: autoChartFiles.length },
-                      { id: 'folders', label: 'Audio Folders', count: autoChartFolders.length },
-                      { id: 'stems', label: 'Pre-Split Stems', count: autoChartStemFolders.length },
-                      { id: 'urls', label: 'URLs', count: autoChartUrls.filter((u) => u.trim()).length }
+                      { id: 'mix', label: 'Full Mix', count: autoChartFiles.length + autoChartFolders.length + autoChartUrls.filter((u) => u.trim()).length },
+                      { id: 'stems', label: 'Stems', count: autoChartStemSongs.filter((s) => Object.values(s.stems).some((v) => v.trim())).length }
                     ] as const).map((tab) => {
                       const active = autoChartInputTab === tab.id
                       return (
@@ -1008,21 +1053,22 @@ export function Toolbar(): React.JSX.Element {
                           aria-selected={active}
                           onClick={() => setAutoChartInputTab(tab.id)}
                           style={{
-                            padding: '8px 14px',
+                            padding: '10px 18px',
                             border: 'none',
                             borderBottom: active ? '2px solid #4a9eff' : '2px solid transparent',
                             background: active ? '#2a2a2a' : 'transparent',
                             color: active ? '#fff' : '#bbb',
                             cursor: 'pointer',
-                            fontWeight: active ? 600 : 400
+                            fontWeight: active ? 600 : 500,
+                            fontSize: 14
                           }}
                         >
                           {tab.label}
                           {tab.count > 0 && (
                             <span
                               style={{
-                                marginLeft: 6,
-                                padding: '1px 6px',
+                                marginLeft: 8,
+                                padding: '1px 7px',
                                 background: '#4a9eff',
                                 color: '#fff',
                                 borderRadius: 10,
@@ -1037,107 +1083,203 @@ export function Toolbar(): React.JSX.Element {
                     })}
                   </div>
 
-                  {autoChartInputTab === 'files' && (
-                    <>
-                      <div className="auto-chart-actions-row">
-                        <button className="settings-modal-secondary" onClick={async () => {
-                          const files = await window.api.openAudioFilesDialog()
-                          if (files.length > 0) {
-                            setAutoChartFiles((prev) => Array.from(new Set([...prev, ...files])))
-                          }
-                        }}>Add Files</button>
+                  {autoChartInputTab === 'mix' && (
+                    <div>
+                      {/* Sub-tabs: Audio Files / Audio Folders / URLs */}
+                      <div
+                        role="tablist"
+                        style={{
+                          display: 'flex',
+                          gap: 2,
+                          borderBottom: '1px solid #2f2f2f',
+                          marginBottom: 12
+                        }}
+                      >
+                        {([
+                          { id: 'files', label: 'Audio Files', count: autoChartFiles.length },
+                          { id: 'folders', label: 'Audio Folders', count: autoChartFolders.length },
+                          { id: 'urls', label: 'URLs', count: autoChartUrls.filter((u) => u.trim()).length }
+                        ] as const).map((tab) => {
+                          const active = autoChartFullMixSubTab === tab.id
+                          return (
+                            <button
+                              key={tab.id}
+                              role="tab"
+                              aria-selected={active}
+                              onClick={() => setAutoChartFullMixSubTab(tab.id)}
+                              style={{
+                                padding: '6px 12px',
+                                border: 'none',
+                                borderBottom: active ? '2px solid #4a9eff' : '2px solid transparent',
+                                background: 'transparent',
+                                color: active ? '#fff' : '#999',
+                                cursor: 'pointer',
+                                fontWeight: active ? 600 : 400,
+                                fontSize: 12
+                              }}
+                            >
+                              {tab.label}
+                              {tab.count > 0 && (
+                                <span style={{ marginLeft: 6, padding: '1px 6px', background: '#4a9eff', color: '#fff', borderRadius: 10, fontSize: 10 }}>{tab.count}</span>
+                              )}
+                            </button>
+                          )
+                        })}
                       </div>
-                      <p style={{ fontSize: 12, opacity: 0.7, margin: '6px 0 4px' }}>
-                        Pick one or more individual audio files (.wav/.ogg/.opus/.mp3/.flac).
-                      </p>
-                      <div className="auto-chart-chip-list">
-                        {autoChartFiles.map((file) => (
-                          <button key={file} className="auto-chart-chip" onClick={() => setAutoChartFiles((prev) => prev.filter((entry) => entry !== file))}>
-                            {file.split(/[\\/]/).pop()} ×
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
 
-                  {autoChartInputTab === 'folders' && (
-                    <>
-                      <div className="auto-chart-actions-row">
-                        <button className="settings-modal-secondary" onClick={async () => {
-                          const folder = await window.api.openAudioFolderDialog()
-                          if (folder) {
-                            setAutoChartFolders((prev) => Array.from(new Set([...prev, folder])))
-                          }
-                        }}>Add Folder</button>
-                      </div>
-                      <p style={{ fontSize: 12, opacity: 0.7, margin: '6px 0 4px' }}>
-                        Each folder is scanned for supported audio files; every file is processed as its own song.
-                      </p>
-                      <div className="auto-chart-chip-list">
-                        {autoChartFolders.map((folder) => (
-                          <button key={folder} className="auto-chart-chip" onClick={() => setAutoChartFolders((prev) => prev.filter((entry) => entry !== folder))}>
-                            {folder.split(/[\\/]/).pop()} ×
-                          </button>
-                        ))}
-                      </div>
-                    </>
+                      {autoChartFullMixSubTab === 'files' && (
+                        <>
+                          <div className="auto-chart-actions-row">
+                            <button className="settings-modal-secondary" onClick={async () => {
+                              const files = await window.api.openAudioFilesDialog()
+                              if (files.length > 0) {
+                                setAutoChartFiles((prev) => Array.from(new Set([...prev, ...files])))
+                              }
+                            }}>Add Files</button>
+                          </div>
+                          <p style={{ fontSize: 12, opacity: 0.7, margin: '6px 0 4px' }}>
+                            Pick one or more individual audio files (.wav/.ogg/.opus/.mp3/.flac).
+                          </p>
+                          <div className="auto-chart-chip-list">
+                            {autoChartFiles.map((file) => (
+                              <button key={file} className="auto-chart-chip" onClick={() => setAutoChartFiles((prev) => prev.filter((entry) => entry !== file))}>
+                                {file.split(/[\\/]/).pop()} ×
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+
+                      {autoChartFullMixSubTab === 'folders' && (
+                        <>
+                          <div className="auto-chart-actions-row">
+                            <button className="settings-modal-secondary" onClick={async () => {
+                              const folder = await window.api.openAudioFolderDialog()
+                              if (folder) {
+                                setAutoChartFolders((prev) => Array.from(new Set([...prev, folder])))
+                              }
+                            }}>Add Folder</button>
+                          </div>
+                          <p style={{ fontSize: 12, opacity: 0.7, margin: '6px 0 4px' }}>
+                            Each folder is scanned for supported audio files; every file is processed as its own song.
+                          </p>
+                          <div className="auto-chart-chip-list">
+                            {autoChartFolders.map((folder) => (
+                              <button key={folder} className="auto-chart-chip" onClick={() => setAutoChartFolders((prev) => prev.filter((entry) => entry !== folder))}>
+                                {folder.split(/[\\/]/).pop()} ×
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+
+                      {autoChartFullMixSubTab === 'urls' && (
+                        <div className="settings-field-stack">
+                          <div className="auto-chart-url-header">
+                            <label className="settings-field-label" htmlFor="auto-chart-url-0">Audio / YouTube URLs</label>
+                            <button className="auto-chart-icon-button" onClick={handleAddAutoChartUrl} title="Add URL row" aria-label="Add URL row">+</button>
+                          </div>
+                          <div className="auto-chart-url-list">
+                            {autoChartUrls.map((url, index) => (
+                              <div key={`auto-chart-url-${index}`} className="auto-chart-url-row">
+                                <input
+                                  id={`auto-chart-url-${index}`}
+                                  className="settings-folder-input auto-chart-url-input"
+                                  type="text"
+                                  value={url}
+                                  onChange={(event) => handleUpdateAutoChartUrl(index, event.target.value)}
+                                  placeholder="Paste an audio or YouTube URL"
+                                />
+                                <button
+                                  className="auto-chart-icon-button auto-chart-delete-button"
+                                  onClick={() => handleRemoveAutoChartUrl(index)}
+                                  title="Remove URL row"
+                                  aria-label="Remove URL row"
+                                >
+                                  🗑
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {autoChartInputTab === 'stems' && (
-                    <>
-                      <div className="auto-chart-actions-row">
-                        <button
-                          className="settings-modal-secondary"
-                          onClick={async () => {
-                            const folder = await window.api.openAudioFolderDialog()
-                            if (folder) {
-                              setAutoChartStemFolders((prev) => Array.from(new Set([...prev, folder])))
-                            }
-                          }}
-                        >Add Stems Folder</button>
-                      </div>
-                      <p style={{ fontSize: 12, opacity: 0.7, margin: '6px 0 4px' }}>
-                        Folder must contain <code>drums</code>, <code>bass</code>, <code>vocals</code>, <code>other</code> (.wav/.flac/.ogg/.mp3) plus a <code>song</code> mix (song.wav/ogg/opus/mp3/flac).
-                        Demucs separation is skipped — useful when you already have professionally split stems.
+                    <div>
+                      <p style={{ fontSize: 12, opacity: 0.75, margin: '0 0 10px' }}>
+                        Provide one file or URL per instrument. Empty slots are skipped — that instrument will not be charted, and the Demucs separation phase is skipped entirely (your stems are used as-is). If you don't supply a full mix, one is generated by summing the provided stems.
                       </p>
-                      <div className="auto-chart-chip-list">
-                        {autoChartStemFolders.map((folder) => (
-                          <button key={folder} className="auto-chart-chip" onClick={() => setAutoChartStemFolders((prev) => prev.filter((entry) => entry !== folder))}>
-                            {folder.split(/[\\/]/).pop()} ×
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-
-                  {autoChartInputTab === 'urls' && (
-                    <div className="settings-field-stack">
-                      <div className="auto-chart-url-header">
-                        <label className="settings-field-label" htmlFor="auto-chart-url-0">Audio / YouTube URLs</label>
-                        <button className="auto-chart-icon-button" onClick={handleAddAutoChartUrl} title="Add URL row" aria-label="Add URL row">+</button>
-                      </div>
-                      <div className="auto-chart-url-list">
-                        {autoChartUrls.map((url, index) => (
-                          <div key={`auto-chart-url-${index}`} className="auto-chart-url-row">
+                      {autoChartStemSongs.map((song, songIdx) => (
+                        <div key={song.id} style={{ border: '1px solid #333', borderRadius: 6, padding: 12, marginBottom: 10, background: '#1c1c1c' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                             <input
-                              id={`auto-chart-url-${index}`}
-                              className="settings-folder-input auto-chart-url-input"
                               type="text"
-                              value={url}
-                              onChange={(event) => handleUpdateAutoChartUrl(index, event.target.value)}
-                              placeholder="Paste an audio or YouTube URL"
+                              className="settings-folder-input"
+                              value={song.name}
+                              onChange={(event) => {
+                                const v = event.target.value
+                                setAutoChartStemSongs((prev) => prev.map((s, i) => i === songIdx ? { ...s, name: v } : s))
+                              }}
+                              placeholder="Song name (used for output folder)"
+                              style={{ flex: 1 }}
                             />
-                            <button
-                              className="auto-chart-icon-button auto-chart-delete-button"
-                              onClick={() => handleRemoveAutoChartUrl(index)}
-                              title="Remove URL row"
-                              aria-label="Remove URL row"
-                            >
-                              🗑
-                            </button>
+                            {autoChartStemSongs.length > 1 && (
+                              <button
+                                type="button"
+                                className="auto-chart-icon-button auto-chart-delete-button"
+                                onClick={() => setAutoChartStemSongs((prev) => prev.filter((_, i) => i !== songIdx))}
+                                title="Remove this stem song"
+                                aria-label="Remove stem song"
+                              >🗑</button>
+                            )}
                           </div>
-                        ))}
-                      </div>
+                          <div style={{ display: 'grid', gap: 6 }}>
+                            {([
+                              { key: 'drums', label: 'Drums' },
+                              { key: 'bass', label: 'Bass' },
+                              { key: 'vocals', label: 'Vocals' },
+                              { key: 'other', label: 'Other' },
+                              { key: 'guitar', label: 'Guitar' },
+                              { key: 'piano', label: 'Piano / Keys' },
+                              { key: 'mix', label: 'Full Mix (optional)' }
+                            ] as const).map((row) => (
+                              <div key={row.key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <label style={{ width: 110, fontSize: 12, opacity: 0.85 }}>{row.label}</label>
+                                <input
+                                  type="text"
+                                  className="settings-folder-input"
+                                  value={song.stems[row.key]}
+                                  onChange={(event) => {
+                                    const v = event.target.value
+                                    setAutoChartStemSongs((prev) => prev.map((s, i) => i === songIdx ? { ...s, stems: { ...s.stems, [row.key]: v } } : s))
+                                  }}
+                                  placeholder="File path or URL — leave blank to skip"
+                                  style={{ flex: 1 }}
+                                />
+                                <button
+                                  type="button"
+                                  className="settings-modal-secondary"
+                                  style={{ padding: '4px 10px', fontSize: 12 }}
+                                  onClick={async () => {
+                                    const files = await window.api.openAudioFilesDialog()
+                                    const picked = files[0]
+                                    if (picked) {
+                                      setAutoChartStemSongs((prev) => prev.map((s, i) => i === songIdx ? { ...s, stems: { ...s.stems, [row.key]: picked } } : s))
+                                    }
+                                  }}
+                                >Browse…</button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        className="settings-modal-secondary"
+                        onClick={() => setAutoChartStemSongs((prev) => [...prev, makeEmptyStemSong()])}
+                      >+ Add another stem song</button>
                     </div>
                   )}
 
@@ -1306,6 +1448,7 @@ export function Toolbar(): React.JSX.Element {
                 setAutoChartFiles([])
                 setAutoChartFolders([])
                 setAutoChartStemFolders([])
+                setAutoChartStemSongs([makeEmptyStemSong()])
                 setAutoChartUrls([EMPTY_AUTO_CHART_URL])
                 setAutoChartErrorCopied(false)
                 setAutoChartProgress({

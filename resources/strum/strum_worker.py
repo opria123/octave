@@ -1343,6 +1343,121 @@ def collect_audio_sources(payload: dict[str, Any], cache_dir: Path, run_id: str)
         PRESPLIT_STEM_REGISTRY[mix] = stem_map
         sources.append(mix)
 
+    # Per-instrument stem songs. Each entry maps instrument name → file path
+    # or URL. Empty/missing slots are skipped (that instrument is not
+    # charted). If "mix" is not provided we synthesise one by summing the
+    # supplied stems so the rest of the pipeline (tempo / beat / metadata)
+    # has audio to analyse. Demucs separation is skipped for these songs.
+    stem_songs = payload.get("stemSongs") or []
+    if stem_songs:
+        import numpy as _np
+        import soundfile as _sf
+        stems_root = cache_dir / "stem-songs" / payload["runId"]
+        stems_root.mkdir(parents=True, exist_ok=True)
+        url_dl_dir = cache_dir / "downloaded-inputs" / payload["runId"]
+        for ss_idx, entry in enumerate(stem_songs):
+            if not isinstance(entry, dict):
+                continue
+            stem_inputs = entry.get("stems") or {}
+            if not isinstance(stem_inputs, dict) or not stem_inputs:
+                continue
+            raw_name = str(entry.get("name") or "").strip()
+            song_name = sanitize_filename(raw_name, f"stem-song-{ss_idx + 1}")
+            song_dir = stems_root / song_name
+            song_dir.mkdir(parents=True, exist_ok=True)
+
+            def _resolve_stem(value: str, label: str) -> Path:
+                value = str(value).strip()
+                if not value:
+                    raise IntegrationError(f"Empty stem value for {label}")
+                parsed = urllib.parse.urlparse(value)
+                if parsed.scheme in {"http", "https"}:
+                    url_dl_dir.mkdir(parents=True, exist_ok=True)
+                    if is_direct_audio_url(value):
+                        return download_direct_audio(value, url_dl_dir, run_id)
+                    return download_youtube_audio(value, url_dl_dir, run_id)
+                p = Path(value).expanduser().resolve()
+                if not p.exists() or not p.is_file():
+                    raise IntegrationError(f"Stem file does not exist for {label}: {p}")
+                if p.suffix.lower() not in AUDIO_EXTENSIONS:
+                    raise IntegrationError(f"Unsupported stem audio file for {label}: {p.name}")
+                return p
+
+            stem_map: dict[str, Path] = {}
+            mix_path: Path | None = None
+            for key in ("drums", "bass", "vocals", "other", "guitar", "piano", "mix"):
+                raw_val = stem_inputs.get(key)
+                if not raw_val:
+                    continue
+                resolved = _resolve_stem(raw_val, f"{song_name}/{key}")
+                if key == "mix":
+                    mix_path = resolved
+                else:
+                    stem_map[key] = resolved
+
+            if not stem_map and mix_path is None:
+                raise IntegrationError(
+                    f"Stem song '{song_name}' has no usable inputs."
+                )
+
+            if mix_path is None:
+                # Auto-mix the supplied stems. Load each at its native rate,
+                # resample any odd ones to the highest-rate stem, sum, and
+                # peak-normalise. Output as 16-bit WAV so downstream tools
+                # don't choke on float formats.
+                emit_progress(run_id, "bootstrap", f"Auto-mixing stems for {song_name}", current_item=song_name)
+                loaded: list[tuple[_np.ndarray, int]] = []
+                for stem_file in stem_map.values():
+                    data, sr = _sf.read(str(stem_file), always_2d=True)
+                    loaded.append((data.astype(_np.float32, copy=False), sr))
+                target_sr = max(sr for _, sr in loaded)
+                target_channels = max(d.shape[1] for d, _ in loaded)
+                max_len = 0
+                resampled: list[_np.ndarray] = []
+                for data, sr in loaded:
+                    if sr != target_sr:
+                        ratio = target_sr / sr
+                        new_len = int(round(data.shape[0] * ratio))
+                        # Cheap linear resample via numpy interp (we only
+                        # need an analysis-grade mix, not mastering).
+                        old_idx = _np.linspace(0.0, data.shape[0] - 1, data.shape[0])
+                        new_idx = _np.linspace(0.0, data.shape[0] - 1, new_len)
+                        channels = []
+                        for ch in range(data.shape[1]):
+                            channels.append(_np.interp(new_idx, old_idx, data[:, ch]).astype(_np.float32))
+                        data = _np.stack(channels, axis=1)
+                    if data.shape[1] < target_channels:
+                        # mono → stereo by duplication
+                        data = _np.tile(data, (1, target_channels // data.shape[1]))
+                    elif data.shape[1] > target_channels:
+                        data = data[:, :target_channels]
+                    resampled.append(data)
+                    max_len = max(max_len, data.shape[0])
+                summed = _np.zeros((max_len, target_channels), dtype=_np.float32)
+                for data in resampled:
+                    summed[: data.shape[0]] += data
+                peak = float(_np.max(_np.abs(summed))) or 1.0
+                if peak > 0.999:
+                    summed = summed * (0.999 / peak)
+                mix_path = song_dir / f"{song_name}.wav"
+                _sf.write(str(mix_path), summed, target_sr, subtype="PCM_16")
+            else:
+                # Copy/rename the user-supplied mix into the stem-song dir
+                # so the output folder name matches the user's chosen name.
+                desired = song_dir / f"{song_name}{mix_path.suffix.lower()}"
+                if mix_path != desired:
+                    try:
+                        if desired.exists():
+                            desired.unlink()
+                        shutil.copy2(mix_path, desired)
+                        mix_path = desired
+                    except Exception:
+                        # Fall back to using the original path.
+                        pass
+
+            PRESPLIT_STEM_REGISTRY[mix_path] = stem_map
+            sources.append(mix_path)
+
     url_inputs = [url.strip() for url in payload.get("urls", []) if str(url).strip()]
     if url_inputs:
         download_dir = cache_dir / "downloaded-inputs" / payload["runId"]

@@ -126,6 +126,10 @@ const api = {
     files: string[]
     folders: string[]
     stemFolders?: string[]
+    stemSongs?: Array<{
+      name?: string
+      stems: Partial<Record<'drums' | 'bass' | 'vocals' | 'other' | 'guitar' | 'piano' | 'mix', string>>
+    }>
     urls: string[]
     includeKeys?: boolean
     disableOnlineLookup?: boolean

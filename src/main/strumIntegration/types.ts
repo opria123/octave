@@ -34,6 +34,17 @@ export interface AutoChartRunOptions {
    * skip Demucs separation and use the user-supplied stems directly.
    */
   stemFolders: string[]
+  /**
+   * Per-instrument stem songs. Each entry yields one chart; values are
+   * either local file paths or HTTP(S) URLs. Empty slots are skipped
+   * (that instrument is not charted). The Demucs separation phase is
+   * skipped entirely — the supplied stems are used as-is. If `mix` is
+   * not provided the worker auto-mixes the supplied stems.
+   */
+  stemSongs?: Array<{
+    name?: string
+    stems: Partial<Record<'drums' | 'bass' | 'vocals' | 'other' | 'guitar' | 'piano' | 'mix', string>>
+  }>
   urls: string[]
   includeKeys?: boolean
   /**
