@@ -2186,20 +2186,10 @@ function SwapLanesTool({
             position: 'fixed',
             top: popoverPos.top,
             left: popoverPos.left,
-            zIndex: 1000,
-            padding: 8,
-            background: '#1f1f1f',
-            border: '1px solid #444',
-            borderRadius: 4,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-            minWidth: 240,
-            color: '#eee',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
+            zIndex: 1000
           }}
         >
-          <label style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+          <label className="midi-swap-popover-row">
             <span>Instrument</span>
             <select
               value={instrument}
@@ -2214,7 +2204,7 @@ function SwapLanesTool({
                 ))}
             </select>
           </label>
-          <label style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+          <label className="midi-swap-popover-row">
             <span>Lane A</span>
             <select value={laneA} onChange={(e) => setLaneA(e.target.value)}>
               {lanes.map((l) => (
@@ -2224,7 +2214,7 @@ function SwapLanesTool({
               ))}
             </select>
           </label>
-          <label style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+          <label className="midi-swap-popover-row">
             <span>Lane B</span>
             <select value={laneB} onChange={(e) => setLaneB(e.target.value)}>
               {lanes.map((l) => (
@@ -2234,7 +2224,7 @@ function SwapLanesTool({
               ))}
             </select>
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label className="midi-swap-popover-checkbox">
             <input
               type="checkbox"
               checked={scopeAll}
@@ -2242,9 +2232,10 @@ function SwapLanesTool({
             />
             <span>All difficulties</span>
           </label>
-          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+          <div className="midi-swap-popover-actions">
             <button onClick={() => setOpen(false)}>Cancel</button>
             <button
+              className="primary"
               disabled={laneA === laneB}
               onClick={() => {
                 onSwap(instrument, laneA, laneB, scopeAll ? 'all' : activeDifficulty)

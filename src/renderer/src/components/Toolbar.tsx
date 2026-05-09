@@ -1310,37 +1310,16 @@ export function Toolbar(): React.JSX.Element {
               <section className="settings-preferences-group">
                 <button
                   type="button"
+                  className="auto-chart-collapse-toggle"
                   onClick={() => setAutoChartAdvancedOpen((v) => !v)}
                   aria-expanded={autoChartAdvancedOpen}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    width: '100%',
-                    background: 'transparent',
-                    border: 'none',
-                    padding: '6px 4px',
-                    cursor: 'pointer',
-                    color: 'inherit',
-                    textAlign: 'left'
-                  }}
                 >
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 14,
-                      height: 14,
-                      fontSize: 10,
-                      lineHeight: 1,
-                      color: '#bbb',
-                      transform: autoChartAdvancedOpen ? 'rotate(90deg)' : 'rotate(0deg)',
-                      transition: 'transform 120ms'
-                    }}
-                  >▸</span>
-                  <h3 className="settings-hotkey-group-title" style={{ margin: 0 }}>Advanced</h3>
+                  <span className="auto-chart-collapse-chevron" aria-hidden="true">
+                    <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M4 2.5L8 6L4 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                  <span>Advanced</span>
                 </button>
                 {autoChartAdvancedOpen && (
                 <div className="settings-preferences-body">

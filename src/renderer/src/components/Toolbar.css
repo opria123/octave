@@ -517,3 +517,55 @@
   color: #ffd39b;
   font-size: 12px;
 }
+
+
+/* Collapsible section toggle (used by the auto-chart Advanced section) */
+.auto-chart-collapse-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  transition: color 0.12s, background 0.12s;
+}
+
+.auto-chart-collapse-toggle:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.auto-chart-collapse-toggle[aria-expanded='false'] {
+  border-bottom-color: transparent;
+}
+
+.auto-chart-collapse-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+  transition: transform 0.15s ease;
+}
+
+.auto-chart-collapse-toggle[aria-expanded='true'] .auto-chart-collapse-chevron {
+  transform: rotate(90deg);
+}
+
+.auto-chart-collapse-toggle:hover .auto-chart-collapse-chevron {
+  color: var(--text-primary);
+}
+
+.auto-chart-collapse-chevron svg {
+  width: 12px;
+  height: 12px;
+}
