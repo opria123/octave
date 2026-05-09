@@ -2,6 +2,8 @@
 
 Open with `Ctrl+,` (or *Toolbar → Settings*).
 
+![Settings modal](/screenshots/settings-modal.png)
+
 ## General
 
 - **Theme** — Dark (default) / Light

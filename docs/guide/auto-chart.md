@@ -18,10 +18,12 @@ The Auto-Chart pipeline:
 
 ## Quick start
 
+![Auto-Chart modal](/screenshots/auto-chart-modal.png)
+
 1. Click the **Auto-Chart** button in the toolbar.
-2. **Drop a file** (`.mp3` / `.wav` / `.flac` / `.ogg` / `.opus`) onto the modal — or paste a YouTube URL.
-3. Click **Generate**.
-4. Wait. Progress shows per-stage (split → drums → pitched → vocals → assembly).
+2. **Add files**, point at folders, or paste a URL — the modal has tabs for each.
+3. Click **Start Auto-Chart**.
+4. Wait. Progress shows per-stage (bootstrap → split → drums → pitched → vocals → assembly).
 5. The new song folder appears in your [Project Explorer](/guide/project-explorer).
 
 That's it for the basic flow. The advanced section covers everything else.

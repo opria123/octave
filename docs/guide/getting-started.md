@@ -30,6 +30,8 @@ You'll need [Node.js](https://nodejs.org/) 18+ and npm. Python is **not** requir
 
 ## First launch
 
+![OCTAVE on first launch — empty editor](/screenshots/editor-empty.png)
+
 1. Launch OCTAVE.
 2. The first time you start it, you'll see the **Setup Modal** — pick your output directory for new projects (or skip and set it later in *Settings*).
 3. Click **File → Open Folder** (or drag a folder onto the window).

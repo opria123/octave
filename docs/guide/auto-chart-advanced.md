@@ -2,6 +2,8 @@
 
 The **Advanced** disclosure in the Auto-Chart modal exposes everything you can tune about a generation run.
 
+![Auto-Chart Advanced section](/screenshots/auto-chart-advanced.png)
+
 ## Tracks to chart
 
 By default OCTAVE produces all five instruments. Uncheck any to skip its stage entirely:
