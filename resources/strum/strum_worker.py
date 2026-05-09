@@ -51,6 +51,42 @@ PRESPLIT_STEM_REGISTRY: dict[Path, dict[str, Path]] = {}
 # is written to each song's notes.mid (note ticks are retimed so real-world
 # note positions stay aligned with the audio). See _retime_midi_to_tempo_map.
 USER_TEMPO_MAP: list[tuple[float, float]] = []
+# When False, strip PART REAL_KEYS_X tracks from notes.mid so users can
+# disable Pro Keys output even though upstream STRUM always generates them
+# alongside the standard 5-lane keys track.
+INCLUDE_PRO_KEYS: bool = True
+# One-shot flag so we only emit the basic_pitch troubleshooting hint once
+# per worker run (the same error fires for guitar+bass+keys).
+_BASIC_PITCH_HINT_EMITTED = False
+
+
+def _diagnose_basic_pitch_failure(exc: BaseException) -> None:
+    """If `exc` looks like a basic_pitch SavedModel load failure, print a
+    targeted, actionable hint to stderr (once per worker run). The most
+    common cause we've seen is cross-version site-packages contamination
+    (e.g. a 3.11 interpreter loading wheels installed for 3.10)."""
+    global _BASIC_PITCH_HINT_EMITTED
+    if _BASIC_PITCH_HINT_EMITTED:
+        return
+    msg = str(exc)
+    if "basic_pitch" not in msg and "icassp_2022" not in msg:
+        return
+    _BASIC_PITCH_HINT_EMITTED = True
+    import sys as _sys
+    site_paths = [p for p in _sys.path if "site-packages" in p]
+    print(
+        "[OCTAVE] !!! basic_pitch model failed to load. This usually means the\n"
+        "         basic_pitch install is incomplete OR the running Python is\n"
+        "         loading wheels built for a different Python version (check\n"
+        "         %APPDATA%\\Python\\PythonXY\\site-packages on Windows and the\n"
+        "         PYTHONPATH env var). Detected interpreter: "
+        f"{_sys.version.split()[0]} at {_sys.executable}\n"
+        f"         site-packages on path: {site_paths}\n"
+        "         Fix: pip install --force-reinstall basic-pitch tensorflow\n"
+        "         under the SAME interpreter Octave launches (or set\n"
+        "         OCTAVE_STRUM_PYTHON to a venv that has them).",
+        file=_sys.stderr, flush=True,
+    )
 if DISABLE_ONLINE_LOOKUP:
     FAST_AUDIO_METADATA_LOOKUP = False
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".ogg", ".opus", ".flac"}
@@ -1106,6 +1142,9 @@ def build_pipeline(
                 _gb.detect_pitches_crepe = orig
 
         def transcribe_guitar(self, other_stem: Path, tempo_bpm: float, *args, **kwargs):
+            if not self.include_guitar:
+                print("[OCTAVE] >>> transcribe_guitar skipped (include_guitar=False)", file=sys.stderr, flush=True)
+                return None
             # TF is now bundled, so Basic Pitch uses its default TF model path
             # (matches the STRUM benchmark). CREPE capacity is left at its
             # default unless OCTAVE_CREPE_MODEL is set. Forward *args/**kwargs
@@ -1121,12 +1160,16 @@ def build_pipeline(
                 return chart
             except Exception as exc:
                 import traceback as _tb
+                _diagnose_basic_pitch_failure(exc)
                 print(f"[OCTAVE] !!! transcribe_guitar EXCEPTION: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
                 _tb.print_exc(file=sys.stderr)
                 sys.stderr.flush()
                 return None
 
         def transcribe_bass(self, bass_stem: Path, tempo_bpm: float, *args, **kwargs):
+            if not self.include_bass:
+                print("[OCTAVE] >>> transcribe_bass skipped (include_bass=False)", file=sys.stderr, flush=True)
+                return None
             print(f"[OCTAVE] >>> transcribe_bass(stem={bass_stem}, tempo={tempo_bpm})", file=sys.stderr, flush=True)
             try:
                 from src.inference.guitar_hybrid_v2 import transcribe_guitar_hybrid
@@ -1149,6 +1192,7 @@ def build_pipeline(
                 return chart
             except Exception as exc:
                 import traceback as _tb
+                _diagnose_basic_pitch_failure(exc)
                 print(f"[OCTAVE] !!! transcribe_bass EXCEPTION: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
                 _tb.print_exc(file=sys.stderr)
                 sys.stderr.flush()
@@ -1170,6 +1214,12 @@ def build_pipeline(
                 return None, None
 
         def transcribe_keys(self, other_stem: Path, guitar_stem: Path | None = None):
+            if not self.include_keys:
+                print("[OCTAVE] >>> transcribe_keys skipped (include_keys=False)", file=sys.stderr, flush=True)
+                return None
+            if self.keys_charter is None:
+                print("[OCTAVE] >>> transcribe_keys skipped (keys_charter unavailable)", file=sys.stderr, flush=True)
+                return None
             print(f"[OCTAVE] >>> transcribe_keys(stem={other_stem}, guitar_stem={guitar_stem})", file=sys.stderr, flush=True)
             try:
                 # Bypass upstream wrapper's exception swallowing.
@@ -1524,6 +1574,34 @@ def collect_audio_sources(payload: dict[str, Any], cache_dir: Path, run_id: str)
     return unique_sources
 
 
+def _strip_pro_keys_tracks(midi_path: Path) -> int:
+    """Remove every track named 'PART REAL_KEYS_*' from notes.mid in place.
+    Upstream STRUM always emits Pro Keys tracks alongside PART KEYS; this
+    honors the user's `enabledTracks.proKeys=false` toggle. Returns the
+    number of tracks removed."""
+    try:
+        import mido
+    except Exception:
+        return 0
+    mid = mido.MidiFile(str(midi_path))
+    kept = []
+    removed = 0
+    for track in mid.tracks:
+        name = ""
+        for msg in track:
+            if msg.is_meta and msg.type == 'track_name':
+                name = str(getattr(msg, 'name', ''))
+                break
+        if name.startswith("PART REAL_KEYS_"):
+            removed += 1
+            continue
+        kept.append(track)
+    if removed > 0:
+        mid.tracks = kept
+        mid.save(str(midi_path))
+    return removed
+
+
 def _retime_midi_to_tempo_map(midi_path: Path, init_bpm: float, tempo_map: list[tuple[float, float]]) -> None:
     """Rewrite a STRUM-generated notes.mid (written with constant `init_bpm`)
     so it uses `tempo_map` while preserving each event's real-world time.
@@ -1602,6 +1680,9 @@ def run_pipeline(payload: dict[str, Any]) -> int:
     enabled_tracks_raw = payload.get("enabledTracks") or {}
     enabled_tracks = {k: bool(v) for k, v in enabled_tracks_raw.items()} if isinstance(enabled_tracks_raw, dict) else None
 
+    global INCLUDE_PRO_KEYS
+    INCLUDE_PRO_KEYS = bool((enabled_tracks or {}).get('proKeys', True))
+
     # Optional user-supplied tempo map. Each entry: {"timeSec": float, "bpm": float}.
     # If the first event has timeSec > 0, an implicit (0, first.bpm) is prepended.
     global USER_TEMPO_MAP
@@ -1676,9 +1757,22 @@ def run_pipeline(payload: dict[str, Any]) -> int:
         )
         if result.success:
             song_folders.append(result.output_path)
+            notes_mid = Path(result.output_path) / "notes.mid"
+            if not INCLUDE_PRO_KEYS and notes_mid.exists():
+                try:
+                    removed = _strip_pro_keys_tracks(notes_mid)
+                    if removed:
+                        emit_progress(
+                            run_id,
+                            "merge",
+                            f"Stripped {removed} Pro Keys track(s) from {notes_mid.name}",
+                            percent=min(96, source_start_percent + 65),
+                            current_item=source.name,
+                        )
+                except Exception as exc:
+                    errors.append(f"{source.name}: pro-keys strip failed: {exc}")
             if USER_TEMPO_MAP:
                 try:
-                    notes_mid = Path(result.output_path) / "notes.mid"
                     if notes_mid.exists():
                         _retime_midi_to_tempo_map(notes_mid, USER_TEMPO_MAP[0][1], USER_TEMPO_MAP)
                         emit_progress(

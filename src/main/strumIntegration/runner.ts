@@ -242,6 +242,16 @@ async function findPythonCommand(runId?: string): Promise<PythonCommand> {
     candidates.push({ command: configured, baseArgs: [] })
   }
 
+  // Prefer a workspace-local virtualenv when present so dev runs are isolated
+  // from system per-user site-packages (avoids cross-version contamination
+  // such as a 3.11 launcher loading wheels from %APPDATA%\Python\Python310).
+  const venvPython = process.platform === 'win32'
+    ? join(process.cwd(), '.venv', 'Scripts', 'python.exe')
+    : join(process.cwd(), '.venv', 'bin', 'python')
+  if (existsSync(venvPython)) {
+    candidates.push({ command: venvPython, baseArgs: [] })
+  }
+
   if (process.platform === 'win32') {
     candidates.push({ command: 'py', baseArgs: ['-3.11'] })
     candidates.push({ command: 'py', baseArgs: ['-3.10'] })
