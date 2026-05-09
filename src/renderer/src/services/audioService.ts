@@ -516,8 +516,13 @@ export function setStemVolume(songId: string, filePath: string, volume: number):
 export function setStemMute(songId: string, filePath: string, muted: boolean): void {
   const state = audioRegistry.get(songId)
   if (!state) return
-  if (muted) state.mutedStems.add(filePath)
-  else state.mutedStems.delete(filePath)
+  if (muted) {
+    state.mutedStems.add(filePath)
+    // DAW convention: muting a track clears its solo state.
+    state.soloedStems.delete(filePath)
+  } else {
+    state.mutedStems.delete(filePath)
+  }
   applyStemGains(state)
   notifyStemControlsChanged(songId)
 }
@@ -525,8 +530,13 @@ export function setStemMute(songId: string, filePath: string, muted: boolean): v
 export function setStemSolo(songId: string, filePath: string, soloed: boolean): void {
   const state = audioRegistry.get(songId)
   if (!state) return
-  if (soloed) state.soloedStems.add(filePath)
-  else state.soloedStems.delete(filePath)
+  if (soloed) {
+    state.soloedStems.add(filePath)
+    // DAW convention: soloing a track clears its mute state so it is audible.
+    state.mutedStems.delete(filePath)
+  } else {
+    state.soloedStems.delete(filePath)
+  }
   applyStemGains(state)
   notifyStemControlsChanged(songId)
 }

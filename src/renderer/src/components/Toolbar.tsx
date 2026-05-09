@@ -799,6 +799,7 @@ export function Toolbar(): React.JSX.Element {
           onChange={(e) => updateSettings({ volume: parseFloat(e.target.value) })}
           className="toolbar-volume-slider"
           title={`Volume: ${Math.round(volume * 100)}%`}
+          style={{ ['--slider-fill' as string]: `${volume * 100}%` }}
         />
         <StemMixerButton activeSongId={activeSongId} />
       </div>
@@ -817,6 +818,7 @@ export function Toolbar(): React.JSX.Element {
           onChange={(e) => updateSettings({ highwaySpeed: parseFloat(e.target.value) })}
           className="toolbar-speed-slider"
           title={`Highway Speed: ${highwaySpeed}x`}
+          style={{ ['--slider-fill' as string]: `${((highwaySpeed - 0.25) / (3 - 0.25)) * 100}%` }}
         />
         <span className="toolbar-speed-value">{highwaySpeed}x</span>
       </div>
@@ -1584,6 +1586,7 @@ function StemMixerButton({ activeSongId }: { activeSongId: string | null }): Rea
                       }
                       className="toolbar-volume-slider stem-mixer-volume-slider"
                       title={`Volume: ${Math.round(s.volume * 100)}%`}
+                      style={{ ['--slider-fill' as string]: `${s.volume * 100}%` }}
                     />
                     <span className="stem-mixer-volume-value">{Math.round(s.volume * 100)}%</span>
                   </div>
