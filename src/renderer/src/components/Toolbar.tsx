@@ -53,6 +53,7 @@ export function Toolbar(): React.JSX.Element {
   const [autoChartFolders, setAutoChartFolders] = useState<string[]>([])
   const [autoChartUrls, setAutoChartUrls] = useState<string[]>([EMPTY_AUTO_CHART_URL])
   const [autoChartDisableOnlineLookup, setAutoChartDisableOnlineLookup] = useState(false)
+  const [autoChartCloseCountdown, setAutoChartCloseCountdown] = useState<number | null>(null)
   const [defaultAutoChartOutputDir, setDefaultAutoChartOutputDir] = useState('')
   const [autoChartErrorCopied, setAutoChartErrorCopied] = useState(false)
   const [autoChartProgress, setAutoChartProgress] = useState<AutoChartProgressState>({
@@ -263,6 +264,7 @@ export function Toolbar(): React.JSX.Element {
         const iniData = await window.api.readSongIni(songFolder.path)
 
         const metadata: SongMetadata = {
+          ...(iniData ?? {}),
           name: (iniData?.name as string) || (iniData?.title as string) || songFolder.name,
           artist: (iniData?.artist as string) || 'Unknown Artist',
           album: iniData?.album as string,
@@ -377,6 +379,7 @@ export function Toolbar(): React.JSX.Element {
       if (event.success) {
         updateSettings({ autoChartOutputDir: event.outputDir, lastOpenedFolder: event.outputDir })
         void loadProjectFolder(event.outputDir)
+        setAutoChartCloseCountdown(5)
       }
     })
   }, [loadProjectFolder, updateSettings])
@@ -397,7 +400,22 @@ export function Toolbar(): React.JSX.Element {
     })
   }, [])
 
+  // Tick the post-success countdown and auto-close the modal at 0.
+  useEffect(() => {
+    if (autoChartCloseCountdown === null) return
+    if (autoChartCloseCountdown <= 0) {
+      setIsAutoChartModalOpen(false)
+      setAutoChartCloseCountdown(null)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      setAutoChartCloseCountdown((prev) => (prev === null ? null : prev - 1))
+    }, 1000)
+    return () => window.clearTimeout(timer)
+  }, [autoChartCloseCountdown])
+
   const openAutoChartModal = useCallback((): void => {
+    setAutoChartCloseCountdown(null)
     setAutoChartProgress((prev) => ({
       ...prev,
       outputDir: getPreferredAutoChartOutputDir(),
@@ -440,6 +458,7 @@ export function Toolbar(): React.JSX.Element {
   }, [autoChartProgress.error])
 
   const handleStartAutoChart = useCallback(async (): Promise<void> => {
+    setAutoChartCloseCountdown(null)
     const outputDir = autoChartProgress.outputDir.trim()
     const urls = autoChartUrls.map((entry) => entry.trim()).filter(Boolean)
 
@@ -944,6 +963,10 @@ export function Toolbar(): React.JSX.Element {
               )}
               <section className="settings-preferences-group">
                 <h3 className="settings-hotkey-group-title">Inputs</h3>
+                <fieldset
+                  disabled={autoChartProgress.isRunning}
+                  style={{ border: 'none', padding: 0, margin: 0, opacity: autoChartProgress.isRunning ? 0.55 : 1 }}
+                >
                 <div className="settings-preferences-body auto-chart-inputs">
                   <div className="auto-chart-actions-row">
                     <button className="settings-modal-secondary" onClick={async () => {
@@ -1020,6 +1043,7 @@ export function Toolbar(): React.JSX.Element {
                     </div>
                   </div>
                 </div>
+                </fieldset>
               </section>
 
               <section className="settings-preferences-group">
@@ -1052,7 +1076,11 @@ export function Toolbar(): React.JSX.Element {
                   <div className="toolbar-updater-bar auto-chart-progress-bar">
                     <div className="toolbar-updater-bar-fill" style={{ width: `${autoChartProgress.percent}%` }} />
                   </div>
-                  <div className="auto-chart-progress-message">{autoChartProgress.message || 'Idle'}</div>
+                  <div className="auto-chart-progress-message">
+                    {autoChartCloseCountdown !== null
+                      ? `All songs auto-charted. Closing in ${autoChartCloseCountdown}…`
+                      : (autoChartProgress.message || 'Idle')}
+                  </div>
                   {autoChartProgress.currentItem && (
                     <div className="auto-chart-progress-subtle">Current: {autoChartProgress.currentItem}</div>
                   )}

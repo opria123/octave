@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useProjectStore, getSongStore, useUIStore, useSettingsStore } from '../../stores'
 import type { Instrument, Difficulty, NoteModifiers, VocalNote, VocalPhrase, HarmonyPart, VenueTrackData } from '../../types'
 import type { EditingTool } from './types'
-import { playPitchPreview, stopPitchPreview } from '../../services/audioService'
+import { playPitchPreview, stopPitchPreview, seek as seekAudio } from '../../services/audioService'
 import { resolveVenuePlaybackState } from './venuePlayback'
 
 function formatVenueLabel(value: string): string {
@@ -198,7 +198,14 @@ export function TimelineScrubber(): React.JSX.Element {
       if (!activeSongId || !scrubberRef.current) return
       const rect = scrubberRef.current.getBoundingClientRect()
       const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width))
-      getSongStore(activeSongId).getState().setCurrentTick(Math.round((x / rect.width) * maxTick))
+      const newTick = Math.round((x / rect.width) * maxTick)
+      const state = getSongStore(activeSongId).getState()
+      state.setCurrentTick(newTick)
+      // While playing, also reseat the audio so the playback cursor jumps
+      // with the drag instead of being snapped back by the audio loop.
+      if (state.isPlaying) {
+        seekAudio(activeSongId, newTick, state.song.tempoEvents, state.song.audioSync)
+      }
     },
     [activeSongId, maxTick]
   )
