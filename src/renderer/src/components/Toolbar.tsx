@@ -1484,6 +1484,8 @@ export function Toolbar(): React.JSX.Element {
 function StemMixerButton({ activeSongId }: { activeSongId: string | null }): React.JSX.Element | null {
   const [open, setOpen] = useState(false)
   const [stems, setStems] = useState<audioService.StemControl[]>([])
+  const [popoverPos, setPopoverPos] = useState<{ top: number; right: number } | null>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!activeSongId) {
@@ -1502,21 +1504,45 @@ function StemMixerButton({ activeSongId }: { activeSongId: string | null }): Rea
 
   if (!activeSongId) return null
 
+  const togglePopover = (): void => {
+    if (open) {
+      setOpen(false)
+      return
+    }
+    setStems(audioService.getStemControls(activeSongId))
+    const rect = buttonRef.current?.getBoundingClientRect()
+    if (rect) {
+      setPopoverPos({
+        top: rect.bottom + 6,
+        right: window.innerWidth - rect.right
+      })
+    }
+    setOpen(true)
+  }
+
   return (
     <div className="stem-mixer-wrapper">
       <button
-        className="toolbar-icon-button"
-        onClick={() => {
-          setStems(audioService.getStemControls(activeSongId))
-          setOpen((v) => !v)
-        }}
+        ref={buttonRef}
+        className="toolbar-icon-button stem-mixer-button"
+        onClick={togglePopover}
         title="Stem mixer (mute / solo individual tracks)"
-        style={{ padding: '2px 6px' }}
+        aria-label="Stem mixer"
       >
-        🎚️
+        <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <line x1="3" y1="2" x2="3" y2="14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <line x1="13" y1="2" x2="13" y2="14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <rect x="1.5" y="9" width="3" height="3" rx="0.6" fill="currentColor" />
+          <rect x="6.5" y="4" width="3" height="3" rx="0.6" fill="currentColor" />
+          <rect x="11.5" y="7" width="3" height="3" rx="0.6" fill="currentColor" />
+        </svg>
       </button>
-      {open && (
-        <div className="stem-mixer-popover">
+      {open && popoverPos && (
+        <div
+          className="stem-mixer-popover"
+          style={{ position: 'fixed', top: popoverPos.top, right: popoverPos.right, zIndex: 1000 }}
+        >
           <div className="stem-mixer-header">
             <span>Stem Mixer</span>
             <button className="stem-mixer-close" onClick={() => setOpen(false)} aria-label="Close">×</button>

@@ -132,32 +132,67 @@
   opacity: 0.7;
 }
 
-.toolbar-volume-slider {
-  width: 80px;
-  height: 4px;
+.toolbar-volume-slider,
+.toolbar-speed-slider {
   appearance: none;
-  background: var(--bg-secondary);
-  border-radius: 2px;
+  -webkit-appearance: none;
+  width: 80px;
+  height: 14px;
+  background: transparent;
   cursor: pointer;
+  padding: 0;
+  margin: 0;
 }
 
-.toolbar-volume-slider::-webkit-slider-thumb {
+.toolbar-speed-slider {
+  width: 70px;
+}
+
+.toolbar-volume-slider::-webkit-slider-runnable-track,
+.toolbar-speed-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--bg-secondary);
+  border-radius: 2px;
+}
+
+.toolbar-volume-slider::-moz-range-track,
+.toolbar-speed-slider::-moz-range-track {
+  height: 4px;
+  background: var(--bg-secondary);
+  border-radius: 2px;
+  border: none;
+}
+
+.toolbar-volume-slider::-webkit-slider-thumb,
+.toolbar-speed-slider::-webkit-slider-thumb {
   appearance: none;
+  -webkit-appearance: none;
   width: 12px;
   height: 12px;
+  margin-top: -4px;
   background: var(--accent-color);
+  border: none;
   border-radius: 50%;
   cursor: pointer;
   transition: transform 0.1s ease;
 }
 
-.toolbar-volume-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
+.toolbar-volume-slider::-moz-range-thumb,
+.toolbar-speed-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: var(--accent-color);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.1s ease;
 }
 
-.toolbar-volume-slider::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 2px;
+.toolbar-volume-slider::-webkit-slider-thumb:hover,
+.toolbar-speed-slider::-webkit-slider-thumb:hover,
+.toolbar-volume-slider::-moz-range-thumb:hover,
+.toolbar-speed-slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
 }
 
 /* Highway speed control */
@@ -171,33 +206,7 @@
   color: var(--text-secondary);
 }
 
-.toolbar-speed-slider {
-  width: 70px;
-  height: 4px;
-  appearance: none;
-  background: var(--bg-secondary);
-  border-radius: 2px;
-  cursor: pointer;
-}
-
-.toolbar-speed-slider::-webkit-slider-thumb {
-  appearance: none;
-  width: 12px;
-  height: 12px;
-  background: var(--accent-color);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: transform 0.1s ease;
-}
-
-.toolbar-speed-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
-}
-
-.toolbar-speed-slider::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 2px;
-}
+/* Speed/volume slider thumb + track styles are unified above */
 
 .toolbar-speed-value {
   font-size: 11px;
@@ -573,16 +582,46 @@
 
 /* Stem Mixer popover (toolbar volume area) */
 .stem-mixer-wrapper {
-  position: relative;
+  display: inline-flex;
+  align-items: center;
   margin-left: 4px;
 }
 
+.toolbar-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-icon-button svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.toolbar-icon-button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.toolbar-icon-button.is-active {
+  background: var(--accent-color-transparent);
+  border-color: var(--accent-color);
+  color: var(--accent-color-hover);
+}
+
 .stem-mixer-popover {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 60;
-  margin-top: 6px;
   min-width: 260px;
   padding: 12px;
   background: var(--bg-secondary);
