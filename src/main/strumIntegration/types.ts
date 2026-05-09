@@ -35,6 +35,11 @@ export interface AutoChartRunOptions {
    * misidentifying custom uploads as well-known commercial songs.
    */
   disableOnlineLookup?: boolean
+  /**
+   * When true, skip vocal harmony detection (HARM2/HARM3 generation).
+   * Saves a second whisper pass on the backing-vocals stem.
+   */
+  skipHarmonies?: boolean
 }
 
 export interface AutoChartRunResult {

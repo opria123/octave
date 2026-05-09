@@ -443,15 +443,87 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
       }),
 
     updateTempoEvent: (tick, bpm) =>
-      set((state) => ({
-        song: {
-          ...state.song,
-          tempoEvents: state.song.tempoEvents.map((e) =>
-            e.tick === tick ? { ...e, bpm } : e
-          )
-        },
-        isDirty: true
-      })),
+      set((state) => {
+        const oldEvents = state.song.tempoEvents
+        const target = oldEvents.find((e) => e.tick === tick)
+        if (!target || target.bpm === bpm) return state
+
+        // Rescale every tick-positioned item so its absolute audio time is
+        // preserved across the BPM change. Without this, auto-chart's common
+        // half-tempo error (188 BPM detected for a 94 BPM song) leaves notes
+        // misaligned after the user corrects the BPM. Standard DAW behaviour:
+        // tempo edits keep notes locked to audio time, not to beat numbers.
+        const TPB = 480
+        const tickToTime = (t: number, events: TempoEvent[]): number => {
+          let sec = 0, prev = 0
+          let curBpm = events[0]?.bpm ?? 120
+          for (const ev of events) {
+            if (ev.tick >= t) break
+            sec += (ev.tick - prev) / ((TPB * curBpm) / 60)
+            prev = ev.tick
+            curBpm = ev.bpm
+          }
+          sec += (t - prev) / ((TPB * curBpm) / 60)
+          return sec
+        }
+        const timeToTick = (sec: number, events: TempoEvent[]): number => {
+          let acc = 0, prev = 0
+          let curBpm = events[0]?.bpm ?? 120
+          for (const ev of events) {
+            const segSec = (ev.tick - prev) / ((TPB * curBpm) / 60)
+            if (acc + segSec >= sec) break
+            acc += segSec
+            prev = ev.tick
+            curBpm = ev.bpm
+          }
+          return Math.round(prev + (sec - acc) * ((TPB * curBpm) / 60))
+        }
+
+        // Build the new tempo map first, preserving every other event's
+        // absolute time (rescale ticks of subsequent events).
+        const newEvents: TempoEvent[] = []
+        for (const ev of oldEvents) {
+          if (ev.tick === tick) {
+            newEvents.push({ ...ev, bpm })
+            continue
+          }
+          if (ev.tick > tick) {
+            const t = tickToTime(ev.tick, oldEvents)
+            // Provisional newEvents includes the changed bpm + already-mapped
+            // earlier events; we re-map ev.tick under that partial map.
+            const partial = newEvents
+              .concat([{ tick: ev.tick, bpm: ev.bpm }])
+              .sort((a, b) => a.tick - b.tick)
+            newEvents.push({ ...ev, tick: timeToTick(t, partial) })
+          } else {
+            newEvents.push(ev)
+          }
+        }
+        newEvents.sort((a, b) => a.tick - b.tick)
+
+        const remap = (t: number): number => timeToTick(tickToTime(t, oldEvents), newEvents)
+        const remapDur = (t: number, d: number): number =>
+          Math.max(0, remap(t + d) - remap(t))
+
+        const song = state.song
+        return {
+          song: {
+            ...song,
+            tempoEvents: newEvents,
+            notes: song.notes.map((n) => ({ ...n, tick: remap(n.tick), duration: remapDur(n.tick, n.duration) })),
+            vocalNotes: song.vocalNotes.map((n) => ({ ...n, tick: remap(n.tick), duration: remapDur(n.tick, n.duration) })),
+            vocalPhrases: song.vocalPhrases.map((p) => ({ ...p, tick: remap(p.tick), duration: remapDur(p.tick, p.duration) })),
+            starPowerPhrases: song.starPowerPhrases.map((p) => ({ ...p, tick: remap(p.tick), duration: remapDur(p.tick, p.duration) })),
+            soloSections: song.soloSections.map((s) => ({ ...s, tick: remap(s.tick), duration: remapDur(s.tick, s.duration) })),
+            laneMarkers: song.laneMarkers.map((m) => ({ ...m, tick: remap(m.tick), duration: remapDur(m.tick, m.duration) })),
+            songSections: song.songSections.map((s) => ({ ...s, tick: remap(s.tick) })),
+            timeSignatures: song.timeSignatures.map((ts) =>
+              ts.tick === 0 ? ts : { ...ts, tick: remap(ts.tick) }
+            )
+          },
+          isDirty: true
+        }
+      }),
 
     moveTempoEvent: (oldTick, newTick, bpm) =>
       set((state) => {

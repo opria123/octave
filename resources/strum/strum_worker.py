@@ -41,6 +41,7 @@ FAST_AUDIO_METADATA_LOOKUP = os.environ.get("OCTAVE_STRUM_FAST_METADATA_LOOKUP",
 # lookups are suppressed. Used by the UI's offline-mode toggle so custom uploads
 # aren't misidentified against MusicBrainz / iTunes / etc.
 DISABLE_ONLINE_LOOKUP = os.environ.get("OCTAVE_STRUM_DISABLE_ONLINE_LOOKUP", "0") == "1"
+SKIP_HARMONIES = os.environ.get("OCTAVE_STRUM_SKIP_HARMONIES", "0") == "1"
 if DISABLE_ONLINE_LOOKUP:
     FAST_AUDIO_METADATA_LOOKUP = False
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".ogg", ".opus", ".flac"}
@@ -526,6 +527,43 @@ def _install_offline_lookup_stubs(batch_pipeline_cls) -> None:
     except Exception:
         pass
 
+    # Defense-in-depth: block outbound HTTP at the network layer so any
+    # fetcher we missed (or future upstream additions) cannot leak art /
+    # lyrics / metadata. Existing try/except blocks in STRUM swallow these.
+    _BLOCKED_HOST_HINTS = (
+        "musicbrainz", "coverartarchive", "itunes.apple", "lrclib",
+        "lyrics.ovh", "genius.com", "deezer", "spotify", "last.fm",
+        "discogs", "audiodb",
+    )
+    def _is_blocked_url(url: str) -> bool:
+        u = (url or "").lower()
+        return any(h in u for h in _BLOCKED_HOST_HINTS)
+    try:
+        import requests as _requests
+        _orig_request = _requests.api.request
+        def _guarded_request(method, url, *a, **kw):
+            if _is_blocked_url(url):
+                raise _requests.exceptions.ConnectionError(
+                    f"[OCTAVE offline mode] blocked {method} {url}"
+                )
+            return _orig_request(method, url, *a, **kw)
+        _requests.api.request = _guarded_request
+        _requests.get = lambda url, **kw: _guarded_request("GET", url, **kw)
+        _requests.post = lambda url, data=None, json=None, **kw: _guarded_request("POST", url, data=data, json=json, **kw)
+    except Exception:
+        pass
+    try:
+        import urllib.request as _urlreq
+        _orig_urlopen = _urlreq.urlopen
+        def _guarded_urlopen(url, *a, **kw):
+            target = url.full_url if hasattr(url, "full_url") else str(url)
+            if _is_blocked_url(target):
+                raise OSError(f"[OCTAVE offline mode] blocked urlopen {target}")
+            return _orig_urlopen(url, *a, **kw)
+        _urlreq.urlopen = _guarded_urlopen
+    except Exception:
+        pass
+
 
 def build_pipeline(source_root: Path, output_dir: Path, device: str, include_keys: bool):
     add_source_paths(source_root)
@@ -537,6 +575,17 @@ def build_pipeline(source_root: Path, output_dir: Path, device: str, include_key
 
     if DISABLE_ONLINE_LOOKUP:
         _install_offline_lookup_stubs(batch_pipeline_cls)
+
+    if SKIP_HARMONIES:
+        # Skip harmony detection entirely (saves a full whisper pass on the
+        # backing-vocals stem). Returning [] is the no-harmonies contract
+        # upstream batch_pipeline already handles for songs without backing
+        # vocals.
+        def _no_harmonies(self, *_a, **_kw):
+            return []
+        if hasattr(vocals_charter_cls, "detect_harmonies"):
+            vocals_charter_cls.detect_harmonies = _no_harmonies
+        logging.getLogger(__name__).info("Skip-harmonies enabled: harmony detection disabled.")
 
     class OctaveVocalsCharter(vocals_charter_cls):
         """VocalsCharter that prefers a native whisper.cpp binary when the

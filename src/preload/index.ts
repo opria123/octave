@@ -128,6 +128,7 @@ const api = {
     urls: string[]
     includeKeys?: boolean
     disableOnlineLookup?: boolean
+    skipHarmonies?: boolean
   }): Promise<{ runId: string }> =>
     ipcRenderer.invoke('strum:start', options),
 

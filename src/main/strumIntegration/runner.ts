@@ -436,12 +436,16 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
           OCTAVE_STRUM_FAST_METADATA_LOOKUP: '0'
         }
       : {}
+    const harmoniesEnv: NodeJS.ProcessEnv = options.skipHarmonies
+      ? { OCTAVE_STRUM_SKIP_HARMONIES: '1' }
+      : {}
     const devEnv: NodeJS.ProcessEnv = {
       ...process.env,
       PYTHONUTF8: '1',
       ...(demucsCppEnv ?? {}),
       ...(whisperCppEnv ?? {}),
-      ...offlineEnv
+      ...offlineEnv,
+      ...harmoniesEnv
     }
     const sourceOverride = getDevStrumSourceOverride()
     if (sourceOverride) {
@@ -464,7 +468,7 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
       {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: app.isPackaged
-          ? { ...getBundledPythonEnv(), ...(demucsCppEnv ?? {}), ...(whisperCppEnv ?? {}), ...offlineEnv }
+          ? { ...getBundledPythonEnv(), ...(demucsCppEnv ?? {}), ...(whisperCppEnv ?? {}), ...offlineEnv, ...harmoniesEnv }
           : devEnv
       }
     )

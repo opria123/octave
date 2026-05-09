@@ -53,6 +53,7 @@ export function Toolbar(): React.JSX.Element {
   const [autoChartFolders, setAutoChartFolders] = useState<string[]>([])
   const [autoChartUrls, setAutoChartUrls] = useState<string[]>([EMPTY_AUTO_CHART_URL])
   const [autoChartDisableOnlineLookup, setAutoChartDisableOnlineLookup] = useState(false)
+  const [autoChartSkipHarmonies, setAutoChartSkipHarmonies] = useState(false)
   const [autoChartCloseCountdown, setAutoChartCloseCountdown] = useState<number | null>(null)
   const [defaultAutoChartOutputDir, setDefaultAutoChartOutputDir] = useState('')
   const [autoChartErrorCopied, setAutoChartErrorCopied] = useState(false)
@@ -498,7 +499,8 @@ export function Toolbar(): React.JSX.Element {
         folders: autoChartFolders,
         urls,
         includeKeys: true,
-        disableOnlineLookup: autoChartDisableOnlineLookup
+        disableOnlineLookup: autoChartDisableOnlineLookup,
+        skipHarmonies: autoChartSkipHarmonies
       })
       setAutoChartProgress((prev) => ({ ...prev, runId }))
     } catch (error) {
@@ -508,7 +510,7 @@ export function Toolbar(): React.JSX.Element {
         error: error instanceof Error ? error.message : String(error)
       }))
     }
-  }, [autoChartDisableOnlineLookup, autoChartFiles, autoChartFolders, autoChartProgress.outputDir, autoChartUrls, runtimeStatus, updateSettings])
+  }, [autoChartDisableOnlineLookup, autoChartSkipHarmonies, autoChartFiles, autoChartFolders, autoChartProgress.outputDir, autoChartUrls, runtimeStatus, updateSettings])
 
   const handleCancelAutoChart = useCallback(async (): Promise<void> => {
     if (!autoChartProgress.runId) return
@@ -1060,6 +1062,20 @@ export function Toolbar(): React.JSX.Element {
                       Offline mode (disable online lookups)
                       <small style={{ display: 'block', opacity: 0.7 }}>
                         Skips MusicBrainz, album art, and lyric searches. Use this for custom uploads to avoid them being misidentified as other songs.
+                      </small>
+                    </span>
+                  </label>
+                  <label className="settings-checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={autoChartSkipHarmonies}
+                      onChange={(event) => setAutoChartSkipHarmonies(event.target.checked)}
+                      disabled={autoChartProgress.isRunning}
+                    />
+                    <span>
+                      Skip vocal harmonies
+                      <small style={{ display: 'block', opacity: 0.7 }}>
+                        Skips HARM2/HARM3 detection. Faster runs for songs without backing vocals.
                       </small>
                     </span>
                   </label>
