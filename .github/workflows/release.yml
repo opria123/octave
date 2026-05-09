@@ -129,11 +129,14 @@ jobs:
         run: |
           # Get the previous tag
           CURRENT="${{ needs.tag.outputs.tag }}"
-          PREV=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "^${CURRENT}$" | head -n1)
+          PREV=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "^${CURRENT}$" | head -n1 || true)
           if [ -z "$PREV" ]; then
-            COMMITS=$(git log --pretty=format:'- %s' "$CURRENT")
+            COMMITS=$(git log --pretty=format:'- %s' "$CURRENT" || true)
           else
-            COMMITS=$(git log --pretty=format:'- %s' "${PREV}..${CURRENT}" | grep -v '^- release:')
+            COMMITS=$(git log --pretty=format:'- %s' "${PREV}..${CURRENT}" | { grep -v '^- release:' || true; })
+          fi
+          if [ -z "$COMMITS" ]; then
+            COMMITS="- Maintenance release (no user-facing changes)"
           fi
 
           # Write to file to preserve newlines
