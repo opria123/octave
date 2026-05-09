@@ -338,6 +338,8 @@
     radial-gradient(circle at 80% 100%, rgba(65, 198, 184, 0.16), transparent 55%),
     var(--vp-c-bg-alt);
   margin-bottom: 96px;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .octave-cta-title {
   font-size: 30px;
@@ -345,6 +347,9 @@
   letter-spacing: -0.02em;
   margin: 0 0 8px;
   color: var(--vp-c-text-1);
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  hyphens: auto;
 }
 .octave-cta-sub {
   font-size: 16px;
@@ -392,6 +397,9 @@
   .octave-stats { grid-template-columns: repeat(2, 1fr); }
   .octave-section-title { font-size: 26px; }
   .octave-cta-title { font-size: 24px; }
+  .octave-cta { padding: 36px 20px; }
+  .octave-cta-actions { flex-direction: column; align-items: stretch; }
+  .octave-cta-actions .octave-btn { justify-content: center; width: 100%; }
   .octave-section { margin: 64px auto; }
   .octave-hero-title { font-size: 88px !important; }
   .octave-hero-pitch { font-size: 28px !important; }
