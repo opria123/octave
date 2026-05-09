@@ -78,11 +78,9 @@ const DEFAULT_VENUE_VISUAL: VenueVisualState = {
 }
 
 function VenueCameraController({
-  venueVisual,
   hasVocalOverlay,
   visibleTrackCount
 }: {
-  venueVisual: VenueVisualState
   hasVocalOverlay: boolean
   visibleTrackCount: number
 }): null {
@@ -90,24 +88,22 @@ function VenueCameraController({
   const desiredPos = useRef(new THREE.Vector3())
   const lookAtPos = useRef(new THREE.Vector3())
 
+  // The highway camera is intentionally fixed: in YARG / Clone Hero the highway
+  // is a HUD overlay that does not follow venue camera cuts. Venue cameraCut
+  // events still drive the BackgroundVideo's CSS filter elsewhere, but they
+  // must not move, lift, or zoom the highway camera.
   useFrame(() => {
     const baseHeight = CAMERA_HEIGHT + (hasVocalOverlay ? 0.06 : 0)
     const baseDistance = CAMERA_DISTANCE + 0.75 + (hasVocalOverlay ? 0.22 : 0) + (visibleTrackCount >= 4 ? 0.18 : 0)
 
-    desiredPos.current.set(
-      venueVisual.cameraXOffset,
-      baseHeight + venueVisual.cameraHeightOffset,
-      STRIKE_LINE_POS + baseDistance + venueVisual.cameraDistanceOffset
-    )
-
+    desiredPos.current.set(0, baseHeight, STRIKE_LINE_POS + baseDistance)
     camera.position.lerp(desiredPos.current, 0.18)
 
-    // Aim farther down-lane to reduce steep pitch and expose more highway depth.
-    lookAtPos.current.set(venueVisual.cameraXOffset * 0.2, 0.22, STRIKE_LINE_POS - 2.6)
+    lookAtPos.current.set(0, 0.22, STRIKE_LINE_POS - 2.6)
     camera.lookAt(lookAtPos.current)
 
     if (camera instanceof THREE.PerspectiveCamera) {
-      const targetFov = THREE.MathUtils.clamp(CAMERA_FOV + venueVisual.cameraFovOffset, 35, 80)
+      const targetFov = CAMERA_FOV
       camera.fov += (targetFov - camera.fov) * 0.18
       camera.updateProjectionMatrix()
     }
@@ -253,12 +249,10 @@ function BackgroundVideo({ songId, cssFilter = 'none' }: { songId: string; cssFi
 // -- Highway Wrapper (with Suspense for FBX loading) ------------------
 function HighwayWrapper({
   songId,
-  editTool,
-  venueVisual,
+  editTool
 }: {
   songId: string
   editTool: EditingTool
-  venueVisual: VenueVisualState
 }): React.JSX.Element {
   const [visibleInstruments, setVisibleInstruments] = useState<Set<Instrument>>(
     new Set(['drums', 'guitar', 'bass', 'vocals', 'keys'])
@@ -307,22 +301,21 @@ function HighwayWrapper({
         far={150}
       />
       <VenueCameraController
-        venueVisual={venueVisual}
         hasVocalOverlay={hasVocalOverlay}
         visibleTrackCount={visibleTrackCount}
       />
       {!hasVideo && <fog attach="fog" args={['#050508', 18, 45]} />}
       {!hasVideo && <color attach="background" args={['#050508']} />}
 
-      {/* Base lights — always on so highway/notes are always visible */}
+      {/* Highway lighting is intentionally fixed — venue cues never modulate it.
+          The venue is its own visual layer (BackgroundVideo + cssFilter); the
+          highway sits on top as a HUD and stays evenly lit so notes are always
+          readable. */}
       <ambientLight intensity={0.55} color="#FFFFFF" />
       <directionalLight position={[0, 10, 5]} intensity={0.6} color="#FFFFFF" castShadow />
-
-      {/* Venue mood lights — additive colored fill driven by venue cues */}
-      <ambientLight intensity={venueVisual.ambientIntensity * 0.5} color={venueVisual.ambientColor} />
-      <pointLight position={[-3, 5, STRIKE_LINE_POS - 2]} intensity={venueVisual.accentIntensity * 0.9} color={venueVisual.accentColor} distance={12} />
-      <pointLight position={[3, 5, STRIKE_LINE_POS - 2]} intensity={venueVisual.accentIntensity * 0.9} color={venueVisual.accentColor} distance={12} />
-      <pointLight position={[0, 2, STRIKE_LINE_POS + 0.5]} intensity={venueVisual.accentIntensity * 0.5} color={venueVisual.accentColor} distance={6} />
+      <pointLight position={[-3, 5, STRIKE_LINE_POS - 2]} intensity={0.55} color="#9FB8E8" distance={12} />
+      <pointLight position={[3, 5, STRIKE_LINE_POS - 2]} intensity={0.55} color="#9FB8E8" distance={12} />
+      <pointLight position={[0, 2, STRIKE_LINE_POS + 0.5]} intensity={0.35} color="#FFFFFF" distance={6} />
 
       <Suspense fallback={null}>
         <AssetProvider>
@@ -337,7 +330,7 @@ function HighwayWrapper({
 
       {!hasVideo && (
         <EffectComposer>
-          <Bloom luminanceThreshold={0.4} luminanceSmoothing={0.9} intensity={venueVisual.bloomIntensity} mipmapBlur />
+          <Bloom luminanceThreshold={0.4} luminanceSmoothing={0.9} intensity={1.2} mipmapBlur />
         </EffectComposer>
       )}
     </Canvas>
@@ -452,23 +445,12 @@ export function ChartPreview(): React.JSX.Element {
       <div
         className="chart-preview-canvas"
         onWheel={handlePreviewWheel}
-        style={{ filter: venueVisual.cssFilter !== 'none' ? venueVisual.cssFilter : undefined }}
       >
         {activeSongId ? (
           <PreviewErrorBoundary>
-            <BackgroundVideo songId={activeSongId} cssFilter="none" />
+            <BackgroundVideo songId={activeSongId} cssFilter={venueVisual.cssFilter} />
             <VocalTrackOverlay songId={activeSongId} />
-            <HighwayWrapper songId={activeSongId} editTool={editTool} venueVisual={venueVisual} />
-            {/* Blackout overlay — shown during blackout lighting cues */}
-            {venueVisual.ambientIntensity < 0.15 && (
-              <div
-                style={{
-                  position: 'absolute', inset: 0, pointerEvents: 'none',
-                  background: `rgba(0,0,0,${Math.max(0, 1 - venueVisual.ambientIntensity * 7)})`,
-                  zIndex: 5
-                }}
-              />
-            )}
+            <HighwayWrapper songId={activeSongId} editTool={editTool} />
           </PreviewErrorBoundary>
         ) : (
           <div className="empty-state">

@@ -13,12 +13,15 @@
   [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)]()
 
-  A desktop chart editor for rhythm games like [YARG](https://yarg.in) and Clone Hero.
+  A desktop chart editor and auto-charter for rhythm games.
+
+  ### [octave site &rarr;](https://opria123.github.io/octave/)
 
 </div>
 
-<!-- Screenshot: Full editor view with piano roll + 3D highway -->
-![OCTAVE Editor Overview](docs/public/screenshots/editor-overview.png)
+[![Watch the OCTAVE promo video](docs/public/screenshots/editor-overview.png)](https://opria123.github.io/octave/octave-promo.mp4)
+
+> Click the image above to watch the promo, or [view it on the OCTAVE site](https://opria123.github.io/octave/).
 
 ---
 
@@ -72,7 +75,7 @@ The interface has four main areas:
 | **Toolbar** (top) | Playback controls, save/export, editing tools, snap division |
 | **Project Explorer** (left) | Song browser with album art thumbnails |
 | **Piano Roll** (center) | 2D note editor — one lane per instrument, canvas-based |
-| **3D Highway** (right) | Real-time YARG-style highway preview |
+| **3D Highway** (right) | Real-time 3D highway preview |
 | **Property Panel** (right) | Note inspector, metadata, tempo/time signature editor |
 
 ### Editing Notes
@@ -108,8 +111,8 @@ The interface has four main areas:
 ## Features
 
 ### Multi-Format Support
-- Import & export `.mid` (MIDI) and `.chart` (Clone Hero) files
-- YARG-compliant sustain threshold handling (format-aware)
+- Import & export `.mid` (MIDI) and `.chart` files
+- Format-aware sustain threshold handling
 - Reads `song.ini` metadata
 
 ### 8 Instruments
@@ -121,7 +124,7 @@ The interface has four main areas:
 
 ### Dual Editor Views
 - **2D Piano Roll** — Canvas-based multi-lane MIDI editor with per-instrument tracks, beat grid, and snap quantization
-- **3D Highway Preview** — Real-time Three.js highway with YARG-compatible note models, animated playback, hit effects, and strikeline visualization
+- **3D Highway Preview** — Real-time Three.js highway with note models, animated playback, hit effects, and strikeline visualization
 
 ### Editing Tools
 - Select, Place, Erase tools (keyboard shortcuts `1` / `2` / `3`)
@@ -160,7 +163,7 @@ npm run dev
 
 ### STRUM Auto-Charting
 
-OCTAVE can run the STRUM auto-chart pipeline to generate Clone Hero / YARG chart packages from audio.
+OCTAVE can run the STRUM auto-chart pipeline to generate chart packages from audio.
 
 End users:
 - Release builds are self-contained. Users install the OCTAVE app artifact only.

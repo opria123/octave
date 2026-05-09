@@ -1,6 +1,6 @@
 {
   "name": "octave",
-  "version": "0.0.104",
+  "version": "1.0.0",
   "description": "OCTAVE — Orchestrated Chart & Track Authoring Visual Editor for rhythm games",
   "main": "./out/main/index.js",
   "author": "opria123",
@@ -40,7 +40,8 @@
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "docs:screenshots": "node scripts/screenshots/capture.mjs"
+    "docs:screenshots": "node scripts/screenshots/capture.mjs",
+    "docs:promo": "node scripts/screenshots/record-promo.mjs"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",

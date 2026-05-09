@@ -1,31 +1,728 @@
-:root {
-  --vp-c-brand-1: #00d6e0;
-  --vp-c-brand-2: #00f2fe;
-  --vp-c-brand-3: #18fff8;
-  --vp-c-brand-soft: rgba(0, 242, 254, 0.14);
+/* OCTAVE docs theme — matches the desktop app palette.
+ * App accents: amber #f2a65a (primary), teal #41c6b8 (secondary), bg #111315.
+ */
 
+:root {
+  /* Amber primary, used for buttons, links, focus, brand. */
+  --vp-c-brand-1: #f2a65a;
+  --vp-c-brand-2: #ffb56f;
+  --vp-c-brand-3: #ffc585;
+  --vp-c-brand-soft: rgba(242, 166, 90, 0.16);
+
+  /* Hero name uses an amber → teal sweep — pulled from the actual app accents. */
   --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(120deg, #00f2fe, #4facfe);
-  --vp-home-hero-image-background-image: linear-gradient(-45deg, rgba(0, 242, 254, 0.4), rgba(79, 172, 254, 0.4));
-  --vp-home-hero-image-filter: blur(72px);
+  --vp-home-hero-name-background: linear-gradient(120deg, #f2a65a 0%, #ffb56f 35%, #41c6b8 100%);
+  --vp-home-hero-image-background-image: radial-gradient(
+    circle at 30% 40%,
+    rgba(242, 166, 90, 0.35),
+    rgba(65, 198, 184, 0.25) 45%,
+    transparent 70%
+  );
+  --vp-home-hero-image-filter: blur(80px);
 
   --vp-button-brand-bg: var(--vp-c-brand-1);
   --vp-button-brand-hover-bg: var(--vp-c-brand-2);
-  --vp-button-brand-text: #07212a;
-  --vp-button-brand-hover-text: #07212a;
+  --vp-button-brand-text: #1a1208;
+  --vp-button-brand-hover-text: #1a1208;
   --vp-button-brand-border: transparent;
   --vp-button-brand-hover-border: transparent;
 }
 
 .dark {
-  --vp-c-bg: #0c1117;
-  --vp-c-bg-alt: #11181f;
-  --vp-c-bg-soft: #1a2129;
+  /* Backgrounds tuned to match the app's --bg-primary #111315 family. */
+  --vp-c-bg: #111315;
+  --vp-c-bg-alt: #161a1d;
+  --vp-c-bg-soft: #1c2125;
+  --vp-c-bg-elv: #1c2125;
+
+  --vp-c-divider: rgba(231, 236, 239, 0.08);
+  --vp-c-text-1: #e7ecef;
+  --vp-c-text-2: rgba(231, 236, 239, 0.72);
+  --vp-c-text-3: rgba(231, 236, 239, 0.45);
 }
 
-/* Tighter screenshots */
+/* ---------- Screenshots ---------- */
 .vp-doc img {
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid var(--vp-c-divider);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.vp-doc img:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* ---------- Hero polish ---------- */
+.VPHero .name,
+.VPHero .text {
+  letter-spacing: -0.01em;
+}
+.VPHero .name {
+  font-weight: 800;
+  animation: octave-fade-up 600ms ease-out both;
+}
+.VPHero .text {
+  animation: octave-fade-up 600ms ease-out 80ms both;
+}
+.VPHero .tagline {
+  animation: octave-fade-up 600ms ease-out 160ms both;
+}
+.VPHero .actions {
+  animation: octave-fade-up 600ms ease-out 240ms both;
+}
+.VPHero .image {
+  animation: octave-fade-up 700ms ease-out 320ms both;
+}
+
+/* ---------- Feature cards ---------- */
+.VPFeature {
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  border: 1px solid var(--vp-c-divider) !important;
+}
+.VPFeature:hover {
+  transform: translateY(-3px);
+  border-color: rgba(242, 166, 90, 0.35) !important;
+  background: linear-gradient(140deg, rgba(242, 166, 90, 0.05), rgba(65, 198, 184, 0.04)) !important;
+}
+.VPFeature .icon {
+  transition: transform 0.18s ease;
+}
+.VPFeature:hover .icon {
+  transform: scale(1.08) rotate(-3deg);
+}
+
+/* ---------- Buttons (download + nav CTAs) ---------- */
+.VPButton.brand {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease !important;
+  box-shadow: 0 6px 18px rgba(242, 166, 90, 0.22);
+}
+.VPButton.brand:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(242, 166, 90, 0.32);
+  filter: brightness(1.05);
+}
+
+/* ---------- Sidebar / nav links ---------- */
+.VPSidebarItem.is-active > .item .link .text,
+.VPNavBarMenuLink.active {
+  color: var(--vp-c-brand-1);
+}
+
+/* ---------- Code blocks ---------- */
+.vp-doc div[class*='language-'] {
+  border: 1px solid var(--vp-c-divider);
+  background: #0d1013;
+}
+
+/* ---------- Custom blocks (tip / warning) reskin to OCTAVE accents ---------- */
+.custom-block.tip {
+  border-color: rgba(65, 198, 184, 0.5);
+  background: rgba(65, 198, 184, 0.08);
+}
+.custom-block.tip .custom-block-title { color: #41c6b8; }
+
+.custom-block.warning {
+  border-color: rgba(242, 166, 90, 0.55);
+  background: rgba(242, 166, 90, 0.08);
+}
+.custom-block.warning .custom-block-title { color: #f2a65a; }
+
+/* ---------- Animations ---------- */
+@keyframes octave-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .VPHero .name,
+  .VPHero .text,
+  .VPHero .tagline,
+  .VPHero .actions,
+  .VPHero .image,
+  .VPFeature,
+  .VPFeature .icon,
+  .vp-doc img,
+  .VPButton.brand {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ---------- Promo video frame (stable aspect, no resize on play) ---------- */
+.octave-promo-frame {
+  margin: 56px auto 0;
+  max-width: 1180px;
+  animation: octave-fade-up 700ms ease-out 400ms both;
+}
+.octave-promo-aspect {
+  position: relative;
+  width: 100%;
+  /* Capture is 3440x1392 ≈ 2.47:1 — lock it so the box never snaps when the
+     video metadata loads or the user clicks play. */
+  aspect-ratio: 3440 / 1392;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--vp-c-divider);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(242, 166, 90, 0.14);
+}
+.octave-promo-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #000;
+  object-fit: cover;
+}
+
+/* ---------- "What's inside" pill grid (replaces AI-looking marketing copy) ---------- */
+.octave-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 24px;
+}
+.octave-pill {
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-2);
+}
+.octave-pill strong {
+  color: var(--vp-c-text-1);
+  font-weight: 600;
+}
+
+/* ---------- Landing page sections ---------- */
+.octave-section {
+  max-width: 1180px;
+  margin: 96px auto;
+  padding: 0 24px;
+}
+.octave-section-head {
+  text-align: center;
+  margin: 0 auto 40px;
+  max-width: 760px;
+}
+.octave-section-eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--vp-c-brand-1);
+  margin-bottom: 12px;
+}
+.octave-section-title {
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  text-align: center;
+  margin: 0;
+  color: var(--vp-c-text-1);
+}
+.octave-grad {
+  background: linear-gradient(120deg, #f2a65a 0%, #ffb56f 45%, #41c6b8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* 3-step "How it works" */
+.octave-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+.octave-step {
+  position: relative;
+  padding: 28px 22px 24px;
+  border-radius: 14px;
+  border: 1px solid var(--vp-c-divider);
+  background: linear-gradient(160deg, var(--vp-c-bg-alt), var(--vp-c-bg-soft));
+  transition: transform 0.18s ease, border-color 0.18s ease;
+  overflow: hidden;
+}
+.octave-step::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  padding: 1px;
+  background: linear-gradient(140deg, rgba(242,166,90,0.35), rgba(65,198,184,0.25), transparent 60%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.octave-step:hover {
+  transform: translateY(-3px);
+  border-color: rgba(242, 166, 90, 0.35);
+}
+.octave-step:hover::before { opacity: 1; }
+.octave-step-num {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--vp-c-brand-1);
+  margin-bottom: 10px;
+}
+.octave-step-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--vp-c-text-1);
+  margin-bottom: 8px;
+  letter-spacing: -0.01em;
+}
+.octave-step p {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--vp-c-text-2);
+  margin: 0;
+}
+.octave-step code {
+  background: var(--vp-c-bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  color: var(--vp-c-brand-1);
+}
+
+/* Stats strip */
+.octave-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.octave-stat {
+  text-align: center;
+  padding: 24px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg-alt);
+}
+.octave-stat-value {
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  background: linear-gradient(120deg, #f2a65a, #41c6b8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 8px;
+}
+.octave-stat-label {
+  font-size: 13px;
+  color: var(--vp-c-text-2);
+  letter-spacing: 0.01em;
+}
+
+.octave-pill-row-tech {
+  justify-content: center;
+}
+
+/* Final CTA panel */
+.octave-cta {
+  text-align: center;
+  padding: 52px 32px;
+  border-radius: 18px;
+  border: 1px solid var(--vp-c-divider);
+  background:
+    radial-gradient(circle at 20% 0%, rgba(242, 166, 90, 0.18), transparent 55%),
+    radial-gradient(circle at 80% 100%, rgba(65, 198, 184, 0.16), transparent 55%),
+    var(--vp-c-bg-alt);
+  margin-bottom: 96px;
+}
+.octave-cta-title {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+  color: var(--vp-c-text-1);
+}
+.octave-cta-sub {
+  font-size: 16px;
+  color: var(--vp-c-text-2);
+  margin: 0 0 24px;
+}
+.octave-cta-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.octave-cta-button {
+  display: inline-flex;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px 22px;
+  border-radius: 10px;
+  text-decoration: none !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease, border-color 0.15s ease;
+}
+.octave-cta-primary {
+  background: linear-gradient(120deg, #f2a65a, #ffb56f);
+  color: #1a1208 !important;
+  box-shadow: 0 8px 24px rgba(242, 166, 90, 0.28);
+}
+.octave-cta-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(242, 166, 90, 0.4);
+  filter: brightness(1.05);
+}
+.octave-cta-secondary {
+  background: transparent;
+  color: var(--vp-c-text-1) !important;
+  border: 1px solid var(--vp-c-divider);
+}
+.octave-cta-secondary:hover {
+  border-color: rgba(242, 166, 90, 0.5);
+  color: var(--vp-c-brand-1) !important;
+}
+
+@media (max-width: 768px) {
+  .octave-steps { grid-template-columns: 1fr; }
+  .octave-stats { grid-template-columns: repeat(2, 1fr); }
+  .octave-section-title { font-size: 26px; }
+  .octave-cta-title { font-size: 24px; }
+  .octave-section { margin: 64px auto; }
+  .octave-hero-title { font-size: 88px !important; }
+  .octave-hero-pitch { font-size: 28px !important; }
+  .octave-feature-grid { grid-template-columns: 1fr !important; }
+  .octave-headline-strum-title { font-size: 32px !important; }
+}
+
+/* ===================================================================== */
+/* Custom hero (replaces VPHero)                                         */
+/* ===================================================================== */
+.octave-hero {
+  position: relative;
+  max-width: 1180px;
+  margin: 56px auto 0;
+  padding: 64px 24px 0;
+  text-align: center;
+  overflow: visible;
+}
+.octave-hero-glow {
+  position: absolute;
+  top: -80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1200px;
+  height: 700px;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at 35% 30%, rgba(242, 166, 90, 0.32), transparent 55%),
+    radial-gradient(ellipse at 70% 50%, rgba(65, 198, 184, 0.22), transparent 55%);
+  filter: blur(90px);
+  opacity: 0.9;
+}
+.octave-hero-inner {
+  position: relative;
+  max-width: 920px;
+  margin: 0 auto;
+}
+.octave-hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--vp-c-text-2);
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg-soft);
+  margin-bottom: 28px;
+  animation: octave-fade-up 600ms ease-out both;
+}
+.octave-eyebrow-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #41c6b8;
+  box-shadow: 0 0 8px rgba(65, 198, 184, 0.7);
+  animation: octave-pulse 2.4s ease-in-out infinite;
+}
+@keyframes octave-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%     { opacity: 0.55; transform: scale(0.85); }
+}
+.octave-hero-title {
+  font-size: 132px;
+  line-height: 0.95;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  margin: 0;
+  background: linear-gradient(120deg, #f2a65a 0%, #ffb56f 35%, #41c6b8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: octave-fade-up 700ms ease-out 80ms both;
+}
+.octave-hero-pitch {
+  font-size: 40px;
+  line-height: 1.15;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 24px 0 8px;
+  color: var(--vp-c-text-1);
+  animation: octave-fade-up 700ms ease-out 160ms both;
+}
+.octave-hero-pitch-accent {
+  background: linear-gradient(120deg, #f2a65a, #ffb56f);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.octave-hero-sub {
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--vp-c-text-2);
+  max-width: 640px;
+  margin: 16px auto 32px;
+  animation: octave-fade-up 700ms ease-out 240ms both;
+}
+.octave-hero-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 28px;
+  animation: octave-fade-up 700ms ease-out 320ms both;
+}
+.octave-hero-meta {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-size: 13px;
+  color: var(--vp-c-text-3);
+  margin-bottom: 8px;
+  animation: octave-fade-up 700ms ease-out 400ms both;
+}
+.octave-hero-meta code {
+  font-size: 12px;
+  background: var(--vp-c-bg-soft);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--vp-c-text-2);
+}
+.octave-dot {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--vp-c-brand-1);
+  margin-right: 8px;
+  vertical-align: middle;
+  opacity: 0.7;
+}
+
+/* ===================================================================== */
+/* Shared buttons                                                        */
+/* ===================================================================== */
+.octave-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px 22px;
+  border-radius: 10px;
+  text-decoration: none !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease,
+              border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+.octave-btn-primary {
+  background: linear-gradient(120deg, #f2a65a, #ffb56f);
+  color: #1a1208 !important;
+  box-shadow: 0 10px 28px rgba(242, 166, 90, 0.32);
+}
+.octave-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 36px rgba(242, 166, 90, 0.42);
+  filter: brightness(1.05);
+}
+.octave-btn-ghost {
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1) !important;
+  border: 1px solid var(--vp-c-divider);
+}
+.octave-btn-ghost:hover {
+  border-color: rgba(242, 166, 90, 0.5);
+  color: var(--vp-c-brand-1) !important;
+  background: var(--vp-c-bg-alt);
+}
+
+/* ===================================================================== */
+/* Hero-banner "auto-chart" headline                                     */
+/* ===================================================================== */
+.octave-headline-strum {
+  position: relative;
+  padding: 0 24px;
+}
+.octave-headline-strum-inner {
+  position: relative;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 64px 48px;
+  border-radius: 22px;
+  border: 1px solid var(--vp-c-divider);
+  background:
+    radial-gradient(circle at 18% 20%, rgba(242, 166, 90, 0.22), transparent 55%),
+    radial-gradient(circle at 82% 90%, rgba(65, 198, 184, 0.18), transparent 55%),
+    var(--vp-c-bg-alt);
+  text-align: center;
+  overflow: hidden;
+}
+.octave-headline-strum-eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--vp-c-brand-1);
+  margin-bottom: 16px;
+}
+.octave-headline-strum-title {
+  font-size: 48px;
+  line-height: 1.08;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  margin: 0 0 20px;
+  color: var(--vp-c-text-1);
+}
+.octave-headline-strum-body {
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+  max-width: 680px;
+  margin: 0 auto 28px;
+}
+.octave-headline-strum-body strong {
+  color: var(--vp-c-text-1);
+  font-weight: 700;
+}
+.octave-headline-strum-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* ===================================================================== */
+/* Custom feature grid (replaces VPFeature)                              */
+/* ===================================================================== */
+.octave-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.octave-feature {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 28px 26px 24px;
+  border-radius: 16px;
+  border: 1px solid var(--vp-c-divider);
+  background: linear-gradient(165deg, var(--vp-c-bg-alt), var(--vp-c-bg-soft));
+  text-decoration: none !important;
+  color: inherit !important;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
+}
+.octave-feature::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 16px;
+  padding: 1px;
+  background: linear-gradient(140deg,
+    rgba(242, 166, 90, 0.55),
+    rgba(255, 181, 111, 0.25) 35%,
+    rgba(65, 198, 184, 0.45) 75%,
+    transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+.octave-feature:hover {
+  transform: translateY(-4px);
+  border-color: transparent;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+}
+.octave-feature:hover::before { opacity: 1; }
+.octave-feature-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(140deg, rgba(242, 166, 90, 0.18), rgba(65, 198, 184, 0.12));
+  border: 1px solid rgba(242, 166, 90, 0.25);
+  margin-bottom: 18px;
+  transition: transform 0.2s ease;
+}
+.octave-feature:hover .octave-feature-icon {
+  transform: scale(1.06) rotate(-3deg);
+}
+.octave-feature-icon img {
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+.octave-feature-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--vp-c-text-1);
+  margin-bottom: 10px;
+}
+.octave-feature p {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--vp-c-text-2);
+  margin: 0 0 18px;
+}
+.octave-feature-cta {
+  margin-top: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vp-c-brand-1);
+  letter-spacing: 0.01em;
+}
+.octave-feature-cta span {
+  display: inline-block;
+  margin-left: 4px;
+  transition: transform 0.18s ease;
+}
+.octave-feature:hover .octave-feature-cta span {
+  transform: translateX(4px);
+}
+
+@media (max-width: 1024px) {
+  .octave-feature-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .octave-hero { padding-top: 36px; }
+  .octave-hero-title { font-size: 72px; }
+  .octave-hero-pitch { font-size: 24px; }
+  .octave-hero-sub { font-size: 15px; }
+  .octave-headline-strum-inner { padding: 44px 24px; }
+  .octave-headline-strum-title { font-size: 28px; }
+  .octave-section { margin: 56px auto; padding: 0 16px; }
 }

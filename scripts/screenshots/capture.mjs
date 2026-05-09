@@ -1,46 +1,43 @@
 // @ts-check
 /**
- * OCTAVE screenshot harness — uses Playwright's Electron driver to launch the
- * packaged main bundle and capture documentation screenshots.
+ * OCTAVE screenshot harness.
+ *
+ * Captures docs screenshots into docs/public/screenshots/ by driving the
+ * packaged main bundle (out/main/index.js) through Playwright's Electron API.
  *
  * Usage:
  *   npm run build              # produce out/main/index.js
- *   npm run docs:screenshots   # this script
+ *   npm run docs:screenshots
+ *
+ * The "with-song" steps require a real song folder. Override the path with:
+ *   $env:OCTAVE_DEMO_SONG = "C:\Songs\My Song"
  */
 
-import { _electron as electron } from 'playwright'
 import path from 'node:path'
-import fs from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
+import fsp from 'node:fs/promises'
+import {
+  REPO_ROOT,
+  DEFAULT_DEMO_SONG,
+  ensureMainBuild,
+  stageFixture,
+  cleanupFixture,
+  launchOctave,
+  seedAndReload,
+  waitForSongLoaded,
+  clickFirstSong,
+  dismissModals,
+  maximizeWindow
+} from './lib/setup.mjs'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const REPO_ROOT = path.resolve(__dirname, '..', '..')
-const MAIN_ENTRY = path.join(REPO_ROOT, 'out', 'main', 'index.js')
 const OUTPUT_DIR = path.join(REPO_ROOT, 'docs', 'public', 'screenshots')
-
-const VIEWPORT = { width: 1600, height: 1100 }
 
 /**
  * @typedef {Object} Step
  * @property {string} name
  * @property {string} description
+ * @property {boolean} [requiresSong]
  * @property {(page: import('playwright').Page) => Promise<void>} [run]
  */
-
-/**
- * Helper: dismiss any open modal so the next step starts from a clean state.
- */
-async function dismissModals(page) {
-  // Both Settings and Auto-Chart modals use a `.settings-modal-close` X button.
-  // Click any visible close button, then settle.
-  for (let i = 0; i < 3; i++) {
-    const closeBtn = await page.$('.settings-modal-close')
-    if (!closeBtn) break
-    await closeBtn.click().catch(() => {})
-    await page.waitForTimeout(200)
-  }
-  await page.waitForTimeout(150)
-}
 
 /** @type {Step[]} */
 const STEPS = [
@@ -54,7 +51,7 @@ const STEPS = [
   },
   {
     name: 'settings-modal',
-    description: 'Settings modal open on the General tab',
+    description: 'Settings modal open',
     run: async (page) => {
       await page.keyboard.press('Control+,')
       await page.waitForSelector('.settings-modal', { timeout: 5_000 })
@@ -75,65 +72,96 @@ const STEPS = [
     name: 'auto-chart-advanced',
     description: 'Auto-Chart modal with the Advanced section expanded',
     run: async (page) => {
-      // Modal still open from previous step.
-      const advanced = page.locator('.auto-chart-modal').locator('button, summary').filter({ hasText: /advanced/i }).first()
+      const advanced = page
+        .locator('.auto-chart-modal')
+        .locator('button, summary')
+        .filter({ hasText: /advanced/i })
+        .first()
       if (await advanced.count()) {
         await advanced.click().catch(() => {})
         await page.waitForTimeout(400)
       }
     }
+  },
+  {
+    name: 'editor-overview',
+    description: 'Full editor with the demo song loaded — landing-page hero shot',
+    requiresSong: true,
+    run: async (page) => {
+      await dismissModals(page)
+      await waitForSongLoaded(page)
+      await clickFirstSong(page)
+      // Let the highway initialize a couple of frames.
+      await page.waitForTimeout(2500)
+    }
+  },
+  {
+    name: 'editor-layout',
+    description: 'Editor with the demo song loaded (used in the Editor Layout guide)',
+    requiresSong: true,
+    run: async (page) => {
+      await page.waitForTimeout(300)
+    }
   }
-  // Add more steps here — see scripts/screenshots/README.md
 ]
 
-async function ensureBuild() {
-  try {
-    await fs.access(MAIN_ENTRY)
-  } catch {
-    console.error(`[screenshots] Main bundle not found at ${MAIN_ENTRY}.`)
-    console.error('[screenshots] Run "npm run build" first.')
-    process.exit(1)
-  }
-}
-
 async function main() {
-  await ensureBuild()
-  await fs.mkdir(OUTPUT_DIR, { recursive: true })
+  await ensureMainBuild()
+  await fsp.mkdir(OUTPUT_DIR, { recursive: true })
+
+  const needsSong = STEPS.some((s) => s.requiresSong)
+  /** @type {Awaited<ReturnType<typeof stageFixture>> | null} */
+  let fixture = null
+  if (needsSong) {
+    try {
+      fixture = await stageFixture([DEFAULT_DEMO_SONG])
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[screenshots] could not stage demo song: ${msg}`)
+      console.warn('[screenshots] song-dependent steps will be skipped.')
+    }
+  }
+  if (!fixture) {
+    fixture = await stageFixture([])
+  }
 
   console.log('[screenshots] Launching OCTAVE…')
-  const app = await electron.launch({
-    args: [MAIN_ENTRY],
-    env: {
-      ...process.env,
-      OCTAVE_SCREENSHOT_MODE: '1',
-      ELECTRON_DISABLE_GPU_SANDBOX: '1'
-    }
-  })
+  const { app, page } = await launchOctave({ userData: fixture.userData })
+  const bounds = await maximizeWindow(app)
+  console.log(`[screenshots] window: ${bounds.width}x${bounds.height} @ (${bounds.x},${bounds.y})`)
+  // Match the renderer viewport to the actual window so screenshots fill the frame.
+  await page.setViewportSize({ width: bounds.width, height: bounds.height }).catch(() => {})
 
-  const page = await app.firstWindow()
-  await page.setViewportSize(VIEWPORT)
-  await page.waitForLoadState('domcontentloaded')
+  const haveSong = needsSong && fixture.projectDir && (await fsp.readdir(fixture.projectDir)).length > 0
+  if (haveSong) {
+    await seedAndReload(page, { projectDir: fixture.projectDir })
+  }
 
   let captured = 0
   let failed = 0
 
   for (const step of STEPS) {
     const target = path.join(OUTPUT_DIR, `${step.name}.png`)
+    if (step.requiresSong && !haveSong) {
+      console.log(`[screenshots] - skipping ${step.name} (no demo song available)`)
+      continue
+    }
     try {
-      console.log(`[screenshots] → ${step.name} — ${step.description}`)
+      console.log(`[screenshots] -> ${step.name} - ${step.description}`)
       if (step.run) await step.run(page)
       await page.screenshot({ path: target, fullPage: false })
       captured++
     } catch (err) {
       failed++
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`[screenshots] ✗ ${step.name} failed: ${msg}`)
-      // Still try to capture whatever the window currently shows
+      console.error(`[screenshots] x ${step.name} failed: ${msg}`)
       await page.screenshot({ path: target.replace('.png', '-error.png'), fullPage: false }).catch(() => {})
     }
   }
 
   await app.close()
+  await cleanupFixture(fixture.root)
+
   console.log(`[screenshots] Done. ${captured} captured, ${failed} failed.`)
   console.log(`[screenshots] Output: ${OUTPUT_DIR}`)
   if (failed > 0) process.exit(1)

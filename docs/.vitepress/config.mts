@@ -13,7 +13,7 @@ export default defineConfig({
 
   head: [
     ['link', { rel: 'icon', href: '/octave/favicon.svg', type: 'image/svg+xml' }],
-    ['meta', { name: 'theme-color', content: '#00F2FE' }],
+    ['meta', { name: 'theme-color', content: '#f2a65a' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'OCTAVE — Chart Editor' }],
     ['meta', { property: 'og:description', content: 'A desktop chart editor for rhythm games like YARG and Clone Hero.' }],
@@ -45,6 +45,7 @@ export default defineConfig({
           text: 'Editing',
           items: [
             { text: 'MIDI Editor', link: '/guide/midi-editor' },
+            { text: 'Timeline & Venue Editor', link: '/guide/timeline-editor' },
             { text: 'Chart Preview (3D Highway)', link: '/guide/chart-preview' },
             { text: 'Project Explorer', link: '/guide/project-explorer' },
             { text: 'Property Panel', link: '/guide/property-panel' }

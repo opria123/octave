@@ -281,23 +281,34 @@ export function ProjectExplorer(): React.JSX.Element {
     try {
       const store = getSongStore(songId)
 
-      // 1. Try reading saved video.json
+      // Always scan the song folder for a real video file. This wins over any
+      // absolute `videoPath` saved in video.json — those paths are often stale
+      // (song was moved, or the project was opened from a different machine /
+      // staging folder) and would be blocked by the song-file:// sandbox.
+      const detected = await window.api.scanVideo(folderPath)
+
       const videoJson = await window.api.readVideoJson(folderPath)
-      if (videoJson && (videoJson.videoPath || (Array.isArray(videoJson.clips) && videoJson.clips.length > 0))) {
-        const vs: Partial<VideoSync> = {
-          videoPath: videoJson.videoPath as string | undefined,
-          clips: (videoJson.clips as VideoSync['clips']) || [],
-          offsetMs: (videoJson.offsetMs as number) || 0
-        }
-        store.getState().updateVideoSync(vs)
-        store.getState().markClean() // Don't trigger autosave just from loading
+      const jsonClips = (videoJson?.clips as VideoSync['clips']) || []
+      const jsonOffset = (videoJson?.offsetMs as number) || 0
+
+      if (detected) {
+        store.getState().updateVideoSync({
+          videoPath: detected.filePath,
+          clips: jsonClips,
+          offsetMs: jsonOffset
+        })
+        store.getState().markClean()
         return
       }
 
-      // 2. Fallback: auto-detect a video file in the folder (like games do)
-      const detected = await window.api.scanVideo(folderPath)
-      if (detected) {
-        store.getState().updateVideoSync({ videoPath: detected.filePath })
+      // No file in the folder — fall back to whatever video.json says (e.g. an
+      // http(s) URL) so remote / explicitly-pathed videos still work.
+      if (videoJson && (videoJson.videoPath || jsonClips.length > 0)) {
+        store.getState().updateVideoSync({
+          videoPath: videoJson.videoPath as string | undefined,
+          clips: jsonClips,
+          offsetMs: jsonOffset
+        })
         store.getState().markClean()
       }
     } catch (error) {

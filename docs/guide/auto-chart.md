@@ -1,20 +1,25 @@
 # Auto-Chart <Badge type="warning" text="experimental" />
 
-Generate a complete Clone Hero / YARG chart from an audio source — drums, guitar, bass, keys, vocals, and harmonies — using OCTAVE's bundled STRUM pipeline.
+Generate a complete Clone Hero / YARG chart from an audio source — drums, guitar, bass, keys, vocals, and harmonies — using OCTAVE's bundled **STRUM** pipeline.
 
 ::: warning Experimental
 The auto-charter is bundled but still evolving. Output quality varies by genre, and you'll usually want to clean the result up in the [MIDI Editor](/guide/midi-editor) before shipping. We mark it experimental so it's clear: this is a starting point, not a finished chart.
 :::
 
-## What it does
+## STRUM
 
-The Auto-Chart pipeline:
-1. Splits your audio into stems (drums, bass, vocals, other) using [Demucs](https://github.com/adefossez/demucs).
-2. Detects drum hits & maps them to the General-MIDI drum kit.
-3. Estimates pitched notes for guitar/bass/keys using [basic-pitch](https://github.com/spotify/basic-pitch).
-4. Transcribes vocal melody (and HARM2 / HARM3 harmonies if requested).
-5. Detects tempo and downbeats — **or** uses a manual tempo map you provide.
-6. Writes a complete song folder: `notes.mid`, per-stem `.ogg` files, and a `song.ini`.
+**STRUM** (Stem-aware Transcription, Rhythm & Universal Mapping) is the open-source audio-to-chart engine that powers Auto-Chart. It lives in its own repository at [github.com/opria123/strum](https://github.com/opria123/strum) and is bundled with OCTAVE under [`resources/strum/`](https://github.com/opria123/octave/tree/master/resources/strum). It runs locally — no cloud, no upload.
+
+What STRUM does, in order:
+
+1. **Stem split** with [Demucs](https://github.com/adefossez/demucs) — drums, bass, vocals, other (skipped if you provide pre-split stems).
+2. **Drum onset detection + classification** — kick, snare, toms, hi-hat, crash, ride mapped to General-MIDI.
+3. **Polyphonic transcription** of guitar / bass / keys via [basic-pitch](https://github.com/spotify/basic-pitch).
+4. **Vocal melody + lyric alignment** — pitched lead with optional HARM2 / HARM3 harmonies.
+5. **Tempo & downbeat detection** (or use a manual tempo map you provide).
+6. **Assembly** into a complete song folder: `notes.mid`, per-stem `.ogg` files, and a `song.ini`.
+
+You can run STRUM standalone from the command line using the same `strum_worker.py` OCTAVE invokes — see the [advanced flags](/guide/auto-chart-advanced) for the env vars and overrides.
 
 ## Quick start
 
@@ -50,3 +55,4 @@ In dev builds, OCTAVE prefers a project-local `.venv\Scripts\python.exe` if it e
 
 - [Advanced options →](/guide/auto-chart-advanced) — track gating, manual BPM, tempo maps, harmonies, offline mode
 - [Auto-Chart troubleshooting →](/troubleshooting/auto-chart-issues)
+- [STRUM on GitHub ↗](https://github.com/opria123/strum) — source, issues, and standalone CLI usage

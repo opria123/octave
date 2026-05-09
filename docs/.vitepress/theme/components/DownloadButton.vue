@@ -92,17 +92,18 @@ const primaryHref = computed(() => assetUrl.value ?? fallbackUrl)
   padding: 14px 28px;
   font-size: 17px;
   font-weight: 700;
-  color: #07212a;
-  background: linear-gradient(120deg, #00f2fe, #4facfe);
+  color: #1a1208;
+  background: linear-gradient(120deg, #f2a65a, #ffb56f 55%, #41c6b8);
   border-radius: 999px;
   text-decoration: none;
-  box-shadow: 0 8px 24px rgba(0, 242, 254, 0.25);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 8px 24px rgba(242, 166, 90, 0.28);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
 
 .dl-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 28px rgba(0, 242, 254, 0.32);
+  box-shadow: 0 12px 28px rgba(242, 166, 90, 0.38);
+  filter: brightness(1.04);
   text-decoration: none;
 }
 
