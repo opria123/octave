@@ -546,12 +546,17 @@ def _install_offline_lookup_stubs(batch_pipeline_cls) -> None:
     def _stub_dict(self, *_args, **_kwargs):
         return {}
 
+    # STRUM's batch_pipeline accesses mb_metadata['album'/'year'/'genre'] directly
+    # (no .get), so the offline stub must return all three keys to avoid KeyError.
+    def _stub_metadata_dict(self, *_args, **_kwargs):
+        return {"album": "", "year": "", "genre": ""}
+
     for name in ("_quick_musicbrainz_check",):
         if hasattr(batch_pipeline_cls, name):
             setattr(batch_pipeline_cls, name, _stub_bool)
     for name in ("_fetch_musicbrainz_metadata",):
         if hasattr(batch_pipeline_cls, name):
-            setattr(batch_pipeline_cls, name, _stub_dict)
+            setattr(batch_pipeline_cls, name, _stub_metadata_dict)
     for name in ("fetch_album_art", "_fetch_itunes_art", "fetch_music_video"):
         if hasattr(batch_pipeline_cls, name):
             setattr(batch_pipeline_cls, name, _stub_bool)
