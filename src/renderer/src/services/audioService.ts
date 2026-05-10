@@ -383,7 +383,11 @@ export async function play(
   // RAF loop using AudioContext.currentTime for precise sync (~30fps tick updates)
   let lastUpdateTime = 0
   const updateLoop = (): void => {
-    if (!state.isPlaying || state.sourceNodes !== sourceNodes) {
+    // Bail when playback stops. We deliberately do NOT compare against the
+    // closure-captured `sourceNodes` here — `seek()` swaps `state.sourceNodes`
+    // mid-flight to retarget audio, and an identity check would freeze the
+    // RAF (and the highway scroll along with it) on every scrub.
+    if (!state.isPlaying) {
       state.rafId = null
       return
     }
