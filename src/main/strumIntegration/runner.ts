@@ -39,7 +39,7 @@ function resolveBundledFfmpegDir(): string | null {
   }
 }
 
-type PythonCommand = {
+export type PythonCommand = {
   command: string
   baseArgs: string[]
 }
@@ -270,6 +270,10 @@ async function findPythonCommand(runId?: string): Promise<PythonCommand> {
   throw new Error(
     'A compatible Python runtime for development was not found. Set OCTAVE_STRUM_PYTHON, or install Python 3.10/3.11 and ensure it is available on PATH.'
   )
+}
+
+export async function resolvePythonCommand(runId?: string): Promise<PythonCommand> {
+  return findPythonCommand(runId)
 }
 
 function splitLines(chunk: string, remainder: string): { lines: string[]; remainder: string } {

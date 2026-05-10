@@ -8,7 +8,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater, type UpdateDownloadedEvent } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
 import ffmpeg from 'fluent-ffmpeg'
-import { cancelAutoChart, getStrumRequirementsPath, killAllRunningJobs, openStrumLogsFolder, runAutoChart } from './strumIntegration/runner'
+import { cancelAutoChart, getStrumRequirementsPath, killAllRunningJobs, openStrumLogsFolder, resolvePythonCommand, runAutoChart } from './strumIntegration/runner'
 import { ensureBootstrappedPython, getRuntimeStatus, isBootstrapTarget } from './strumIntegration/runtimeBootstrap'
 
 // Point fluent-ffmpeg at the bundled static binary
@@ -1241,7 +1241,7 @@ ipcMain.handle('video:download-url', async (event, songPath: string, url: string
     return { success: false, error: 'Invalid URL' }
   }
   const outputTemplate = join(songPath, 'video.%(ext)s')
-  const args = [
+  const ytDlpArgs = [
     '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
     '--merge-output-format', 'mp4',
     '-o', outputTemplate,
@@ -1251,9 +1251,21 @@ ipcMain.handle('video:download-url', async (event, songPath: string, url: string
     url
   ]
 
+  // Resolve the same Python the auto-charter uses (bundled runtime in
+  // packaged builds, .venv/system Python in dev) so we can invoke yt_dlp
+  // as a module instead of relying on a `yt-dlp` CLI on PATH — the
+  // packaged app doesn't ship one and most users don't have it either.
+  let pythonCmd: { command: string; baseArgs: string[] }
+  try {
+    pythonCmd = await resolvePythonCommand()
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+  const args = [...pythonCmd.baseArgs, '-m', 'yt_dlp', ...ytDlpArgs]
+
   return new Promise<{ success: boolean; filePath?: string; error?: string }>((resolvePromise) => {
     console.log('[yt-dlp] Starting download:', url)
-    const proc = execFile('yt-dlp', args, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+    const proc = execFile(pythonCmd.command, args, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error) {
         console.error('[yt-dlp] Error:', error.message)
         console.error('[yt-dlp] stderr:', stderr)
