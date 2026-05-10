@@ -1040,6 +1040,8 @@ export function Toolbar(): React.JSX.Element {
                   )}
                 </div>
               )}
+              {!autoChartProgress.isRunning && (
+              <>
               <section className="settings-preferences-group">
                 <h3 className="settings-hotkey-group-title">Inputs</h3>
                 <fieldset
@@ -1527,6 +1529,8 @@ export function Toolbar(): React.JSX.Element {
                 </div>
                 )}
               </section>
+              </>
+              )}
 
               <section className="settings-preferences-group">
                 <h3 className="settings-hotkey-group-title">Progress</h3>
@@ -1573,30 +1577,35 @@ export function Toolbar(): React.JSX.Element {
             </div>
 
             <div className="settings-modal-footer">
-              <button className="settings-modal-secondary" onClick={() => {
-                setAutoChartFiles([])
-                setAutoChartFolders([])
-                setAutoChartStemFolders([])
-                setAutoChartStemSongs([makeEmptyStemSong()])
-                setAutoChartUrls([EMPTY_AUTO_CHART_URL])
-                setAutoChartErrorCopied(false)
-                setAutoChartProgress({
-                  runId: null,
-                  stage: 'bootstrap',
-                  message: '',
-                  percent: 0,
-                  isRunning: false,
-                  outputDir: getPreferredAutoChartOutputDir(),
-                  error: null,
-                  warnings: []
-                })
-              }} disabled={autoChartProgress.isRunning}>Reset</button>
+              {!autoChartProgress.isRunning && (
+                <button className="settings-modal-secondary" onClick={() => {
+                  setAutoChartCloseCountdown(null)
+                  setAutoChartFiles([])
+                  setAutoChartFolders([])
+                  setAutoChartStemFolders([])
+                  setAutoChartStemSongs([makeEmptyStemSong()])
+                  setAutoChartUrls([EMPTY_AUTO_CHART_URL])
+                  setAutoChartErrorCopied(false)
+                  setAutoChartProgress({
+                    runId: null,
+                    stage: 'bootstrap',
+                    message: '',
+                    percent: 0,
+                    isRunning: false,
+                    outputDir: getPreferredAutoChartOutputDir(),
+                    error: null,
+                    warnings: []
+                  })
+                }}>Reset</button>
+              )}
               <button className="settings-modal-secondary" onClick={() => autoChartProgress.isRunning ? void handleCancelAutoChart() : setIsAutoChartModalOpen(false)}>
                 {autoChartProgress.isRunning ? 'Cancel Run' : 'Close'}
               </button>
-              <button className="settings-modal-primary" onClick={() => void handleStartAutoChart()} disabled={autoChartProgress.isRunning || (runtimeStatus?.managed === true && !runtimeStatus.ready)}>
-                Start Auto-Chart
-              </button>
+              {!autoChartProgress.isRunning && (
+                <button className="settings-modal-primary" onClick={() => void handleStartAutoChart()} disabled={runtimeStatus?.managed === true && !runtimeStatus.ready}>
+                  Start Auto-Chart
+                </button>
+              )}
             </div>
           </div>
         </div>
