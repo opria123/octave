@@ -62,7 +62,8 @@ interface ChartEditorAPI {
     stemFolders?: string[]
     stemSongs?: Array<{
       name?: string
-      stems: Partial<Record<'drums' | 'bass' | 'vocals' | 'other' | 'guitar' | 'piano' | 'mix', string>>
+      stems: Partial<Record<'drums' | 'bass' | 'vocals' | 'other' | 'guitar' | 'piano' | 'vocalsHarm2' | 'vocalsHarm3' | 'crowd', string>>
+      extras?: string[]
     }>
     urls: string[]
     includeKeys?: boolean
@@ -99,6 +100,7 @@ interface ChartEditorAPI {
     outputDir: string
     songFolders: string[]
     errors: string[]
+    urlSongFolders?: Array<{ url: string; songFolder: string }>
   }) => void) => () => void
   onAutoChartError: (callback: (event: {
     runId: string

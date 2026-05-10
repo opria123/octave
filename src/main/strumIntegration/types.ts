@@ -101,5 +101,12 @@ export interface AutoChartRunResult {
   outputDir: string
   songFolders: string[]
   errors: string[]
+  /**
+   * Per-URL provenance: which URL input produced which song folder.
+   * Only populated for `urls[]` entries; file/folder/stem inputs are not
+   * listed. Used by the renderer to optionally download the source
+   * video into the corresponding song folder after charting.
+   */
+  urlSongFolders?: Array<{ url: string; songFolder: string }>
 }
 

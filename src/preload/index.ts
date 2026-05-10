@@ -174,6 +174,7 @@ const api = {
     outputDir: string
     songFolders: string[]
     errors: string[]
+    urlSongFolders?: Array<{ url: string; songFolder: string }>
   }) => void): (() => void) => {
     const handler = (_event: unknown, payload: {
       runId: string
@@ -181,6 +182,7 @@ const api = {
       outputDir: string
       songFolders: string[]
       errors: string[]
+      urlSongFolders?: Array<{ url: string; songFolder: string }>
     }): void => callback(payload)
     ipcRenderer.on('strum:complete', handler)
     return () => ipcRenderer.removeListener('strum:complete', handler)

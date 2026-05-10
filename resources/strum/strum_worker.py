@@ -62,6 +62,10 @@ CROWD_REGISTRY: dict[Path, Path] = {}
 # Maps a song-mix Path to backing-vocals stems that should be exported as
 # vocals_1.ogg / vocals_2.ogg for in-game playback alongside the main mix.
 BACKING_VOCALS_REGISTRY: dict[Path, dict[str, Path]] = {}
+# Maps a downloaded audio Path back to the original URL it came from. Used
+# to surface URL→song-folder pairings in the completion event so the host
+# can optionally pull the source video into the same song folder.
+URL_SOURCE_REGISTRY: dict[Path, str] = {}
 # User-supplied tempo map (sorted by timeSec). When non-empty, the first
 # entry's BPM overrides STRUM's auto-detected initial tempo and the full list
 # is written to each song's notes.mid (note ticks are retimed so real-world
@@ -1803,9 +1807,11 @@ def collect_audio_sources(payload: dict[str, Any], cache_dir: Path, run_id: str)
             if parsed.scheme not in {"http", "https"}:
                 raise IntegrationError(f"Only HTTP and HTTPS URLs are supported: {url}")
             if is_direct_audio_url(url):
-                sources.append(download_direct_audio(url, download_dir, run_id))
+                downloaded = download_direct_audio(url, download_dir, run_id)
             else:
-                sources.append(download_youtube_audio(url, download_dir, run_id))
+                downloaded = download_youtube_audio(url, download_dir, run_id)
+            URL_SOURCE_REGISTRY[downloaded.resolve()] = url
+            sources.append(downloaded)
 
     unique_sources: list[Path] = []
     seen = set()
@@ -1976,6 +1982,7 @@ def run_pipeline(payload: dict[str, Any]) -> int:
 
     output_dir.mkdir(parents=True, exist_ok=True)
     song_folders: list[str] = []
+    url_song_folders: list[dict[str, str]] = []
     errors: list[str] = []
 
     for index, source in enumerate(sources, start=1):
@@ -2000,6 +2007,9 @@ def run_pipeline(payload: dict[str, Any]) -> int:
         )
         if result.success:
             song_folders.append(result.output_path)
+            source_url = URL_SOURCE_REGISTRY.get(source.resolve())
+            if source_url:
+                url_song_folders.append({"url": source_url, "songFolder": result.output_path})
             notes_mid = Path(result.output_path) / "notes.mid"
             if not INCLUDE_PRO_KEYS and notes_mid.exists():
                 try:
@@ -2036,6 +2046,7 @@ def run_pipeline(payload: dict[str, Any]) -> int:
         success=success,
         outputDir=str(output_dir),
         songFolders=song_folders,
+        urlSongFolders=url_song_folders,
         errors=errors,
     )
     return 0 if success else 1

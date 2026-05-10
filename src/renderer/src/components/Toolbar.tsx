@@ -69,6 +69,7 @@ export function Toolbar(): React.JSX.Element {
   const [autoChartStemSongs, setAutoChartStemSongs] = useState<StemSong[]>([makeEmptyStemSong()])
   const [autoChartUrls, setAutoChartUrls] = useState<string[]>([EMPTY_AUTO_CHART_URL])
   const [autoChartDisableOnlineLookup, setAutoChartDisableOnlineLookup] = useState(false)
+  const [autoChartDownloadVideo, setAutoChartDownloadVideo] = useState(true)
   const [autoChartAdvancedOpen, setAutoChartAdvancedOpen] = useState(false)
   // Optional user-supplied tempo map. Empty = use STRUM's auto-detection.
   // First entry's BPM (sorted by timeSec) overrides initial detected tempo.
@@ -407,11 +408,26 @@ export function Toolbar(): React.JSX.Element {
 
       if (event.success) {
         updateSettings({ autoChartOutputDir: event.outputDir, lastOpenedFolder: event.outputDir })
-        void loadProjectFolder(event.outputDir)
+        // Optionally pull the source video for any URL inputs into their
+        // resulting song folders so it shows up in the timeline / in-game.
+        if (autoChartDownloadVideo && event.urlSongFolders && event.urlSongFolders.length > 0) {
+          void Promise.allSettled(
+            event.urlSongFolders.map((entry) =>
+              window.api.downloadVideoUrl(entry.songFolder, entry.url).catch((err) => {
+                console.warn('[auto-chart] video download failed:', entry.url, err)
+                return { success: false }
+              })
+            )
+          ).then(() => {
+            void loadProjectFolder(event.outputDir)
+          })
+        } else {
+          void loadProjectFolder(event.outputDir)
+        }
         setAutoChartCloseCountdown(5)
       }
     })
-  }, [loadProjectFolder, updateSettings])
+  }, [autoChartDownloadVideo, loadProjectFolder, updateSettings])
 
   useEffect(() => {
     return window.api.onAutoChartError((event) => {
@@ -1401,6 +1417,21 @@ export function Toolbar(): React.JSX.Element {
                       Offline mode (disable online lookups)
                       <small style={{ display: 'block', opacity: 0.7 }}>
                         Skips MusicBrainz, album art, and lyric searches. Use this for custom uploads to avoid them being misidentified as other songs.
+                      </small>
+                    </span>
+                  </label>
+
+                  <label className="settings-checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={autoChartDownloadVideo}
+                      onChange={(event) => setAutoChartDownloadVideo(event.target.checked)}
+                      disabled={autoChartProgress.isRunning}
+                    />
+                    <span>
+                      Download video for URL inputs
+                      <small style={{ display: 'block', opacity: 0.7 }}>
+                        After charting finishes, pull the source video (e.g. YouTube) into each song folder so it plays in the timeline and in-game.
                       </small>
                     </span>
                   </label>

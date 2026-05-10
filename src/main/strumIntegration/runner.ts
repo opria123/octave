@@ -341,11 +341,22 @@ function handleStructuredEvent(
     }
 
     if (kind === 'complete') {
+      const rawUrlSongFolders = Array.isArray(payload.urlSongFolders) ? payload.urlSongFolders : []
+      const urlSongFolders: Array<{ url: string; songFolder: string }> = []
+      for (const entry of rawUrlSongFolders) {
+        if (entry && typeof entry === 'object') {
+          const e = entry as Record<string, unknown>
+          const url = typeof e.url === 'string' ? e.url : ''
+          const songFolder = typeof e.songFolder === 'string' ? e.songFolder : ''
+          if (url && songFolder) urlSongFolders.push({ url, songFolder })
+        }
+      }
       completion.result = {
         success: payload.success === true,
         outputDir: String(payload.outputDir ?? ''),
         songFolders: Array.isArray(payload.songFolders) ? payload.songFolders.map(String) : [],
-        errors: Array.isArray(payload.errors) ? payload.errors.map(String) : []
+        errors: Array.isArray(payload.errors) ? payload.errors.map(String) : [],
+        urlSongFolders
       }
       return true
     }
