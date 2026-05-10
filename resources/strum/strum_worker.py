@@ -52,9 +52,13 @@ PRESPLIT_STEM_REGISTRY: dict[Path, dict[str, Path]] = {}
 # OctaveVocalsCharter.detect_harmonies override.
 HARMONY_OVERRIDE_REGISTRY: dict[Path, Path] = {}
 # Maps a song-mix Path to extra audio files (uncharted) that should be
-# summed into a crowd.ogg playback file alongside the main mix. Populated
-# by collect_audio_sources(); consumed by OctaveBatchPipeline.convert_to_ogg.
+# merged into other.ogg alongside the user-supplied "other" stem (if any)
+# so all uncharted musical content plays back in-game. Populated by
+# collect_audio_sources(); consumed by OctaveBatchPipeline.convert_to_ogg.
 EXTRAS_REGISTRY: dict[Path, list[Path]] = {}
+# Maps a song-mix Path to a user-supplied crowd audio file. Exported
+# directly as crowd.ogg (CH/YARG play this as ambient crowd noise).
+CROWD_REGISTRY: dict[Path, Path] = {}
 # Maps a song-mix Path to backing-vocals stems that should be exported as
 # vocals_1.ogg / vocals_2.ogg for in-game playback alongside the main mix.
 BACKING_VOCALS_REGISTRY: dict[Path, dict[str, Path]] = {}
@@ -901,47 +905,66 @@ def build_pipeline(
             return self._vocals_charter
 
         def convert_to_ogg(self, input_path: Path, output_path: Path, *args, **kwargs):
-            # Always write the combined song.ogg via the parent implementation.
-            # Forward *args/**kwargs so newer upstream signatures (e.g.
-            # trim_start_ms=...) keep working without a worker update.
-            super().convert_to_ogg(input_path, output_path, *args, **kwargs)
             input_resolved = Path(input_path).resolve()
             logger = logging.getLogger(__name__)
             song_folder = output_path.parent
+            # STRUM passes trim_start_ms when phase-aligning song.ogg with
+            # the chart's bar-0 downbeat. Every other ogg we export from this
+            # same input has to receive the same trim or it will play back
+            # offset by phase_offset_ms relative to song.ogg (the symptom
+            # users report as "all stems are half a beat off").
+            export_kwargs = dict(kwargs)
+            # CH/YARG mix song.ogg + every per-instrument stem together at
+            # playback. When we have pre-split stems, writing a full mix to
+            # song.ogg would double every instrument in-game. Replace
+            # song.ogg with a silent track of matching duration so the games
+            # still find the file (some menu / preview paths require it) but
+            # don't double the audio. The per-stem oggs carry the real audio.
+            preset = PRESPLIT_STEM_REGISTRY.get(input_resolved) or {}
+            extras = EXTRAS_REGISTRY.get(input_resolved) or []
+            backing = BACKING_VOCALS_REGISTRY.get(input_resolved) or {}
+            has_full_coverage = bool(preset) or bool(extras) or bool(backing)
+            if has_full_coverage:
+                try:
+                    self._octave_write_silent_ogg(input_path, output_path, **export_kwargs)
+                    logger.info("  Wrote silent song.ogg (per-stem oggs carry the audio)")
+                except Exception as exc:
+                    logger.warning(f"  ⚠ Failed to write silent song.ogg, falling back to full mix: {exc}")
+                    super().convert_to_ogg(input_path, output_path, *args, **kwargs)
+            else:
+                # No pre-split stems — write the real full mix so playback
+                # works (the "single audio file" / Demucs path).
+                super().convert_to_ogg(input_path, output_path, *args, **kwargs)
 
             # Backing-vocals stems → vocals_1.ogg / vocals_2.ogg (CH/YARG
             # play these alongside vocals.ogg for harmony playback).
-            backing = BACKING_VOCALS_REGISTRY.get(input_resolved) or {}
             for slot, dest_name in (("vocalsHarm2", "vocals_1.ogg"), ("vocalsHarm3", "vocals_2.ogg")):
                 src = backing.get(slot)
                 if src is None:
                     continue
                 dest = song_folder / dest_name
                 try:
-                    super().convert_to_ogg(src, dest)
+                    super().convert_to_ogg(src, dest, **export_kwargs)
                     logger.info(f"  Exported backing vocals: {dest.name}")
                 except Exception as exc:
                     logger.warning(f"  ⚠ Failed to export {dest_name}: {exc}")
 
-            # Extras → crowd.ogg (sum first; CH/YARG play crowd.ogg as
-            # ambient uncharted audio).
-            extras = EXTRAS_REGISTRY.get(input_resolved) or []
-            if extras:
+            # Crowd slot → crowd.ogg (single file, no summing needed).
+            crowd_src = CROWD_REGISTRY.get(input_resolved)
+            if crowd_src is not None:
                 try:
-                    self._octave_export_crowd_ogg(extras, song_folder / "crowd.ogg")
-                    logger.info("  Exported extras: crowd.ogg")
+                    super().convert_to_ogg(crowd_src, song_folder / "crowd.ogg", **export_kwargs)
+                    logger.info("  Exported crowd: crowd.ogg")
                 except Exception as exc:
                     logger.warning(f"  ⚠ Failed to export crowd.ogg: {exc}")
 
             # When the user supplied pre-split stems for this mix, also export
             # each stem as `{stem}.ogg` alongside song.ogg so Clone Hero / YARG
             # can mute the corresponding instrument when notes are missed.
-            preset = PRESPLIT_STEM_REGISTRY.get(input_resolved)
-            if not preset:
-                return
+            # Extras (uncharted audio) get merged into other.ogg since "other"
+            # is the catch-all uncharted bucket in CH/YARG.
             # Map our internal stem names to the filenames recognised by
-            # Clone Hero / YARG. "other" stays as other.ogg (the bucket of
-            # whatever is not drums/bass/vocals — typically guitar+keys).
+            # Clone Hero / YARG.
             stem_filenames = {
                 "drums": "drums.ogg",
                 "bass": "bass.ogg",
@@ -956,13 +979,52 @@ def build_pipeline(
                     continue
                 dest = song_folder / dest_name
                 try:
-                    super().convert_to_ogg(src_path, dest)
-                    logger.info(f"  Exported stem: {dest.name}")
+                    if stem_name == "other" and extras:
+                        # Merge user's other stem with extras into other.ogg.
+                        self._octave_export_combined_ogg([src_path, *extras], dest, **export_kwargs)
+                        logger.info(f"  Exported stem (with extras): {dest.name}")
+                    else:
+                        super().convert_to_ogg(src_path, dest, **export_kwargs)
+                        logger.info(f"  Exported stem: {dest.name}")
                 except Exception as exc:
                     logger.warning(f"  ⚠ Failed to export stem {dest_name}: {exc}")
 
-        def _octave_export_crowd_ogg(self, src_files: list[Path], dest: Path) -> None:
-            """Sum a list of audio files and write the result as crowd.ogg.
+            # No "other" stem but extras present → export extras as other.ogg.
+            if "other" not in preset and extras:
+                try:
+                    self._octave_export_combined_ogg(extras, song_folder / "other.ogg", **export_kwargs)
+                    logger.info("  Exported extras as: other.ogg")
+                except Exception as exc:
+                    logger.warning(f"  ⚠ Failed to export other.ogg: {exc}")
+
+        def _octave_write_silent_ogg(self, ref_path: Path, dest: Path, **convert_kwargs) -> None:
+            """Write a silent ogg matching the reference audio's duration.
+
+            Used for song.ogg when per-stem oggs already cover the full mix —
+            CH/YARG would otherwise sum song.ogg + each stem and double the
+            audio. We honour the same trim_start_ms STRUM passes for the real
+            song.ogg so the silent file's length matches what the games expect.
+            """
+            import numpy as _np
+            import soundfile as _sf
+            import tempfile
+            info = _sf.info(str(ref_path))
+            trim_start_ms = float(convert_kwargs.get("trim_start_ms", 0.0) or 0.0)
+            duration_s = max(0.0, float(info.duration) - (trim_start_ms / 1000.0))
+            sr = int(info.samplerate)
+            channels = max(1, int(info.channels))
+            samples = max(1, int(round(duration_s * sr)))
+            silent = _np.zeros((samples, channels), dtype=_np.float32)
+            with tempfile.TemporaryDirectory(prefix="octave_silent_") as tmpdir:
+                wav_path = Path(tmpdir) / "silent.wav"
+                _sf.write(str(wav_path), silent, sr, subtype="PCM_16")
+                # Pass trim_start_ms=0 since we've already accounted for the
+                # trim by shortening the silent buffer.
+                forwarded = {k: v for k, v in convert_kwargs.items() if k != "trim_start_ms"}
+                super().convert_to_ogg(wav_path, dest, **forwarded)
+
+        def _octave_export_combined_ogg(self, src_files: list[Path], dest: Path, **convert_kwargs) -> None:
+            """Sum a list of audio files and write the result as ogg.
 
             Re-uses the same lightweight resample-and-sum logic used for the
             stem-song auto-mix path. Output is a 16-bit WAV first, then
@@ -1004,10 +1066,10 @@ def build_pipeline(
             peak = float(_np.max(_np.abs(summed))) or 1.0
             if peak > 0.999:
                 summed = summed * (0.999 / peak)
-            with tempfile.TemporaryDirectory(prefix="octave_crowd_") as tmpdir:
-                wav_path = Path(tmpdir) / "crowd.wav"
+            with tempfile.TemporaryDirectory(prefix="octave_combined_") as tmpdir:
+                wav_path = Path(tmpdir) / "combined.wav"
                 _sf.write(str(wav_path), summed, target_sr, subtype="PCM_16")
-                super().convert_to_ogg(wav_path, dest)
+                super().convert_to_ogg(wav_path, dest, **convert_kwargs)
 
         def separate_stems(self, audio_path: Path, work_dir: Path):
             logger = logging.getLogger(__name__)
@@ -1616,7 +1678,16 @@ def collect_audio_sources(payload: dict[str, Any], cache_dir: Path, run_id: str)
                     continue
                 backing_map[key] = _resolve_stem(raw_val, f"{song_name}/{key}")
 
-            # Extras: uncharted audio summed into the auto-mix + crowd.ogg.
+            # Crowd slot: optional, single file. Exported directly as crowd.ogg
+            # without re-encoding via auto-mix. Not included in the analysis
+            # mix — crowd noise would muddy tempo/beat detection.
+            crowd_path: Path | None = None
+            crowd_raw = stem_inputs.get("crowd")
+            if crowd_raw:
+                crowd_path = _resolve_stem(crowd_raw, f"{song_name}/crowd")
+
+            # Extras: uncharted audio summed into the auto-mix and merged
+            # into other.ogg for in-game playback.
             extras_paths: list[Path] = []
             for ex_idx, raw_val in enumerate(extras_inputs):
                 if not raw_val or not str(raw_val).strip():
@@ -1625,7 +1696,8 @@ def collect_audio_sources(payload: dict[str, Any], cache_dir: Path, run_id: str)
 
             if not stem_map and not backing_map and not extras_paths:
                 raise IntegrationError(
-                    f"Stem song '{song_name}' has no usable inputs."
+                    f"Stem song '{song_name}' needs at least one stem, backing-vocals "
+                    f"or extra audio file (crowd audio alone isn't enough to build a chart)."
                 )
 
             # Auto-mix everything (charted stems + backing vocals + extras).
@@ -1672,6 +1744,8 @@ def collect_audio_sources(payload: dict[str, Any], cache_dir: Path, run_id: str)
             PRESPLIT_STEM_REGISTRY[mix_path] = stem_map
             if extras_paths:
                 EXTRAS_REGISTRY[mix_path] = extras_paths
+            if crowd_path is not None:
+                CROWD_REGISTRY[mix_path] = crowd_path
             if backing_map:
                 BACKING_VOCALS_REGISTRY[mix_path] = backing_map
                 # If the user provided a lead-vocals stem, route harmony

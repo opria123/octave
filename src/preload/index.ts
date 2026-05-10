@@ -128,7 +128,7 @@ const api = {
     stemFolders?: string[]
     stemSongs?: Array<{
       name?: string
-      stems: Partial<Record<'drums' | 'bass' | 'vocals' | 'other' | 'guitar' | 'piano' | 'vocalsHarm2' | 'vocalsHarm3', string>>
+      stems: Partial<Record<'drums' | 'bass' | 'vocals' | 'other' | 'guitar' | 'piano' | 'vocalsHarm2' | 'vocalsHarm3' | 'crowd', string>>
       extras?: string[]
     }>
     urls: string[]

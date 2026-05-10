@@ -1088,30 +1088,44 @@ ipcMain.handle('song:importAudio', async (_event, songPath: string, audioSourceP
   }
 })
 
-// Read audio files - returns all audio stems found in the song folder
+// Read audio files - returns audio stems found in the song folder.
+// `song.{ogg,opus,mp3,wav}` (the full mix) is excluded from the timeline
+// when other stems are present — Clone Hero / YARG keep song.ogg around for
+// menu previews, but loading it alongside the per-instrument stems would
+// double the audio. When song.* is the only audio file, it's returned so
+// the editor still has playback.
 ipcMain.handle('song:readAudio', async (_event, songPath: string) => {
   if (!isPathAllowed(songPath)) return null
   const audioExtensions = ['.ogg', '.mp3', '.opus', '.wav']
-  const results: { filePath: string; filename: string }[] = []
+  const fullMixBaseNames = new Set(['song'])
+  const fullMixCandidates: { filePath: string; filename: string }[] = []
+  const stemResults: { filePath: string; filename: string }[] = []
 
   try {
     const entries = await readdir(songPath)
     for (const entry of entries) {
-      const ext = entry.substring(entry.lastIndexOf('.')).toLowerCase()
-      if (audioExtensions.includes(ext)) {
-        const audioPath = join(songPath, entry)
-        try {
-          await stat(audioPath)
-          results.push({ filePath: audioPath, filename: entry })
-        } catch {
-          // Skip inaccessible files
-        }
+      const lastDot = entry.lastIndexOf('.')
+      if (lastDot < 0) continue
+      const ext = entry.substring(lastDot).toLowerCase()
+      if (!audioExtensions.includes(ext)) continue
+      const audioPath = join(songPath, entry)
+      try {
+        await stat(audioPath)
+      } catch {
+        continue
+      }
+      const baseName = entry.substring(0, lastDot).toLowerCase()
+      if (fullMixBaseNames.has(baseName)) {
+        fullMixCandidates.push({ filePath: audioPath, filename: entry })
+      } else {
+        stemResults.push({ filePath: audioPath, filename: entry })
       }
     }
   } catch {
     // Folder not readable
   }
 
+  const results = stemResults.length > 0 ? stemResults : fullMixCandidates
   return results.length > 0 ? results : null
 })
 

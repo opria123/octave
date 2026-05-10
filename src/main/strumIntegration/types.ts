@@ -47,12 +47,16 @@ export interface AutoChartRunOptions {
    *   - `vocalsHarm3` — backing vocals 2, drives HARM3 and vocals_2.ogg.
    *
    * `extras` is a list of additional audio files/URLs that are NOT
-   * charted. They are summed into the auto-mixed full mix and exported
-   * as crowd.ogg so players hear them during playback.
+   * charted. They are summed into the auto-mixed full mix and merged
+   * into other.ogg so players hear them during playback.
+   *
+   * `crowd` is an optional single audio file exported directly as
+   * crowd.ogg (CH/YARG play this as ambient crowd noise). Not included
+   * in the analysis mix.
    */
   stemSongs?: Array<{
     name?: string
-    stems: Partial<Record<'drums' | 'bass' | 'vocals' | 'other' | 'guitar' | 'piano' | 'vocalsHarm2' | 'vocalsHarm3', string>>
+    stems: Partial<Record<'drums' | 'bass' | 'vocals' | 'other' | 'guitar' | 'piano' | 'vocalsHarm2' | 'vocalsHarm3' | 'crowd', string>>
     extras?: string[]
   }>
   urls: string[]
