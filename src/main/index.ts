@@ -591,7 +591,7 @@ ipcMain.handle('strum:start', async (_event, options: {
   files: string[]
   folders: string[]
   stemFolders?: string[]
-  stemSongs?: Array<{ name?: string; stems: Record<string, string> }>
+  stemSongs?: Array<{ name?: string; stems: Record<string, string>; extras?: string[] }>
   urls: string[]
   includeKeys?: boolean
   disableOnlineLookup?: boolean

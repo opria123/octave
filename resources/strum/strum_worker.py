@@ -46,6 +46,18 @@ SKIP_HARMONIES = os.environ.get("OCTAVE_STRUM_SKIP_HARMONIES", "0") == "1"
 # collect_audio_sources() when the user provides a pre-split stems folder;
 # consulted by OctaveBatchPipeline.separate_stems() to skip Demucs.
 PRESPLIT_STEM_REGISTRY: dict[Path, dict[str, Path]] = {}
+# Maps a lead-vocals Path to the audio file that should drive harmony
+# (HARM2/HARM3) detection. Populated when the user provides backing-vocals
+# stems via the per-instrument upload UI; consulted by the
+# OctaveVocalsCharter.detect_harmonies override.
+HARMONY_OVERRIDE_REGISTRY: dict[Path, Path] = {}
+# Maps a song-mix Path to extra audio files (uncharted) that should be
+# summed into a crowd.ogg playback file alongside the main mix. Populated
+# by collect_audio_sources(); consumed by OctaveBatchPipeline.convert_to_ogg.
+EXTRAS_REGISTRY: dict[Path, list[Path]] = {}
+# Maps a song-mix Path to backing-vocals stems that should be exported as
+# vocals_1.ogg / vocals_2.ogg for in-game playback alongside the main mix.
+BACKING_VOCALS_REGISTRY: dict[Path, dict[str, Path]] = {}
 # User-supplied tempo map (sorted by timeSec). When non-empty, the first
 # entry's BPM overrides STRUM's auto-detected initial tempo and the full list
 # is written to each song's notes.mid (note ticks are retimed so real-world
@@ -650,6 +662,21 @@ def build_pipeline(
         `whisper` package otherwise.
         """
 
+        def detect_harmonies(self, audio_path, lead_phrases):
+            # When the user supplied dedicated backing-vocals stems for this
+            # song, run harmony detection against those instead of re-using
+            # the lead vocals stem. Lead vocals stay strictly lead.
+            try:
+                override = HARMONY_OVERRIDE_REGISTRY.get(Path(audio_path).resolve())
+            except Exception:
+                override = None
+            if override is not None:
+                logging.getLogger(__name__).info(
+                    f"  Routing harmony detection to user-supplied backing vocals: {override.name}"
+                )
+                audio_path = str(override)
+            return super().detect_harmonies(audio_path, lead_phrases)
+
         def transcribe_lyrics(self, audio_path):
             cpp_bin = os.environ.get("OCTAVE_WHISPER_CPP_BIN", "").strip()
             cpp_model = os.environ.get("OCTAVE_WHISPER_CPP_MODEL", "").strip()
@@ -878,14 +905,40 @@ def build_pipeline(
             # Forward *args/**kwargs so newer upstream signatures (e.g.
             # trim_start_ms=...) keep working without a worker update.
             super().convert_to_ogg(input_path, output_path, *args, **kwargs)
+            input_resolved = Path(input_path).resolve()
+            logger = logging.getLogger(__name__)
+            song_folder = output_path.parent
+
+            # Backing-vocals stems → vocals_1.ogg / vocals_2.ogg (CH/YARG
+            # play these alongside vocals.ogg for harmony playback).
+            backing = BACKING_VOCALS_REGISTRY.get(input_resolved) or {}
+            for slot, dest_name in (("vocalsHarm2", "vocals_1.ogg"), ("vocalsHarm3", "vocals_2.ogg")):
+                src = backing.get(slot)
+                if src is None:
+                    continue
+                dest = song_folder / dest_name
+                try:
+                    super().convert_to_ogg(src, dest)
+                    logger.info(f"  Exported backing vocals: {dest.name}")
+                except Exception as exc:
+                    logger.warning(f"  ⚠ Failed to export {dest_name}: {exc}")
+
+            # Extras → crowd.ogg (sum first; CH/YARG play crowd.ogg as
+            # ambient uncharted audio).
+            extras = EXTRAS_REGISTRY.get(input_resolved) or []
+            if extras:
+                try:
+                    self._octave_export_crowd_ogg(extras, song_folder / "crowd.ogg")
+                    logger.info("  Exported extras: crowd.ogg")
+                except Exception as exc:
+                    logger.warning(f"  ⚠ Failed to export crowd.ogg: {exc}")
+
             # When the user supplied pre-split stems for this mix, also export
             # each stem as `{stem}.ogg` alongside song.ogg so Clone Hero / YARG
             # can mute the corresponding instrument when notes are missed.
-            preset = PRESPLIT_STEM_REGISTRY.get(Path(input_path).resolve())
+            preset = PRESPLIT_STEM_REGISTRY.get(input_resolved)
             if not preset:
                 return
-            logger = logging.getLogger(__name__)
-            song_folder = output_path.parent
             # Map our internal stem names to the filenames recognised by
             # Clone Hero / YARG. "other" stays as other.ogg (the bucket of
             # whatever is not drums/bass/vocals — typically guitar+keys).
@@ -907,6 +960,54 @@ def build_pipeline(
                     logger.info(f"  Exported stem: {dest.name}")
                 except Exception as exc:
                     logger.warning(f"  ⚠ Failed to export stem {dest_name}: {exc}")
+
+        def _octave_export_crowd_ogg(self, src_files: list[Path], dest: Path) -> None:
+            """Sum a list of audio files and write the result as crowd.ogg.
+
+            Re-uses the same lightweight resample-and-sum logic used for the
+            stem-song auto-mix path. Output is a 16-bit WAV first, then
+            converted to ogg via the parent class so the codec settings stay
+            consistent with song.ogg.
+            """
+            import numpy as _np
+            import soundfile as _sf
+            import tempfile
+            loaded: list[tuple[_np.ndarray, int]] = []
+            for src in src_files:
+                data, sr = _sf.read(str(src), always_2d=True)
+                loaded.append((data.astype(_np.float32, copy=False), sr))
+            if not loaded:
+                return
+            target_sr = max(sr for _, sr in loaded)
+            target_channels = max(d.shape[1] for d, _ in loaded)
+            max_len = 0
+            resampled: list[_np.ndarray] = []
+            for data, sr in loaded:
+                if sr != target_sr:
+                    ratio = target_sr / sr
+                    new_len = int(round(data.shape[0] * ratio))
+                    old_idx = _np.linspace(0.0, data.shape[0] - 1, data.shape[0])
+                    new_idx = _np.linspace(0.0, data.shape[0] - 1, new_len)
+                    chs = []
+                    for ch in range(data.shape[1]):
+                        chs.append(_np.interp(new_idx, old_idx, data[:, ch]).astype(_np.float32))
+                    data = _np.stack(chs, axis=1)
+                if data.shape[1] < target_channels:
+                    data = _np.tile(data, (1, target_channels // data.shape[1]))
+                elif data.shape[1] > target_channels:
+                    data = data[:, :target_channels]
+                resampled.append(data)
+                max_len = max(max_len, data.shape[0])
+            summed = _np.zeros((max_len, target_channels), dtype=_np.float32)
+            for data in resampled:
+                summed[: data.shape[0]] += data
+            peak = float(_np.max(_np.abs(summed))) or 1.0
+            if peak > 0.999:
+                summed = summed * (0.999 / peak)
+            with tempfile.TemporaryDirectory(prefix="octave_crowd_") as tmpdir:
+                wav_path = Path(tmpdir) / "crowd.wav"
+                _sf.write(str(wav_path), summed, target_sr, subtype="PCM_16")
+                super().convert_to_ogg(wav_path, dest)
 
         def separate_stems(self, audio_path: Path, work_dir: Path):
             logger = logging.getLogger(__name__)
@@ -1445,9 +1546,20 @@ def collect_audio_sources(payload: dict[str, Any], cache_dir: Path, run_id: str)
 
     # Per-instrument stem songs. Each entry maps instrument name → file path
     # or URL. Empty/missing slots are skipped (that instrument is not
-    # charted). If "mix" is not provided we synthesise one by summing the
-    # supplied stems so the rest of the pipeline (tempo / beat / metadata)
+    # charted). The full mix is always synthesised by summing the supplied
+    # stems + extras so the rest of the pipeline (tempo / beat / metadata)
     # has audio to analyse. Demucs separation is skipped for these songs.
+    #
+    # Vocal slots:
+    #   - "vocals" → strictly lead vocals (PART VOCALS / HARM1)
+    #   - "vocalsHarm2" → backing vocals 1; drives HARM2 + vocals_1.ogg
+    #   - "vocalsHarm3" → backing vocals 2; drives HARM3 + vocals_2.ogg
+    # Backing-vocal stems are NOT charted as PART VOCALS — they're routed
+    # through OctaveVocalsCharter.detect_harmonies via HARMONY_OVERRIDE_REGISTRY
+    # and exported as vocals_1.ogg / vocals_2.ogg via BACKING_VOCALS_REGISTRY.
+    #
+    # "extras" is a list of additional uncharted audio files/URLs. They are
+    # summed into the auto-mix and exported as crowd.ogg for in-game playback.
     stem_songs = payload.get("stemSongs") or []
     if stem_songs:
         import numpy as _np
@@ -1459,7 +1571,12 @@ def collect_audio_sources(payload: dict[str, Any], cache_dir: Path, run_id: str)
             if not isinstance(entry, dict):
                 continue
             stem_inputs = entry.get("stems") or {}
-            if not isinstance(stem_inputs, dict) or not stem_inputs:
+            extras_inputs = entry.get("extras") or []
+            if not isinstance(stem_inputs, dict):
+                stem_inputs = {}
+            if not isinstance(extras_inputs, list):
+                extras_inputs = []
+            if not stem_inputs and not extras_inputs:
                 continue
             raw_name = str(entry.get("name") or "").strip()
             song_name = sanitize_filename(raw_name, f"stem-song-{ss_idx + 1}")
@@ -1483,79 +1600,124 @@ def collect_audio_sources(payload: dict[str, Any], cache_dir: Path, run_id: str)
                     raise IntegrationError(f"Unsupported stem audio file for {label}: {p.name}")
                 return p
 
+            # Charted stems passed to STRUM's separator-replacement registry.
             stem_map: dict[str, Path] = {}
-            mix_path: Path | None = None
-            for key in ("drums", "bass", "vocals", "other", "guitar", "piano", "mix"):
+            # Backing vocals are NOT charted; they're routed to harmony
+            # detection + playback exports separately.
+            backing_map: dict[str, Path] = {}
+            for key in ("drums", "bass", "vocals", "other", "guitar", "piano"):
                 raw_val = stem_inputs.get(key)
                 if not raw_val:
                     continue
-                resolved = _resolve_stem(raw_val, f"{song_name}/{key}")
-                if key == "mix":
-                    mix_path = resolved
-                else:
-                    stem_map[key] = resolved
+                stem_map[key] = _resolve_stem(raw_val, f"{song_name}/{key}")
+            for key in ("vocalsHarm2", "vocalsHarm3"):
+                raw_val = stem_inputs.get(key)
+                if not raw_val:
+                    continue
+                backing_map[key] = _resolve_stem(raw_val, f"{song_name}/{key}")
 
-            if not stem_map and mix_path is None:
+            # Extras: uncharted audio summed into the auto-mix + crowd.ogg.
+            extras_paths: list[Path] = []
+            for ex_idx, raw_val in enumerate(extras_inputs):
+                if not raw_val or not str(raw_val).strip():
+                    continue
+                extras_paths.append(_resolve_stem(str(raw_val), f"{song_name}/extra-{ex_idx + 1}"))
+
+            if not stem_map and not backing_map and not extras_paths:
                 raise IntegrationError(
                     f"Stem song '{song_name}' has no usable inputs."
                 )
 
-            if mix_path is None:
-                # Auto-mix the supplied stems. Load each at its native rate,
-                # resample any odd ones to the highest-rate stem, sum, and
-                # peak-normalise. Output as 16-bit WAV so downstream tools
-                # don't choke on float formats.
-                emit_progress(run_id, "bootstrap", f"Auto-mixing stems for {song_name}", current_item=song_name)
-                loaded: list[tuple[_np.ndarray, int]] = []
-                for stem_file in stem_map.values():
-                    data, sr = _sf.read(str(stem_file), always_2d=True)
-                    loaded.append((data.astype(_np.float32, copy=False), sr))
-                target_sr = max(sr for _, sr in loaded)
-                target_channels = max(d.shape[1] for d, _ in loaded)
-                max_len = 0
-                resampled: list[_np.ndarray] = []
-                for data, sr in loaded:
-                    if sr != target_sr:
-                        ratio = target_sr / sr
-                        new_len = int(round(data.shape[0] * ratio))
-                        # Cheap linear resample via numpy interp (we only
-                        # need an analysis-grade mix, not mastering).
-                        old_idx = _np.linspace(0.0, data.shape[0] - 1, data.shape[0])
-                        new_idx = _np.linspace(0.0, data.shape[0] - 1, new_len)
-                        channels = []
-                        for ch in range(data.shape[1]):
-                            channels.append(_np.interp(new_idx, old_idx, data[:, ch]).astype(_np.float32))
-                        data = _np.stack(channels, axis=1)
-                    if data.shape[1] < target_channels:
-                        # mono → stereo by duplication
-                        data = _np.tile(data, (1, target_channels // data.shape[1]))
-                    elif data.shape[1] > target_channels:
-                        data = data[:, :target_channels]
-                    resampled.append(data)
-                    max_len = max(max_len, data.shape[0])
-                summed = _np.zeros((max_len, target_channels), dtype=_np.float32)
-                for data in resampled:
-                    summed[: data.shape[0]] += data
-                peak = float(_np.max(_np.abs(summed))) or 1.0
-                if peak > 0.999:
-                    summed = summed * (0.999 / peak)
-                mix_path = song_dir / f"{song_name}.wav"
-                _sf.write(str(mix_path), summed, target_sr, subtype="PCM_16")
-            else:
-                # Copy/rename the user-supplied mix into the stem-song dir
-                # so the output folder name matches the user's chosen name.
-                desired = song_dir / f"{song_name}{mix_path.suffix.lower()}"
-                if mix_path != desired:
-                    try:
-                        if desired.exists():
-                            desired.unlink()
-                        shutil.copy2(mix_path, desired)
-                        mix_path = desired
-                    except Exception:
-                        # Fall back to using the original path.
-                        pass
+            # Auto-mix everything (charted stems + backing vocals + extras).
+            # Load each at its native rate, resample any odd ones to the
+            # highest-rate stem, sum, peak-normalise. Output as 16-bit WAV.
+            emit_progress(run_id, "bootstrap", f"Auto-mixing stems for {song_name}", current_item=song_name)
+            mix_inputs = list(stem_map.values()) + list(backing_map.values()) + extras_paths
+            loaded: list[tuple[_np.ndarray, int]] = []
+            for stem_file in mix_inputs:
+                data, sr = _sf.read(str(stem_file), always_2d=True)
+                loaded.append((data.astype(_np.float32, copy=False), sr))
+            target_sr = max(sr for _, sr in loaded)
+            target_channels = max(d.shape[1] for d, _ in loaded)
+            max_len = 0
+            resampled: list[_np.ndarray] = []
+            for data, sr in loaded:
+                if sr != target_sr:
+                    ratio = target_sr / sr
+                    new_len = int(round(data.shape[0] * ratio))
+                    # Cheap linear resample via numpy interp (we only
+                    # need an analysis-grade mix, not mastering).
+                    old_idx = _np.linspace(0.0, data.shape[0] - 1, data.shape[0])
+                    new_idx = _np.linspace(0.0, data.shape[0] - 1, new_len)
+                    channels = []
+                    for ch in range(data.shape[1]):
+                        channels.append(_np.interp(new_idx, old_idx, data[:, ch]).astype(_np.float32))
+                    data = _np.stack(channels, axis=1)
+                if data.shape[1] < target_channels:
+                    # mono → stereo by duplication
+                    data = _np.tile(data, (1, target_channels // data.shape[1]))
+                elif data.shape[1] > target_channels:
+                    data = data[:, :target_channels]
+                resampled.append(data)
+                max_len = max(max_len, data.shape[0])
+            summed = _np.zeros((max_len, target_channels), dtype=_np.float32)
+            for data in resampled:
+                summed[: data.shape[0]] += data
+            peak = float(_np.max(_np.abs(summed))) or 1.0
+            if peak > 0.999:
+                summed = summed * (0.999 / peak)
+            mix_path = song_dir / f"{song_name}.wav"
+            _sf.write(str(mix_path), summed, target_sr, subtype="PCM_16")
 
             PRESPLIT_STEM_REGISTRY[mix_path] = stem_map
+            if extras_paths:
+                EXTRAS_REGISTRY[mix_path] = extras_paths
+            if backing_map:
+                BACKING_VOCALS_REGISTRY[mix_path] = backing_map
+                # If the user provided a lead-vocals stem, route harmony
+                # detection from the lead path to a summed backing-vocals
+                # mix. Without a lead stem there's nothing to override —
+                # STRUM's harmony pass will fall back to its default path.
+                lead_path = stem_map.get("vocals")
+                if lead_path is not None:
+                    backing_files = list(backing_map.values())
+                    if len(backing_files) == 1:
+                        HARMONY_OVERRIDE_REGISTRY[lead_path] = backing_files[0]
+                    else:
+                        # Sum HARM2 + HARM3 into a single audio file so
+                        # detect_harmonies sees both backing parts at once.
+                        merged = song_dir / f"{song_name}_backing_vocals.wav"
+                        _b_loaded = [(_sf.read(str(p), always_2d=True)) for p in backing_files]
+                        _b_data = [(d.astype(_np.float32, copy=False), s) for d, s in _b_loaded]
+                        _b_sr = max(s for _, s in _b_data)
+                        _b_ch = max(d.shape[1] for d, _ in _b_data)
+                        _b_max = 0
+                        _b_resampled: list[_np.ndarray] = []
+                        for d, s in _b_data:
+                            if s != _b_sr:
+                                ratio = _b_sr / s
+                                new_len = int(round(d.shape[0] * ratio))
+                                old_idx = _np.linspace(0.0, d.shape[0] - 1, d.shape[0])
+                                new_idx = _np.linspace(0.0, d.shape[0] - 1, new_len)
+                                chs = []
+                                for ch in range(d.shape[1]):
+                                    chs.append(_np.interp(new_idx, old_idx, d[:, ch]).astype(_np.float32))
+                                d = _np.stack(chs, axis=1)
+                            if d.shape[1] < _b_ch:
+                                d = _np.tile(d, (1, _b_ch // d.shape[1]))
+                            elif d.shape[1] > _b_ch:
+                                d = d[:, :_b_ch]
+                            _b_resampled.append(d)
+                            _b_max = max(_b_max, d.shape[0])
+                        _b_sum = _np.zeros((_b_max, _b_ch), dtype=_np.float32)
+                        for d in _b_resampled:
+                            _b_sum[: d.shape[0]] += d
+                        _b_peak = float(_np.max(_np.abs(_b_sum))) or 1.0
+                        if _b_peak > 0.999:
+                            _b_sum = _b_sum * (0.999 / _b_peak)
+                        _sf.write(str(merged), _b_sum, _b_sr, subtype="PCM_16")
+                        HARMONY_OVERRIDE_REGISTRY[lead_path] = merged
+
             sources.append(mix_path)
 
     url_inputs = [url.strip() for url in payload.get("urls", []) if str(url).strip()]
