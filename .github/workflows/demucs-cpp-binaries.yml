@@ -26,7 +26,7 @@ on:
       - 'src/main/strumIntegration/demucsCppBootstrap.ts'
 
 env:
-  BIN_VERSION: '1'
+  BIN_VERSION: '2'
   UPSTREAM_REPO: 'sevagh/demucs.cpp'
   UPSTREAM_REF: ${{ github.event.inputs.upstream_ref || 'main' }}
 
@@ -124,6 +124,30 @@ jobs:
               if new != text:
                   mt.write_text(new)
                   print('patched cli-apps/demucs_mt.cpp for Windows path conversion')
+          PY
+
+      - name: Patch release flags for portable x64 binaries
+        if: matrix.arch == 'x64'
+        shell: bash
+        working-directory: demucs-cpp-src
+        run: |
+          # Upstream's CMAKE_CXX_FLAGS_RELEASE hard-codes `-march=native`,
+          # which bakes in whatever instruction set the GitHub build runner
+          # happens to support (often AVX-512). End users on CPUs without
+          # those instructions hit SIGILL / "Illegal instruction" crashes
+          # (GitHub issue #1). Replace `-march=native` with a portable
+          # x86-64-v3 baseline (AVX2 + FMA + BMI2, Haswell-era and newer)
+          # so the published binaries run on the wide majority of x64 CPUs.
+          python3 - <<'PY'
+          import pathlib, re
+          cml = pathlib.Path('CMakeLists.txt')
+          text = cml.read_text()
+          new = text.replace('-march=native', '-march=x86-64-v3')
+          if new != text:
+              cml.write_text(new)
+              print('replaced -march=native with -march=x86-64-v3')
+          else:
+              print('WARNING: -march=native not found in top-level CMakeLists.txt')
           PY
 
       - name: Install OpenBLAS (Linux)

@@ -55,6 +55,47 @@ npm run dev
 - Use the [feature request template](https://github.com/opria123/octave/issues/new?template=feature_request.md)
 - Describe the use case, not just the solution
 
+## Releases & Beta Testing
+
+OCTAVE ships through two automated channels. Both build Windows, macOS, and
+Linux installers and publish a GitHub Release; users auto-update via
+electron-updater.
+
+| Channel | Branch | Workflow | Release type | Who receives it |
+|---------|--------|----------|--------------|-----------------|
+| Stable | `master` | [`release.yml`](.github/workflows/release.yml) | normal release (`vX.Y.Z`) | everyone |
+| Beta | `beta` | [`release-beta.yml`](.github/workflows/release-beta.yml) | pre-release (`vX.Y.Z-beta.N`) | only users who opt in |
+
+### How users opt into beta
+
+In the app: **Settings → Updates → "Receive beta (pre-release) updates"**.
+This flips `autoUpdater.allowPrerelease`, so the user's app starts picking up
+pre-release builds and auto-updating to them. Turning it back off returns them
+to the stable channel. Because `1.2.3-beta.2` sorts *below* `1.2.3` in semver,
+beta testers automatically roll forward onto the matching stable release once
+it ships — no manual reinstall.
+
+> The opt-in toggle itself lives in the app, so a user can only reach it once
+> they are on a stable build that already contains it. When introducing the
+> beta channel for the first time, the toggle must go out in a **stable**
+> (`master`) release first; only then can existing users opt in to test
+> subsequent `beta` builds.
+
+### Typical fix-verification flow
+
+1. Land the fix on the `beta` branch (`git push origin beta`).
+2. The beta workflow auto-versions `vX.Y.Z-beta.N`, builds all platforms, and
+   publishes a GitHub **pre-release**.
+3. Affected users enable the beta toggle (or download the pre-release installer
+   from the Releases page) and confirm the fix.
+4. Once verified, merge `beta` → `master`. The stable workflow cuts the normal
+   `vX.Y.Z` release and every user updates to it.
+
+Both workflows version automatically from conventional-commit messages
+(`feat:` bumps minor, `fix:`/others bump patch, `!:`/`BREAKING CHANGE` bumps
+major), so no manual version edits are needed.
+
 ## License
+
 
 By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
