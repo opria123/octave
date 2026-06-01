@@ -135,6 +135,10 @@ const api = {
     includeKeys?: boolean
     disableOnlineLookup?: boolean
     skipHarmonies?: boolean
+    keepStems?: boolean
+    snapDrums?: boolean
+    snapDrumsDivision?: number
+    snapDrumsWindowMs?: number
     enabledTracks?: {
       drums?: boolean
       guitar?: boolean
@@ -214,6 +218,13 @@ const api = {
 
   bootstrapRuntime: (): Promise<{ ok: boolean; skipped?: boolean; message?: string }> =>
     ipcRenderer.invoke('runtime:bootstrap'),
+
+  // App update channel (stable vs. beta/pre-release)
+  getUpdateChannel: (): Promise<{ betaChannel: boolean }> =>
+    ipcRenderer.invoke('updater:getChannel'),
+
+  setUpdateChannel: (betaEnabled: boolean): Promise<{ ok: boolean; betaChannel: boolean }> =>
+    ipcRenderer.invoke('updater:setChannel', betaEnabled),
 
   // App updater events
   onUpdaterStatus: (callback: (status: {

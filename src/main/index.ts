@@ -1,7 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net, Menu, session, type MenuItemConstructorOptions } from 'electron'
 import { join, resolve, basename } from 'path'
 import { readdir, readFile, writeFile, stat, rename, copyFile, unlink, mkdir } from 'fs/promises'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { execFile, spawn } from 'child_process'
 import { randomUUID } from 'crypto'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -82,6 +82,34 @@ function broadcastUpdaterState(payload: UpdaterState): void {
 
 function getMainWindow(): BrowserWindow | undefined {
   return BrowserWindow.getAllWindows()[0]
+}
+
+// --- Update channel (stable vs. beta/pre-release) -----------------------
+// The renderer owns the user-facing toggle, but the main process needs the
+// preference at startup (before the window finishes loading) to decide whether
+// to offer pre-release builds. We mirror the flag to a tiny JSON file in
+// userData so the very first checkForUpdates() picks the correct channel.
+function getUpdateChannelFile(): string {
+  return join(app.getPath('userData'), 'update-channel.json')
+}
+
+function readBetaChannelPref(): boolean {
+  try {
+    const parsed = JSON.parse(readFileSync(getUpdateChannelFile(), 'utf-8')) as {
+      betaChannel?: boolean
+    }
+    return parsed.betaChannel === true
+  } catch {
+    return false
+  }
+}
+
+async function writeBetaChannelPref(enabled: boolean): Promise<void> {
+  try {
+    await writeFile(getUpdateChannelFile(), JSON.stringify({ betaChannel: enabled }), 'utf-8')
+  } catch (error) {
+    console.warn('[Updater] Failed to persist update channel preference:', error)
+  }
 }
 
 async function isMacAutoInstallSupported(): Promise<boolean> {
@@ -383,6 +411,10 @@ app.whenReady().then(() => {
     }
 
     autoUpdater.autoDownload = false
+    // Honor the persisted update channel: when the user has opted into the
+    // beta channel, electron-updater will also surface GitHub releases that are
+    // marked as "pre-release". Stable users never see them.
+    autoUpdater.allowPrerelease = readBetaChannelPref()
     autoUpdater.on('checking-for-update', () => {
       console.log('[Updater] Checking for updates...')
       broadcastUpdaterState({ state: 'checking' })
@@ -521,6 +553,24 @@ app.on('window-all-closed', () => {
 // IPC Handlers for Chart Editor
 // ============================================
 
+// Update channel preference (stable vs. beta/pre-release)
+ipcMain.handle('updater:getChannel', () => ({ betaChannel: readBetaChannelPref() }))
+
+ipcMain.handle('updater:setChannel', async (_event, betaEnabled: boolean) => {
+  const enabled = betaEnabled === true
+  await writeBetaChannelPref(enabled)
+  autoUpdater.allowPrerelease = enabled
+  // Re-check immediately so opting in/out takes effect without a restart.
+  if (!is.dev) {
+    try {
+      await autoUpdater.checkForUpdates()
+    } catch (error) {
+      console.error('[Updater] Re-check after channel switch failed:', error)
+    }
+  }
+  return { ok: true, betaChannel: enabled }
+})
+
 // Open folder dialog
 ipcMain.handle('dialog:openFolder', async () => {
   const result = await dialog.showOpenDialog({
@@ -596,6 +646,10 @@ ipcMain.handle('strum:start', async (_event, options: {
   includeKeys?: boolean
   disableOnlineLookup?: boolean
   skipHarmonies?: boolean
+  keepStems?: boolean
+  snapDrums?: boolean
+  snapDrumsDivision?: number
+  snapDrumsWindowMs?: number
   enabledTracks?: {
     drums?: boolean
     guitar?: boolean
@@ -620,6 +674,10 @@ ipcMain.handle('strum:start', async (_event, options: {
     includeKeys: options.includeKeys,
     disableOnlineLookup: options.disableOnlineLookup,
     skipHarmonies: options.skipHarmonies,
+    keepStems: options.keepStems,
+    snapDrums: options.snapDrums,
+    snapDrumsDivision: options.snapDrumsDivision,
+    snapDrumsWindowMs: options.snapDrumsWindowMs,
     enabledTracks: options.enabledTracks,
     tempoMap: options.tempoMap
   })
@@ -1228,6 +1286,30 @@ ipcMain.handle('video:scan', async (_event, songPath: string) => {
   return null
 })
 
+// Re-encode a downloaded video into a VP8/.webm container. YARG's Unity video
+// player on Linux ONLY decodes VP8-in-webm; H.264/VP9/AV1 all produce a black
+// screen with audio. YouTube never serves VP8, so on Linux we must transcode
+// after download. Returns the path to the new .webm (and removes the source).
+function transcodeVideoToVp8Webm(inputPath: string, songPath: string): Promise<string> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const outPath = join(songPath, 'video.webm')
+    ffmpeg(inputPath)
+      .videoCodec('libvpx')
+      .audioCodec('libopus')
+      // yuv420p 8-bit + capped bitrate keeps it inside Unity's VP8 decoder.
+      .outputOptions(['-pix_fmt', 'yuv420p', '-b:v', '3M', '-deadline', 'good', '-cpu-used', '2', '-b:a', '128k'])
+      .on('end', () => {
+        // Drop the source file so YARG doesn't pick the undecodable one.
+        if (resolve(inputPath) !== resolve(outPath)) {
+          unlink(inputPath).catch(() => { /* best-effort cleanup */ })
+        }
+        resolvePromise(outPath)
+      })
+      .on('error', (err) => rejectPromise(err))
+      .save(outPath)
+  })
+}
+
 // Download video from URL (YouTube, etc.) using yt-dlp
 ipcMain.handle('video:download-url', async (event, songPath: string, url: string) => {
   if (!isPathAllowed(songPath)) return { success: false, error: 'Invalid path' }
@@ -1240,9 +1322,16 @@ ipcMain.handle('video:download-url', async (event, songPath: string, url: string
   } catch {
     return { success: false, error: 'Invalid URL' }
   }
+  const isLinux = process.platform === 'linux'
   const outputTemplate = join(songPath, 'video.%(ext)s')
+  // Prefer H.264 (avc1) 8-bit and explicitly avoid AV1/VP9, which YARG's Unity
+  // VideoPlayer can't decode (black screen, audio still plays). Capping at
+  // 1080p keeps us inside YouTube's H.264 availability (4K is AV1/VP9 only) and
+  // also matches YARG's recommended background resolution. On Linux the file is
+  // transcoded to VP8/webm afterwards regardless of what's downloaded here.
   const ytDlpArgs = [
-    '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+    '-f',
+    'bestvideo[vcodec^=avc1][height<=1080]+bestaudio[ext=m4a]/best[vcodec^=avc1][height<=1080]/bestvideo[ext=mp4][height<=1080]+bestaudio/best[ext=mp4]/best',
     '--merge-output-format', 'mp4',
     '-o', outputTemplate,
     '--no-playlist',
@@ -1273,16 +1362,35 @@ ipcMain.handle('video:download-url', async (event, songPath: string, url: string
         return
       }
       console.log('[yt-dlp] Done:', stdout.slice(-200))
+      // Locate the downloaded file, then (on Linux) transcode it to VP8/webm so
+      // YARG can actually decode it.
+      const finalize = async (downloadedPath: string): Promise<void> => {
+        if (!isLinux) {
+          resolvePromise({ success: true, filePath: downloadedPath })
+          return
+        }
+        try {
+          event.sender.send('video:download-progress', 99)
+          const webmPath = await transcodeVideoToVp8Webm(downloadedPath, songPath)
+          resolvePromise({ success: true, filePath: webmPath })
+        } catch (err) {
+          console.error('[yt-dlp] Linux VP8 transcode failed:', err)
+          resolvePromise({
+            success: false,
+            error: `Video downloaded but could not be converted for Linux playback: ${err instanceof Error ? err.message : String(err)}`
+          })
+        }
+      }
       // Find the output file (video.mp4 or similar)
       const expectedPath = join(songPath, 'video.mp4')
       if (existsSync(expectedPath)) {
-        resolvePromise({ success: true, filePath: expectedPath })
+        void finalize(expectedPath)
       } else {
         // Look for any video.* file
         readdir(songPath).then((entries) => {
           const videoFile = entries.find((e) => e.startsWith('video.') && !e.endsWith('.part'))
           if (videoFile) {
-            resolvePromise({ success: true, filePath: join(songPath, videoFile) })
+            void finalize(join(songPath, videoFile))
           } else {
             resolvePromise({ success: false, error: 'Download completed but output file not found' })
           }

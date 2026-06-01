@@ -66,6 +66,14 @@ BACKING_VOCALS_REGISTRY: dict[Path, dict[str, Path]] = {}
 # to surface URL→song-folder pairings in the completion event so the host
 # can optionally pull the source video into the same song folder.
 URL_SOURCE_REGISTRY: dict[Path, str] = {}
+# When True, stems produced by Demucs separation are exported as per-instrument
+# oggs (drums.ogg, bass.ogg, …) in the song folder instead of being discarded
+# after charting. Set from the payload's "keepStems" flag in run_pipeline().
+KEEP_STEMS = False
+# Maps a song-mix Path to the stem-name → stem Path dict produced by Demucs.
+# Populated by OctaveBatchPipeline.separate_stems() when KEEP_STEMS is on and
+# consumed by convert_to_ogg() to write the per-instrument oggs.
+SEPARATED_STEM_REGISTRY: dict[Path, dict[str, Path]] = {}
 # User-supplied tempo map (sorted by timeSec). When non-empty, the first
 # entry's BPM overrides STRUM's auto-detected initial tempo and the full list
 # is written to each song's notes.mid (note ticks are retimed so real-world
@@ -75,6 +83,15 @@ USER_TEMPO_MAP: list[tuple[float, float]] = []
 # disable Pro Keys output even though upstream STRUM always generates them
 # alongside the standard 5-lane keys track.
 INCLUDE_PRO_KEYS: bool = True
+# Optional drum grid-snap. When SNAP_DRUMS is True, each drum note in
+# notes.mid is nudged to the nearest 1/SNAP_DRUMS_DIVISION grid line, but ONLY
+# when it already lies within SNAP_DRUMS_WINDOW_MS of that line. Onsets that
+# are further off (genuine syncopation / fills) are left untouched. This kills
+# the "off by a 32nd note" jitter caused by onset-detector timing error
+# without quantizing away intentionally-loose playing. Off by default.
+SNAP_DRUMS: bool = False
+SNAP_DRUMS_DIVISION: int = 32  # grid resolution: 32 = thirty-second notes
+SNAP_DRUMS_WINDOW_MS: float = 40.0  # only snap onsets already within this window
 # One-shot flag so we only emit the basic_pitch troubleshooting hint once
 # per worker run (the same error fires for guitar+bass+keys).
 _BASIC_PITCH_HINT_EMITTED = False
@@ -927,6 +944,12 @@ def build_pipeline(
             preset = PRESPLIT_STEM_REGISTRY.get(input_resolved) or {}
             extras = EXTRAS_REGISTRY.get(input_resolved) or []
             backing = BACKING_VOCALS_REGISTRY.get(input_resolved) or {}
+            # Keep-stems: when the user asked to retain the Demucs-separated
+            # stems, treat them like pre-split stems so each one is exported as
+            # a per-instrument ogg and song.ogg is written silent (avoids
+            # CH/YARG doubling song.ogg + every stem).
+            if not preset and KEEP_STEMS:
+                preset = SEPARATED_STEM_REGISTRY.get(input_resolved) or {}
             has_full_coverage = bool(preset) or bool(extras) or bool(backing)
             if has_full_coverage:
                 try:
@@ -1095,7 +1118,10 @@ def build_pipeline(
             cpp_bin = os.environ.get("OCTAVE_DEMUCS_CPP_BIN", "").strip()
             cpp_weights = os.environ.get("OCTAVE_DEMUCS_CPP_WEIGHTS", "").strip()
             if cpp_bin and cpp_weights and Path(cpp_bin).exists() and Path(cpp_weights).exists():
-                return self._separate_stems_cpp(audio_path, work_dir, cpp_bin, cpp_weights)
+                cpp_stems = self._separate_stems_cpp(audio_path, work_dir, cpp_bin, cpp_weights)
+                if KEEP_STEMS and cpp_stems:
+                    SEPARATED_STEM_REGISTRY[Path(audio_path).resolve()] = dict(cpp_stems)
+                return cpp_stems
 
             logger.info(f"  Separating stems with Demucs (Python) on device={device}...")
 
@@ -1137,6 +1163,8 @@ def build_pipeline(
                     stems[stem] = stem_path
 
             logger.info(f"    Separated stems: {list(stems.keys())}")
+            if KEEP_STEMS and stems:
+                SEPARATED_STEM_REGISTRY[Path(audio_path).resolve()] = dict(stems)
             return stems
 
         def _ensure_demucs_cpp_input(self, audio_path: Path, work_dir: Path) -> Path:
@@ -1921,6 +1949,178 @@ def _retime_midi_to_tempo_map(midi_path: Path, init_bpm: float, tempo_map: list[
     mid.save(str(midi_path))
 
 
+def _quantize_drum_track(
+    midi_path: Path,
+    division: int = 32,
+    window_ms: float = 40.0,
+) -> int:
+    """Snap drum onsets in notes.mid to the nearest 1/``division`` grid line,
+    but only when an onset already lies within ``window_ms`` of that line.
+
+    STRUM places drum notes at the raw onset time reported by its detector,
+    with no musical quantization. Small onset-timing errors (a handful of ms)
+    then render as notes sitting on a 32nd-note subdivision between gridlines
+    in-game — the "drums off by a 32nd note" complaint. This pass removes that
+    jitter while leaving genuinely off-grid hits (fills, syncopation, anything
+    further than ``window_ms`` from a gridline) exactly where STRUM put them.
+
+    Operates only on the ``PART DRUMS`` track. note_off events are shifted by
+    the same delta as their matching note_on so note durations are preserved.
+    Returns the number of onsets snapped.
+    """
+    if division <= 0 or window_ms <= 0:
+        return 0
+    try:
+        import mido
+    except Exception as exc:  # pragma: no cover - mido is bundled
+        logging.getLogger(__name__).warning(
+            "Skipping drum quantize: mido import failed (%s)", exc
+        )
+        return 0
+
+    mid = mido.MidiFile(str(midi_path))
+    tpb = mid.ticks_per_beat
+    # Ticks between adjacent 1/division grid lines. division is in note values
+    # (32 = 32nd note), and there are division/4 of them per quarter-note beat.
+    grid_ticks = (tpb * 4.0) / division
+    if grid_ticks <= 0:
+        return 0
+
+    # Build an absolute-tick tempo map (default 120 BPM if none present) so the
+    # ms-window can be converted to ticks at each note's local tempo.
+    DEFAULT_TEMPO = 500000  # microseconds per beat == 120 BPM
+    tempo_changes: list[tuple[int, int]] = []
+    for track in mid.tracks:
+        abs_tick = 0
+        for msg in track:
+            abs_tick += msg.time
+            if msg.is_meta and msg.type == 'set_tempo':
+                tempo_changes.append((abs_tick, msg.tempo))
+    tempo_changes.sort(key=lambda x: x[0])
+
+    def tempo_at(tick: int) -> int:
+        active = DEFAULT_TEMPO
+        for t_tick, tempo in tempo_changes:
+            if t_tick <= tick:
+                active = tempo
+            else:
+                break
+        return active
+
+    def window_ticks_at(tick: int) -> float:
+        tempo = tempo_at(tick)  # microseconds per beat
+        sec_per_tick = (tempo / 1_000_000.0) / tpb
+        if sec_per_tick <= 0:
+            return 0.0
+        return (window_ms / 1000.0) / sec_per_tick
+
+    snapped = 0
+    new_tracks = []
+    for track in mid.tracks:
+        # Identify the drums track by its track_name meta event.
+        name = ""
+        for msg in track:
+            if msg.is_meta and msg.type == 'track_name':
+                name = str(getattr(msg, 'name', ''))
+                break
+        if name != "PART DRUMS":
+            new_tracks.append(track)
+            continue
+
+        # Expand to absolute-tick events, then compute a per-onset snap delta.
+        events: list[list[Any]] = []  # [abs_tick, msg]
+        abs_tick = 0
+        for msg in track:
+            abs_tick += msg.time
+            events.append([abs_tick, msg])
+
+        # Map each note_on to the delta we will apply, then apply the SAME
+        # delta to the matching note_off so durations are preserved. Match
+        # by (note, channel) using a stack to handle repeated notes.
+        open_notes: dict[tuple[int, int], list[int]] = {}
+        for ev in events:
+            tick, msg = ev[0], ev[1]
+            if msg.type == 'note_on' and getattr(msg, 'velocity', 0) > 0:
+                nearest = round(tick / grid_ticks) * grid_ticks
+                delta = nearest - tick
+                if 0 < abs(delta) <= window_ticks_at(tick):
+                    new_tick = int(round(tick + delta))
+                    applied = new_tick - tick
+                    ev[0] = new_tick
+                    if applied != 0:
+                        snapped += 1
+                    key = (msg.note, getattr(msg, 'channel', 0))
+                    open_notes.setdefault(key, []).append(applied)
+            elif msg.type == 'note_off' or (msg.type == 'note_on' and getattr(msg, 'velocity', 0) == 0):
+                key = (msg.note, getattr(msg, 'channel', 0))
+                stack = open_notes.get(key)
+                if stack:
+                    applied = stack.pop(0)
+                    ev[0] = max(0, ev[0] + applied)
+
+        # Re-sort by absolute tick (stable) and rebuild delta times.
+        events.sort(key=lambda e: e[0])
+        new_track = mido.MidiTrack()
+        prev = 0
+        for tick, msg in events:
+            delta = max(0, tick - prev)
+            new_track.append(msg.copy(time=delta))
+            prev = tick
+        new_tracks.append(new_track)
+
+    if snapped > 0:
+        mid.tracks = new_tracks
+        mid.save(str(midi_path))
+    return snapped
+
+
+def _tag_song_as_ai_generated(song_folder: Path) -> None:
+    """Mark a generated song's ``song.ini`` as AI auto-charted.
+
+    Charters in the community have asked that auto-generated charts be clearly
+    identifiable in metadata so they are not mistaken for hand-charted work.
+    We add explicit, non-destructive markers to the ``[song]`` section without
+    clobbering any existing charter/author fields.
+    """
+    ini_path = song_folder / "song.ini"
+    if not ini_path.exists():
+        return
+    try:
+        text = ini_path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return
+
+    lines = text.splitlines()
+    lowered = {ln.split("=", 1)[0].strip().lower() for ln in lines if "=" in ln}
+
+    # Locate the [song] section header (case-insensitive); fall back to top.
+    insert_at = None
+    for i, ln in enumerate(lines):
+        if ln.strip().lower() in ("[song]", "[game]"):
+            insert_at = i + 1
+            break
+
+    additions: list[str] = []
+    if "auto_chart" not in lowered:
+        additions.append("auto_chart = True")
+    if "auto_chart_tool" not in lowered:
+        additions.append("auto_chart_tool = STRUM (OCTAVE AI auto-charter)")
+    if "charter" not in lowered:
+        additions.append("charter = STRUM (AI auto-charted)")
+    if not additions:
+        return
+
+    if insert_at is None:
+        lines = ["[song]", *additions, *lines]
+    else:
+        lines[insert_at:insert_at] = additions
+
+    try:
+        ini_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except Exception:
+        return
+
+
 def run_pipeline(payload: dict[str, Any]) -> int:
     run_id = str(payload["runId"])
     cache_dir = Path(payload["cacheDir"]).expanduser().resolve()
@@ -1931,6 +2131,26 @@ def run_pipeline(payload: dict[str, Any]) -> int:
 
     global INCLUDE_PRO_KEYS
     INCLUDE_PRO_KEYS = bool((enabled_tracks or {}).get('proKeys', True))
+
+    # Keep Demucs-separated stems as per-instrument oggs instead of discarding
+    # them (community-requested). Off by default to preserve prior behaviour.
+    global KEEP_STEMS
+    KEEP_STEMS = bool(payload.get("keepStems", False))
+    SEPARATED_STEM_REGISTRY.clear()
+
+    # Optional drum grid-snap (community-requested fix for "drums off by a
+    # 32nd note"). Off by default; when on, drum onsets already close to a
+    # grid line are nudged onto it. See _quantize_drum_track.
+    global SNAP_DRUMS, SNAP_DRUMS_DIVISION, SNAP_DRUMS_WINDOW_MS
+    SNAP_DRUMS = bool(payload.get("snapDrums", False))
+    try:
+        SNAP_DRUMS_DIVISION = int(payload.get("snapDrumsDivision", 32) or 32)
+    except (TypeError, ValueError):
+        SNAP_DRUMS_DIVISION = 32
+    try:
+        SNAP_DRUMS_WINDOW_MS = float(payload.get("snapDrumsWindowMs", 40.0) or 40.0)
+    except (TypeError, ValueError):
+        SNAP_DRUMS_WINDOW_MS = 40.0
 
     # Optional user-supplied tempo map. Each entry: {"timeSec": float, "bpm": float}.
     # If the first event has timeSec > 0, an implicit (0, first.bpm) is prepended.
@@ -2007,6 +2227,10 @@ def run_pipeline(payload: dict[str, Any]) -> int:
         )
         if result.success:
             song_folders.append(result.output_path)
+            try:
+                _tag_song_as_ai_generated(Path(result.output_path))
+            except Exception as exc:
+                errors.append(f"{source.name}: AI watermark tag failed: {exc}")
             source_url = URL_SOURCE_REGISTRY.get(source.resolve())
             if source_url:
                 url_song_folders.append({"url": source_url, "songFolder": result.output_path})
@@ -2037,6 +2261,23 @@ def run_pipeline(payload: dict[str, Any]) -> int:
                         )
                 except Exception as exc:
                     errors.append(f"{source.name}: tempo-map post-process failed: {exc}")
+            if SNAP_DRUMS and notes_mid.exists():
+                try:
+                    snapped = _quantize_drum_track(
+                        notes_mid,
+                        division=SNAP_DRUMS_DIVISION,
+                        window_ms=SNAP_DRUMS_WINDOW_MS,
+                    )
+                    if snapped:
+                        emit_progress(
+                            run_id,
+                            "merge",
+                            f"Snapped {snapped} drum onset(s) to grid in {notes_mid.name}",
+                            percent=min(96, source_start_percent + 65),
+                            current_item=source.name,
+                        )
+                except Exception as exc:
+                    errors.append(f"{source.name}: drum quantize failed: {exc}")
         if result.error:
             errors.append(f"{source.name}: {result.error}")
 
