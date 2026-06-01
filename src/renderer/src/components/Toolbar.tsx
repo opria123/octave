@@ -70,6 +70,8 @@ export function Toolbar(): React.JSX.Element {
   const [autoChartUrls, setAutoChartUrls] = useState<string[]>([EMPTY_AUTO_CHART_URL])
   const [autoChartDisableOnlineLookup, setAutoChartDisableOnlineLookup] = useState(false)
   const [autoChartDownloadVideo, setAutoChartDownloadVideo] = useState(true)
+  const [autoChartKeepStems, setAutoChartKeepStems] = useState(false)
+  const [autoChartSnapDrums, setAutoChartSnapDrums] = useState(false)
   const [autoChartAdvancedOpen, setAutoChartAdvancedOpen] = useState(false)
   // Optional user-supplied tempo map. Empty = use STRUM's auto-detection.
   // First entry's BPM (sorted by timeSec) overrides initial detected tempo.
@@ -582,6 +584,8 @@ export function Toolbar(): React.JSX.Element {
         includeKeys: autoChartEnabledTracks.keys,
         disableOnlineLookup: autoChartDisableOnlineLookup,
         skipHarmonies: !autoChartEnabledTracks.harmonies,
+        keepStems: autoChartKeepStems,
+        snapDrums: autoChartSnapDrums,
         enabledTracks: autoChartEnabledTracks,
         tempoMap: (() => {
           const parsed = autoChartTempoEvents
@@ -599,7 +603,7 @@ export function Toolbar(): React.JSX.Element {
         error: error instanceof Error ? error.message : String(error)
       }))
     }
-  }, [autoChartDisableOnlineLookup, autoChartEnabledTracks, autoChartFiles, autoChartFolders, autoChartStemFolders, autoChartStemSongs, autoChartProgress.outputDir, autoChartTempoEvents, autoChartUrls, runtimeStatus, updateSettings])
+  }, [autoChartDisableOnlineLookup, autoChartEnabledTracks, autoChartFiles, autoChartFolders, autoChartKeepStems, autoChartSnapDrums, autoChartStemFolders, autoChartStemSongs, autoChartProgress.outputDir, autoChartTempoEvents, autoChartUrls, runtimeStatus, updateSettings])
 
   const handleCancelAutoChart = useCallback(async (): Promise<void> => {
     if (!autoChartProgress.runId) return
@@ -1432,6 +1436,36 @@ export function Toolbar(): React.JSX.Element {
                       Download video for URL inputs
                       <small style={{ display: 'block', opacity: 0.7 }}>
                         After charting finishes, pull the source video (e.g. YouTube) into each song folder so it plays in the timeline and in-game.
+                      </small>
+                    </span>
+                  </label>
+
+                  <label className="settings-checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={autoChartKeepStems}
+                      onChange={(event) => setAutoChartKeepStems(event.target.checked)}
+                      disabled={autoChartProgress.isRunning}
+                    />
+                    <span>
+                      Keep separated stems
+                      <small style={{ display: 'block', opacity: 0.7 }}>
+                        Export the separated stems (drums, bass, vocals, etc.) as per-instrument oggs in each song folder instead of discarding them. Lets you remix or mute instruments in-game.
+                      </small>
+                    </span>
+                  </label>
+
+                  <label className="settings-checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={autoChartSnapDrums}
+                      onChange={(event) => setAutoChartSnapDrums(event.target.checked)}
+                      disabled={autoChartProgress.isRunning}
+                    />
+                    <span>
+                      Snap drums to grid
+                      <small style={{ display: 'block', opacity: 0.7 }}>
+                        Nudge drum notes that land just off the beat onto the nearest 1/32 grid line, removing the slight timing jitter from onset detection. Genuinely off-grid hits (fills, syncopation) are left untouched.
                       </small>
                     </span>
                   </label>

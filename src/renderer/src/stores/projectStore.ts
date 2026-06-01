@@ -60,6 +60,7 @@ const defaultSettings: AppSettings = {
   leftyFlip: false,
   enableAutoChart: true,
   autoChartOutputDir: undefined,
+  betaUpdates: false,
   hotkeys: cloneDefaultHotkeys()
 }
 

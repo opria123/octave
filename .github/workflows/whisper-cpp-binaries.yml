@@ -31,7 +31,7 @@ on:
       - 'src/main/strumIntegration/whisperCppBootstrap.ts'
 
 env:
-  BIN_VERSION: '2'
+  BIN_VERSION: '3'
   UPSTREAM_REPO: 'ggerganov/whisper.cpp'
   UPSTREAM_REF: ${{ github.event.inputs.upstream_ref || 'master' }}
 
@@ -105,15 +105,17 @@ jobs:
         shell: bash
         run: |
           cd upstream
-          # Single SM 8.6 (Ampere) arch keeps nvcc memory + time within the
-          # GitHub-hosted Linux runner's budget (parallel nvcc OOM-killed at
-          # multi-arch). PTX fallback (implicit trailing virtual) covers Ada,
-          # Hopper, Blackwell via JIT on first launch.
+          # Build real SASS for Pascal (sm_61), Turing (sm_75) and Ampere
+          # (sm_86). PTX JIT only targets the compiled virtual arch and
+          # NEWER GPUs, so a single sm_86 build leaves Pascal/Turing users
+          # (GTX 10xx / 16xx, RTX 20xx) with no runnable kernels and they
+          # fail at launch (GitHub issue #3). The trailing compute_86 PTX
+          # still covers Ada / Hopper / Blackwell via JIT.
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_CUDA=ON \
-            -DCMAKE_CUDA_ARCHITECTURES="86" \
+            -DCMAKE_CUDA_ARCHITECTURES="61;75;86" \
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_EXAMPLES=ON
 
@@ -150,14 +152,15 @@ jobs:
         shell: bash
         run: |
           cd upstream
-          # Single SM 8.6 (Ampere) arch keeps the Windows runner build under
-          # the 6h job timeout. PTX fallback covers Ada / Hopper / Blackwell
-          # via JIT.
+          # Build real SASS for Pascal (sm_61), Turing (sm_75) and Ampere
+          # (sm_86). A single sm_86 build cannot JIT down to older GPUs, so
+          # GTX 10xx / 16xx and RTX 20xx users hit a launch failure (GitHub
+          # issue #3). compute_86 PTX still covers Ada / Hopper / Blackwell.
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
             -DGGML_CUDA=ON \
-            -DCMAKE_CUDA_ARCHITECTURES="86" \
+            -DCMAKE_CUDA_ARCHITECTURES="61;75;86" \
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_EXAMPLES=ON
 

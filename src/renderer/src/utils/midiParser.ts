@@ -1043,6 +1043,11 @@ export function parseChartFile(chartText: string): ParsedMidiData {
     // Collect all note events and cymbal flags at each tick for drums
     const tickNotes = new Map<number, { lane: number; duration: number; isDoubleKick: boolean }[]>()
     const cymbalTicks = new Set<number>()
+    // Guitar HOPO/tap markers: .chart encodes a forced-HOPO flag as lane 5 and
+    // a tap flag as lane 6 (both authored at the same tick as the note they
+    // modify). Without collecting these the flags are silently dropped on import.
+    const forcedTicks = new Set<number>()
+    const tapTicks = new Set<number>()
 
     for (const line of section.lines) {
       // Note: tick = N lane duration
@@ -1054,6 +1059,16 @@ export function parseChartFile(chartText: string): ParsedMidiData {
 
         if (type === 'drums' && lane === 66) {
           cymbalTicks.add(tick)
+          continue
+        }
+
+        if (type === 'guitar' && lane === 5) {
+          forcedTicks.add(tick)
+          continue
+        }
+
+        if (type === 'guitar' && lane === 6) {
+          tapTicks.add(tick)
           continue
         }
 
@@ -1101,6 +1116,15 @@ export function parseChartFile(chartText: string): ParsedMidiData {
 
         if (lane === undefined) continue
 
+        const guitarFlags =
+          type === 'guitar'
+            ? {
+                ...(forcedTicks.has(tick) ? { isHOPO: true } : {}),
+                ...(tapTicks.has(tick) ? { isTap: true } : {})
+              }
+            : {}
+        const hasGuitarFlags = Object.keys(guitarFlags).length > 0
+
         notes.push({
           id: uuidv4(),
           tick,
@@ -1109,7 +1133,8 @@ export function parseChartFile(chartText: string): ParsedMidiData {
           difficulty,
           lane,
           velocity: 100,
-          ...(type === 'drums' && isDoubleKick ? { flags: { isDoubleKick: true } } : {})
+          ...(type === 'drums' && isDoubleKick ? { flags: { isDoubleKick: true } } : {}),
+          ...(hasGuitarFlags ? { flags: guitarFlags } : {})
         })
       }
     }
@@ -1301,6 +1326,14 @@ export function serializeChartFile(
         const laneNum = CHART_GUITAR_LANE_NUM[note.lane as string]
         if (laneNum === undefined) continue
         entries.push({ tick, text: `${tick} = N ${laneNum} ${duration}` })
+        // Persist HOPO/tap flags so they survive a save → reopen round-trip.
+        // .chart encodes forced-HOPO as lane 5 and tap as lane 6 at the same tick.
+        if (note.flags?.isHOPO) {
+          entries.push({ tick, text: `${tick} = N 5 0` })
+        }
+        if (note.flags?.isTap) {
+          entries.push({ tick, text: `${tick} = N 6 0` })
+        }
       }
     }
 

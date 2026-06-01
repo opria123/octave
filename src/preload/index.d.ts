@@ -69,6 +69,10 @@ interface ChartEditorAPI {
     includeKeys?: boolean
     disableOnlineLookup?: boolean
     skipHarmonies?: boolean
+    keepStems?: boolean
+    snapDrums?: boolean
+    snapDrumsDivision?: number
+    snapDrumsWindowMs?: number
     enabledTracks?: {
       drums?: boolean
       guitar?: boolean
@@ -119,6 +123,10 @@ interface ChartEditorAPI {
     isUpgrade: boolean
   }>
   bootstrapRuntime: () => Promise<{ ok: boolean; skipped?: boolean; message?: string }>
+
+  // App update channel (stable vs. beta/pre-release)
+  getUpdateChannel: () => Promise<{ betaChannel: boolean }>
+  setUpdateChannel: (betaEnabled: boolean) => Promise<{ ok: boolean; betaChannel: boolean }>
 
   // App updater events
   onUpdaterStatus: (callback: (status: {

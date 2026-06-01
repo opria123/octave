@@ -73,6 +73,23 @@ export interface AutoChartRunOptions {
    */
   skipHarmonies?: boolean
   /**
+   * When true, the Demucs-separated stems are kept and exported as
+   * per-instrument oggs (drums.ogg, bass.ogg, …) in each song folder
+   * instead of being discarded after charting.
+   */
+  keepStems?: boolean
+  /**
+   * When true, drum onsets that already land within `snapDrumsWindowMs` of a
+   * 1/`snapDrumsDivision` grid line are snapped onto it, removing onset-timing
+   * jitter (the "drums off by a 32nd note" complaint) while leaving genuinely
+   * off-grid hits untouched.
+   */
+  snapDrums?: boolean
+  /** Grid resolution for drum snap (note value, e.g. 32 = 32nd notes). Default 32. */
+  snapDrumsDivision?: number
+  /** Only snap drum onsets already within this many ms of a grid line. Default 40. */
+  snapDrumsWindowMs?: number
+  /**
    * Per-instrument enable flags. When omitted all tracks are charted.
    * `keys` here means standard 5-lane keys; pro-keys is currently always
    * generated alongside keys when enabled.

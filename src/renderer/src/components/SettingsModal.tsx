@@ -18,20 +18,23 @@ export function SettingsModal(): React.JSX.Element | null {
   const hotkeys = useSettingsStore((s) => s.hotkeys)
   const enableAutoChart = useSettingsStore((s) => s.enableAutoChart)
   const autoChartOutputDir = useSettingsStore((s) => s.autoChartOutputDir)
+  const betaUpdates = useSettingsStore((s) => s.betaUpdates)
   const updateSettings = useSettingsStore((s) => s.updateSettings)
   const [recordingAction, setRecordingAction] = useState<HotkeyAction | null>(null)
   const [draftHotkeys, setDraftHotkeys] = useState<AppHotkeys>(hotkeys)
   const [draftEnableAutoChart, setDraftEnableAutoChart] = useState(enableAutoChart)
   const [draftAutoChartOutputDir, setDraftAutoChartOutputDir] = useState(autoChartOutputDir ?? '')
+  const [draftBetaUpdates, setDraftBetaUpdates] = useState(betaUpdates)
 
   useEffect(() => {
     if (isOpen) {
       setDraftHotkeys(hotkeys)
       setDraftEnableAutoChart(enableAutoChart)
       setDraftAutoChartOutputDir(autoChartOutputDir ?? '')
+      setDraftBetaUpdates(betaUpdates)
       setRecordingAction(null)
     }
-  }, [autoChartOutputDir, enableAutoChart, hotkeys, isOpen])
+  }, [autoChartOutputDir, enableAutoChart, betaUpdates, hotkeys, isOpen])
 
   useEffect(() => {
     if (!isOpen || draftAutoChartOutputDir.trim()) return
@@ -149,6 +152,23 @@ export function SettingsModal(): React.JSX.Element | null {
               </div>
             </div>
           </section>
+          <section className="settings-preferences-group">
+            <h3 className="settings-hotkey-group-title">Updates</h3>
+            <div className="settings-preferences-body">
+              <label className="settings-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={draftBetaUpdates}
+                  onChange={(event) => setDraftBetaUpdates(event.target.checked)}
+                />
+                <span>Receive beta (pre-release) updates</span>
+              </label>
+              <p className="settings-field-hint">
+                Beta builds include fixes still being tested. They may be less stable than
+                regular releases. Turn this off to return to the stable channel.
+              </p>
+            </div>
+          </section>
           {hasConflicts && (
             <div className="settings-hotkey-conflicts-banner">
               Resolve duplicate bindings before saving. Conflicting shortcuts are highlighted below.
@@ -213,8 +233,12 @@ export function SettingsModal(): React.JSX.Element | null {
               updateSettings({
                 hotkeys: draftHotkeys,
                 enableAutoChart: draftEnableAutoChart,
-                autoChartOutputDir: draftAutoChartOutputDir.trim() || undefined
+                autoChartOutputDir: draftAutoChartOutputDir.trim() || undefined,
+                betaUpdates: draftBetaUpdates
               })
+              if (draftBetaUpdates !== betaUpdates) {
+                void window.api.setUpdateChannel(draftBetaUpdates)
+              }
               setSettingsModalOpen(false)
             }}
           >

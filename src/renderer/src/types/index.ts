@@ -266,6 +266,7 @@ export interface AppSettings {
   leftyFlip: boolean // Mirror highway left-right for left-handed players
   enableAutoChart: boolean
   autoChartOutputDir?: string
+  betaUpdates: boolean // Opt into beta/pre-release auto-updates
   hotkeys: AppHotkeys
 }
 
