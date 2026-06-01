@@ -24,7 +24,10 @@ import type { AutoChartProgressEvent } from './types'
 
 // Bump together with the binary release version. Each bump invalidates
 // the on-disk cache so users get the new binary on next launch.
-const DEMUCS_CPP_BIN_VERSION = '1'
+// v2: rebuilt with -march=x86-64-v3 (AVX2/FMA/BMI2) instead of
+//     -march=native so the binary runs on every x64 CPU without AVX-512
+//     (fixes illegal-instruction crash 0xC000001D on e.g. Ryzen Zen3).
+const DEMUCS_CPP_BIN_VERSION = '2'
 
 // htdemucs_6s ggml-f16 weights, hosted on HuggingFace by upstream
 // (sevagh/demucs.cpp). Pinned by SHA so a HuggingFace incident can't

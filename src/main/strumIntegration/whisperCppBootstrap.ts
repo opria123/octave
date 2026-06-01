@@ -28,7 +28,10 @@ import { detectAccelerator } from './runtimeBootstrap'
 // the on-disk cache so users get the new binary on next launch.
 // v2: added per-variant (cuda/cpu) assets so CUDA hosts get cuBLAS-
 //     accelerated whisper-cli on Windows + Linux.
-const WHISPER_CPP_BIN_VERSION = '2'
+// v3: CUDA build now targets compute archs 61;75;86 (Pascal/Turing/
+//     Ampere) instead of 86-only, fixing "no kernel image" crash
+//     (0xC0000409) on GTX 10/16 + RTX 20 series GPUs.
+const WHISPER_CPP_BIN_VERSION = '3'
 
 // Build variants. CUDA hosts on Windows/Linux x64 prefer the cuBLAS-
 // linked tarball (~+150 MB for cuBLAS DLLs) for ~5–10× faster
