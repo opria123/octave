@@ -73,6 +73,9 @@ interface ChartEditorAPI {
     snapDrums?: boolean
     snapDrumsDivision?: number
     snapDrumsWindowMs?: number
+    autoTempo?: boolean
+    autoTempoDrift?: boolean
+    autoTempoSnap?: boolean
     enabledTracks?: {
       drums?: boolean
       guitar?: boolean
