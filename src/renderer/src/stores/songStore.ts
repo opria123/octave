@@ -35,6 +35,7 @@ interface SongStoreState extends SongEditorState {
   deleteNote: (noteId: string) => void
   deleteSelectedNotes: () => void
   swapLanes: (instrument: Instrument, laneA: string, laneB: string, difficulty?: Difficulty | 'all') => void
+  snapNotesToGrid: (division?: number) => void
 
   // Selection actions
   selectNote: (noteId: string, addToSelection?: boolean) => void
@@ -262,6 +263,62 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
               return note
             })
           },
+          isDirty: true
+        }
+      }),
+
+    // Snap notes to the nearest grid line for the given division (defaults to the
+    // active snap division). When notes are selected, only those are snapped;
+    // otherwise every note in the song is snapped. Vocal notes are snapped too so
+    // the whole chart lines up to the beat grid. Snapping is purely tick-based and
+    // therefore tempo-independent: a note at tick T moves to the nearest multiple
+    // of (480 / division) ticks. Sustained notes keep their end aligned to the
+    // grid as well so durations stay clean.
+    snapNotesToGrid: (division) =>
+      set((state) => {
+        const div = division ?? state.snapDivision
+        if (!div || div <= 0) return {}
+        const snapTicks = 480 / div
+        const snap = (t: number): number => Math.round(t / snapTicks) * snapTicks
+
+        const selectedNotes = new Set(state.selectedNoteIds)
+        const selectedVocals = new Set(state.selectedVocalNoteIds)
+        const hasSelection = selectedNotes.size > 0 || selectedVocals.size > 0
+
+        const snapEntry = <T extends { tick: number; duration: number }>(n: T): T => {
+          const newTick = snap(n.tick)
+          let newDuration = n.duration
+          if (n.duration > 0) {
+            newDuration = Math.max(0, snap(n.tick + n.duration) - newTick)
+          }
+          if (newTick === n.tick && newDuration === n.duration) return n
+          return { ...n, tick: newTick, duration: newDuration }
+        }
+
+        let changed = false
+
+        const notes = state.song.notes.map((n) => {
+          if (hasSelection && !selectedNotes.has(n.id)) return n
+          const snapped = snapEntry(n)
+          if (snapped !== n) changed = true
+          return snapped
+        })
+
+        const vocalNotes = state.song.vocalNotes.map((n) => {
+          if (hasSelection && !selectedVocals.has(n.id)) return n
+          const snapped = snapEntry(n)
+          if (snapped !== n) changed = true
+          return snapped
+        })
+
+        if (!changed) return {}
+
+        // Preserve the tick-sorted invariant after snapping.
+        notes.sort((a, b) => a.tick - b.tick)
+        vocalNotes.sort((a, b) => a.tick - b.tick)
+
+        return {
+          song: { ...state.song, notes, vocalNotes },
           isDirty: true
         }
       }),

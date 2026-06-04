@@ -650,6 +650,9 @@ ipcMain.handle('strum:start', async (_event, options: {
   snapDrums?: boolean
   snapDrumsDivision?: number
   snapDrumsWindowMs?: number
+  autoTempo?: boolean
+  autoTempoDrift?: boolean
+  autoTempoSnap?: boolean
   enabledTracks?: {
     drums?: boolean
     guitar?: boolean
@@ -678,6 +681,9 @@ ipcMain.handle('strum:start', async (_event, options: {
     snapDrums: options.snapDrums,
     snapDrumsDivision: options.snapDrumsDivision,
     snapDrumsWindowMs: options.snapDrumsWindowMs,
+    autoTempo: options.autoTempo,
+    autoTempoDrift: options.autoTempoDrift,
+    autoTempoSnap: options.autoTempoSnap,
     enabledTracks: options.enabledTracks,
     tempoMap: options.tempoMap
   })

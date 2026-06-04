@@ -3540,6 +3540,17 @@ export function MidiEditor(): React.JSX.Element {
             useSettingsStore.getState().updateSettings({ snapDivision: v })
           }}
         />
+        <button
+          className="midi-snap-to-grid-button"
+          title={
+            selectedNoteIds.length > 0
+              ? `Snap ${selectedNoteIds.length} selected note(s) to the 1/${snapDivision} grid`
+              : `Snap ALL notes to the 1/${snapDivision} grid`
+          }
+          onClick={() => songStore?.getState().snapNotesToGrid()}
+        >
+          Snap to Grid
+        </button>
         <SwapLanesTool
           activeDifficulty={activeDifficulty}
           defaultInstrument={Array.from(visibleInstruments)[0] ?? 'guitar'}

@@ -92,6 +92,23 @@ INCLUDE_PRO_KEYS: bool = True
 SNAP_DRUMS: bool = False
 SNAP_DRUMS_DIVISION: int = 32  # grid resolution: 32 = thirty-second notes
 SNAP_DRUMS_WINDOW_MS: float = 40.0  # only snap onsets already within this window
+# Automatic tempo refinement (the "notes drift off the beat lines" fix). When
+# AUTO_TEMPO is True (default), after STRUM writes notes.mid the worker re-fits
+# the tempo grid to the detected note onsets instead of trusting STRUM's single
+# global BPM. It corrects a slightly-wrong global tempo (e.g. 120.0 vs 119.7,
+# which otherwise drifts notes a little further off the grid every bar) and
+# clear octave errors. When AUTO_TEMPO_DRIFT is on it also builds a piecewise
+# tempo map for songs whose tempo genuinely changes (live recordings, no click).
+# Real-world note times are preserved — only the tempo and each note's tick move
+# — so audio stays in sync while notes land on the grid. AUTO_TEMPO_SNAP then
+# nudges any residual onset-detector jitter (within a tight window) onto the
+# grid across every instrument track. The whole pass is skipped when the user
+# supplies an explicit USER_TEMPO_MAP (their override wins).
+AUTO_TEMPO: bool = True
+AUTO_TEMPO_DRIFT: bool = True
+AUTO_TEMPO_SNAP: bool = True
+AUTO_TEMPO_SNAP_DIVISION: int = 32  # grid resolution for residual jitter snap
+AUTO_TEMPO_SNAP_WINDOW_MS: float = 30.0  # only snap onsets already this close
 # One-shot flag so we only emit the basic_pitch troubleshooting hint once
 # per worker run (the same error fires for guitar+bass+keys).
 _BASIC_PITCH_HINT_EMITTED = False
@@ -2074,6 +2091,347 @@ def _quantize_drum_track(
     return snapped
 
 
+def _quantize_onsets(
+    midi_path: Path,
+    division: int,
+    window_ms: float,
+    track_predicate,
+) -> int:
+    """Generalised onset snap: nudge note onsets to the nearest 1/``division``
+    grid line, but only when an onset already lies within ``window_ms`` of that
+    line. ``track_predicate`` is a callable taking a track name and returning
+    True for the tracks to process (e.g. all ``PART *`` tracks). This is the
+    residual-jitter cleanup applied after tempo refinement — at that point the
+    grid already matches the music, so this only mops up the few-ms error left
+    by the onset detector and leaves genuinely off-grid hits alone. note_off
+    events are shifted by the same delta as their matching note_on so durations
+    are preserved. Returns the number of onsets snapped.
+    """
+    if division <= 0 or window_ms <= 0:
+        return 0
+    try:
+        import mido
+    except Exception as exc:  # pragma: no cover - mido is bundled
+        logging.getLogger(__name__).warning(
+            "Skipping onset quantize: mido import failed (%s)", exc
+        )
+        return 0
+
+    mid = mido.MidiFile(str(midi_path))
+    tpb = mid.ticks_per_beat
+    grid_ticks = (tpb * 4.0) / division
+    if grid_ticks <= 0:
+        return 0
+
+    DEFAULT_TEMPO = 500000  # microseconds per beat == 120 BPM
+    tempo_changes: list[tuple[int, int]] = []
+    for track in mid.tracks:
+        abs_tick = 0
+        for msg in track:
+            abs_tick += msg.time
+            if msg.is_meta and msg.type == 'set_tempo':
+                tempo_changes.append((abs_tick, msg.tempo))
+    tempo_changes.sort(key=lambda x: x[0])
+
+    def tempo_at(tick: int) -> int:
+        active = DEFAULT_TEMPO
+        for t_tick, tempo in tempo_changes:
+            if t_tick <= tick:
+                active = tempo
+            else:
+                break
+        return active
+
+    def window_ticks_at(tick: int) -> float:
+        tempo = tempo_at(tick)
+        sec_per_tick = (tempo / 1_000_000.0) / tpb
+        if sec_per_tick <= 0:
+            return 0.0
+        return (window_ms / 1000.0) / sec_per_tick
+
+    snapped = 0
+    new_tracks = []
+    for track in mid.tracks:
+        name = ""
+        for msg in track:
+            if msg.is_meta and msg.type == 'track_name':
+                name = str(getattr(msg, 'name', ''))
+                break
+        if not track_predicate(name):
+            new_tracks.append(track)
+            continue
+
+        events: list[list[Any]] = []  # [abs_tick, msg]
+        abs_tick = 0
+        for msg in track:
+            abs_tick += msg.time
+            events.append([abs_tick, msg])
+
+        open_notes: dict[tuple[int, int], list[int]] = {}
+        for ev in events:
+            tick, msg = ev[0], ev[1]
+            if msg.type == 'note_on' and getattr(msg, 'velocity', 0) > 0:
+                nearest = round(tick / grid_ticks) * grid_ticks
+                delta = nearest - tick
+                if 0 < abs(delta) <= window_ticks_at(tick):
+                    new_tick = int(round(tick + delta))
+                    applied = new_tick - tick
+                    ev[0] = new_tick
+                    if applied != 0:
+                        snapped += 1
+                    key = (msg.note, getattr(msg, 'channel', 0))
+                    open_notes.setdefault(key, []).append(applied)
+            elif msg.type == 'note_off' or (msg.type == 'note_on' and getattr(msg, 'velocity', 0) == 0):
+                key = (msg.note, getattr(msg, 'channel', 0))
+                stack = open_notes.get(key)
+                if stack:
+                    applied = stack.pop(0)
+                    ev[0] = max(0, ev[0] + applied)
+
+        events.sort(key=lambda e: e[0])
+        new_track = mido.MidiTrack()
+        prev = 0
+        for tick, msg in events:
+            delta = max(0, tick - prev)
+            new_track.append(msg.copy(time=delta))
+            prev = tick
+        new_tracks.append(new_track)
+
+    if snapped > 0:
+        mid.tracks = new_tracks
+        mid.save(str(midi_path))
+    return snapped
+
+
+def _recover_note_onsets(midi_path: Path) -> tuple[int, float, list[float]]:
+    """Read notes.mid and return ``(ticks_per_beat, init_bpm, onset_times_sec)``.
+
+    Onset times are recovered in real-world seconds using whatever tempo map the
+    file currently carries (STRUM writes a single constant tempo at this stage).
+    Onsets come from the rhythmic instrument tracks (drums/bass/guitar/keys when
+    available), are deduped to a 25 ms minimum spacing so dense chords don't
+    dominate the fit, and are returned sorted. These onsets are the ground truth
+    the tempo grid is fitted to — they sit where the actual hits are in the audio.
+    """
+    try:
+        import mido
+    except Exception:  # pragma: no cover - mido is bundled
+        return (480, 120.0, [])
+
+    mid = mido.MidiFile(str(midi_path))
+    tpb = mid.ticks_per_beat or 480
+
+    DEFAULT_TEMPO = 500000  # microseconds per beat == 120 BPM
+    tempo_changes: list[tuple[int, int]] = []
+    for track in mid.tracks:
+        at = 0
+        for msg in track:
+            at += msg.time
+            if msg.is_meta and msg.type == 'set_tempo':
+                tempo_changes.append((at, msg.tempo))
+    tempo_changes.sort(key=lambda x: x[0])
+
+    # Build (tick, seconds_at_tick, tempo) boundaries so tick->seconds is exact
+    # for either a constant tempo or a variable map.
+    tc = tempo_changes[:]
+    if not tc or tc[0][0] != 0:
+        tc = [(0, DEFAULT_TEMPO)] + tc
+    boundaries: list[tuple[int, float, int]] = []
+    cum_sec = 0.0
+    prev_tick = 0
+    cur_tempo = tc[0][1]
+    for i, (tk, tp) in enumerate(tc):
+        if i == 0:
+            boundaries.append((tk, 0.0, tp))
+            prev_tick, cur_tempo = tk, tp
+            continue
+        cum_sec += (tk - prev_tick) * (cur_tempo / 1_000_000.0) / tpb
+        boundaries.append((tk, cum_sec, tp))
+        prev_tick, cur_tempo = tk, tp
+
+    init_bpm = 60_000_000.0 / boundaries[0][2]
+
+    def tick_to_sec(tick: int) -> float:
+        base_tick, base_sec, tempo = boundaries[0]
+        for b_tick, b_sec, b_tempo in boundaries:
+            if b_tick <= tick:
+                base_tick, base_sec, tempo = b_tick, b_sec, b_tempo
+            else:
+                break
+        return base_sec + (tick - base_tick) * (tempo / 1_000_000.0) / tpb
+
+    PREFERRED = {"PART DRUMS", "PART BASS", "PART GUITAR", "PART KEYS"}
+    preferred_onsets: list[float] = []
+    fallback_onsets: list[float] = []
+    for track in mid.tracks:
+        name = ""
+        for msg in track:
+            if msg.is_meta and msg.type == 'track_name':
+                name = str(getattr(msg, 'name', ''))
+                break
+        if not name.startswith("PART ") or "VOCAL" in name:
+            continue
+        target = preferred_onsets if name in PREFERRED else fallback_onsets
+        at = 0
+        for msg in track:
+            at += msg.time
+            if msg.type == 'note_on' and getattr(msg, 'velocity', 0) > 0:
+                target.append(tick_to_sec(at))
+
+    onsets = preferred_onsets if len(preferred_onsets) >= 16 else (preferred_onsets + fallback_onsets)
+    onsets.sort()
+    deduped: list[float] = []
+    for t in onsets:
+        if not deduped or t - deduped[-1] >= 0.025:
+            deduped.append(t)
+    return (tpb, init_bpm, deduped)
+
+
+def _grid_fit_error(onsets: list[float], bpm: float, subdivisions: int = 4) -> float:
+    """Mean distance (seconds) from each onset to the nearest grid line of a
+    1/(``subdivisions``-per-beat) grid at ``bpm``, after removing the best
+    constant phase. Lower means the grid explains the onsets better. A slightly
+    wrong BPM makes the phase drift across the song, which inflates this error —
+    so minimising it recovers the true tempo. The 16th-note grid (subdivisions=4)
+    lets legitimate off-beat playing count as on-grid.
+    """
+    import math
+    if bpm <= 0 or len(onsets) < 2:
+        return float('inf')
+    step = (60.0 / bpm) / subdivisions
+    if step <= 0:
+        return float('inf')
+    sin_s = 0.0
+    cos_s = 0.0
+    for t in onsets:
+        ang = 2.0 * math.pi * ((t / step) % 1.0)
+        sin_s += math.sin(ang)
+        cos_s += math.cos(ang)
+    mean_phase = math.atan2(sin_s, cos_s) / (2.0 * math.pi)  # in units of `step`
+    total = 0.0
+    for t in onsets:
+        u = t / step - mean_phase
+        total += abs(u - round(u))
+    return (total / len(onsets)) * step
+
+
+def _refine_bpm(onsets: list[float], center: float, span: float = 3.0) -> tuple[float, float]:
+    """Fine grid-search BPM in ``[center-span, center+span]`` (0.02 BPM steps) to
+    minimise :func:`_grid_fit_error`. Returns ``(best_bpm, best_error_seconds)``.
+    """
+    best_bpm = center
+    best_err = _grid_fit_error(onsets, center)
+    lo = max(30.0, center - span)
+    hi = center + span
+    steps = int(round((hi - lo) / 0.02))
+    for i in range(steps + 1):
+        bpm = lo + i * 0.02
+        err = _grid_fit_error(onsets, bpm)
+        if err < best_err:
+            best_err, best_bpm = err, bpm
+    return best_bpm, best_err
+
+
+def _estimate_global_tempo(onsets: list[float], init_bpm: float) -> tuple[float, float]:
+    """Level A: best single tempo for the whole song. Fine-refines around the
+    detected BPM and, conservatively, checks the half/double-time octaves —
+    only switching octave when the fit is dramatically better, so we never make
+    a correct tempo worse. Returns ``(best_bpm, best_error_seconds)``.
+    """
+    best_bpm, best_err = _refine_bpm(onsets, init_bpm)
+    for factor in (0.5, 2.0):
+        center = init_bpm * factor
+        if center < 40.0 or center > 280.0:
+            continue
+        cand_bpm, cand_err = _refine_bpm(onsets, center)
+        # Only switch octave when the alternate grid is both dramatically better
+        # *and* genuinely tight (small absolute error). A truly octave-wrong song
+        # snaps onto the correct grid within a few ms; a merely drifting song can
+        # also look "relatively" better on a denser 2x grid but leaves a large
+        # residual — the absolute gate keeps drift from masquerading as an octave
+        # error and pushing the whole chart to double time.
+        if cand_err < best_err * 0.6 and cand_err < 0.012:
+            best_bpm, best_err = cand_bpm, cand_err
+    return best_bpm, best_err
+
+
+def _estimate_tempo_map(onsets: list[float], global_bpm: float) -> "list[tuple[float, float]] | None":
+    """Level B: detect tempo drift and, when present, build a piecewise tempo
+    map (list of ``(timeSec, bpm)``). Returns None when the song is steady enough
+    that the single global tempo is best, so steady songs never get a cluttered
+    map. Per-window tempos are clamped to a sane drift band and smoothed.
+    """
+    if len(onsets) < 32:
+        return None
+    duration = onsets[-1] - onsets[0]
+    if duration < 30.0:
+        return None
+    window = 12.0  # seconds
+    n_windows = int(duration // window) + 1
+    if n_windows < 3:
+        return None
+
+    start = onsets[0]
+    span = global_bpm * 0.06
+    local: list[tuple[float, float]] = []  # (window_start_time, bpm)
+    for w in range(n_windows):
+        w0 = start + w * window
+        seg = [t for t in onsets if w0 <= t < w0 + window]
+        if len(seg) < 8:
+            local.append((w0, local[-1][1] if local else global_bpm))
+            continue
+        bpm, _ = _refine_bpm(seg, global_bpm, span=span)
+        bpm = max(global_bpm * 0.85, min(global_bpm * 1.15, bpm))
+        local.append((w0, bpm))
+
+    bpms = [b for _, b in local]
+    if max(bpms) - min(bpms) < 1.0:
+        return None  # steady — global tempo wins
+
+    # 3-point moving average to damp window-to-window jitter.
+    smoothed: list[tuple[float, float]] = []
+    for i, (t, _b) in enumerate(local):
+        lo = max(0, i - 1)
+        hi = min(len(local), i + 2)
+        avg = sum(b for _, b in local[lo:hi]) / (hi - lo)
+        smoothed.append((t, avg))
+    smoothed[0] = (0.0, smoothed[0][1])  # first event must anchor at t=0
+
+    tempo_map: list[tuple[float, float]] = []
+    for t, b in smoothed:
+        if tempo_map and abs(tempo_map[-1][1] - b) < 0.3:
+            continue  # collapse near-equal consecutive tempos
+        tempo_map.append((round(t, 3), round(b, 3)))
+    if len(tempo_map) < 2:
+        return None
+    return tempo_map
+
+
+def _refine_tempo(midi_path: Path, allow_drift: bool) -> str:
+    """Refine notes.mid's tempo grid so it lines up with the detected note
+    onsets, fixing slow drift from a slightly-wrong global BPM (and clear octave
+    errors), plus a piecewise tempo map for genuinely drifting songs when
+    ``allow_drift`` is True. Real-world onset times are preserved — only the
+    tempo and each note's tick change — so playback stays in sync with the audio
+    while notes land on the grid. Returns a short human-readable status.
+    """
+    _tpb, init_bpm, onsets = _recover_note_onsets(midi_path)
+    if len(onsets) < 16:
+        return "skipped (too few onsets to analyse)"
+    global_bpm, _err = _estimate_global_tempo(onsets, init_bpm)
+    tempo_map: list[tuple[float, float]] = [(0.0, global_bpm)]
+    drift = _estimate_tempo_map(onsets, global_bpm) if allow_drift else None
+    if drift:
+        tempo_map = drift
+    # Nothing meaningfully changed for a steady song already on the right tempo.
+    if not drift and abs(global_bpm - init_bpm) < 0.05:
+        return f"already aligned ({init_bpm:.2f} BPM)"
+    _retime_midi_to_tempo_map(midi_path, init_bpm, tempo_map)
+    if drift:
+        return f"variable tempo map ({len(tempo_map)} events, {global_bpm:.2f} BPM base)"
+    return f"refined {init_bpm:.2f} -> {global_bpm:.2f} BPM"
+
+
 def _tag_song_as_ai_generated(song_folder: Path) -> None:
     """Mark a generated song's ``song.ini`` as AI auto-charted.
 
@@ -2151,6 +2509,23 @@ def run_pipeline(payload: dict[str, Any]) -> int:
         SNAP_DRUMS_WINDOW_MS = float(payload.get("snapDrumsWindowMs", 40.0) or 40.0)
     except (TypeError, ValueError):
         SNAP_DRUMS_WINDOW_MS = 40.0
+
+    # Automatic tempo refinement (default on). Re-fits the tempo grid to the
+    # detected note onsets so notes stop drifting off the beat lines. See
+    # AUTO_TEMPO comment block and _refine_tempo().
+    global AUTO_TEMPO, AUTO_TEMPO_DRIFT, AUTO_TEMPO_SNAP
+    global AUTO_TEMPO_SNAP_DIVISION, AUTO_TEMPO_SNAP_WINDOW_MS
+    AUTO_TEMPO = bool(payload.get("autoTempo", True))
+    AUTO_TEMPO_DRIFT = bool(payload.get("autoTempoDrift", True))
+    AUTO_TEMPO_SNAP = bool(payload.get("autoTempoSnap", True))
+    try:
+        AUTO_TEMPO_SNAP_DIVISION = int(payload.get("autoTempoSnapDivision", 32) or 32)
+    except (TypeError, ValueError):
+        AUTO_TEMPO_SNAP_DIVISION = 32
+    try:
+        AUTO_TEMPO_SNAP_WINDOW_MS = float(payload.get("autoTempoSnapWindowMs", 30.0) or 30.0)
+    except (TypeError, ValueError):
+        AUTO_TEMPO_SNAP_WINDOW_MS = 30.0
 
     # Optional user-supplied tempo map. Each entry: {"timeSec": float, "bpm": float}.
     # If the first event has timeSec > 0, an implicit (0, first.bpm) is prepended.
@@ -2261,6 +2636,33 @@ def run_pipeline(payload: dict[str, Any]) -> int:
                         )
                 except Exception as exc:
                     errors.append(f"{source.name}: tempo-map post-process failed: {exc}")
+            elif AUTO_TEMPO and notes_mid.exists():
+                try:
+                    status = _refine_tempo(notes_mid, AUTO_TEMPO_DRIFT)
+                    emit_progress(
+                        run_id,
+                        "merge",
+                        f"Tempo refine ({status}) on {notes_mid.name}",
+                        percent=min(96, source_start_percent + 65),
+                        current_item=source.name,
+                    )
+                    if AUTO_TEMPO_SNAP:
+                        cleaned = _quantize_onsets(
+                            notes_mid,
+                            division=AUTO_TEMPO_SNAP_DIVISION,
+                            window_ms=AUTO_TEMPO_SNAP_WINDOW_MS,
+                            track_predicate=lambda n: n.startswith("PART ") and "VOCAL" not in n,
+                        )
+                        if cleaned:
+                            emit_progress(
+                                run_id,
+                                "merge",
+                                f"Snapped {cleaned} residual onset(s) to grid in {notes_mid.name}",
+                                percent=min(96, source_start_percent + 65),
+                                current_item=source.name,
+                            )
+                except Exception as exc:
+                    errors.append(f"{source.name}: tempo refine failed: {exc}")
             if SNAP_DRUMS and notes_mid.exists():
                 try:
                     snapped = _quantize_drum_track(

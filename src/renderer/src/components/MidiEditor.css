@@ -85,6 +85,27 @@
   cursor: pointer;
 }
 
+.midi-snap-to-grid-button {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.midi-snap-to-grid-button:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--accent-color, #4ecdc4);
+}
+
+.midi-snap-to-grid-button:active {
+  transform: translateY(1px);
+}
+
 .midi-zoom-controls button {
   width: 28px;
   height: 28px;
