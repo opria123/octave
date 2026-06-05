@@ -71,6 +71,7 @@ export function Toolbar(): React.JSX.Element {
   const [autoChartDisableOnlineLookup, setAutoChartDisableOnlineLookup] = useState(false)
   const [autoChartDownloadVideo, setAutoChartDownloadVideo] = useState(true)
   const [autoChartKeepStems, setAutoChartKeepStems] = useState(false)
+  const [autoChartImproveTempo, setAutoChartImproveTempo] = useState(true)
   const [autoChartSnapDrums, setAutoChartSnapDrums] = useState(false)
   const [autoChartAdvancedOpen, setAutoChartAdvancedOpen] = useState(false)
   // Optional user-supplied tempo map. Empty = use STRUM's auto-detection.
@@ -585,6 +586,7 @@ export function Toolbar(): React.JSX.Element {
         disableOnlineLookup: autoChartDisableOnlineLookup,
         skipHarmonies: !autoChartEnabledTracks.harmonies,
         keepStems: autoChartKeepStems,
+        autoTempo: autoChartImproveTempo,
         snapDrums: autoChartSnapDrums,
         enabledTracks: autoChartEnabledTracks,
         tempoMap: (() => {
@@ -603,7 +605,7 @@ export function Toolbar(): React.JSX.Element {
         error: error instanceof Error ? error.message : String(error)
       }))
     }
-  }, [autoChartDisableOnlineLookup, autoChartEnabledTracks, autoChartFiles, autoChartFolders, autoChartKeepStems, autoChartSnapDrums, autoChartStemFolders, autoChartStemSongs, autoChartProgress.outputDir, autoChartTempoEvents, autoChartUrls, runtimeStatus, updateSettings])
+  }, [autoChartDisableOnlineLookup, autoChartEnabledTracks, autoChartFiles, autoChartFolders, autoChartImproveTempo, autoChartKeepStems, autoChartSnapDrums, autoChartStemFolders, autoChartStemSongs, autoChartProgress.outputDir, autoChartTempoEvents, autoChartUrls, runtimeStatus, updateSettings])
 
   const handleCancelAutoChart = useCallback(async (): Promise<void> => {
     if (!autoChartProgress.runId) return
@@ -1451,6 +1453,21 @@ export function Toolbar(): React.JSX.Element {
                       Keep separated stems
                       <small style={{ display: 'block', opacity: 0.7 }}>
                         Export the separated stems (drums, bass, vocals, etc.) as per-instrument oggs in each song folder instead of discarding them. Lets you remix or mute instruments in-game.
+                      </small>
+                    </span>
+                  </label>
+
+                  <label className="settings-checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={autoChartImproveTempo}
+                      onChange={(event) => setAutoChartImproveTempo(event.target.checked)}
+                      disabled={autoChartProgress.isRunning}
+                    />
+                    <span>
+                      Improve tempo accuracy (recommended)
+                      <small style={{ display: 'block', opacity: 0.7 }}>
+                        Re-fits the tempo grid to the detected notes so they stop drifting off the beat lines. Corrects a slightly-wrong BPM and, for live recordings, follows tempo changes — while keeping notes in sync with the audio. Disabled automatically when you set a manual tempo map below.
                       </small>
                     </span>
                   </label>

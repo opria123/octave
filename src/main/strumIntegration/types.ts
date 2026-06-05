@@ -90,6 +90,19 @@ export interface AutoChartRunOptions {
   /** Only snap drum onsets already within this many ms of a grid line. Default 40. */
   snapDrumsWindowMs?: number
   /**
+   * Automatic tempo refinement (default on). After STRUM writes notes.mid the
+   * worker re-fits the tempo grid to the detected note onsets — correcting a
+   * slightly-wrong global BPM (and clear octave errors) and, for genuinely
+   * drifting songs, building a piecewise tempo map. Real-world note times are
+   * preserved so audio stays in sync while notes land on the grid. Skipped when
+   * a `tempoMap` override is supplied.
+   */
+  autoTempo?: boolean
+  /** Allow a piecewise tempo map for drifting songs (live recordings). Default on. */
+  autoTempoDrift?: boolean
+  /** Snap residual onset jitter onto the grid after tempo refinement. Default on. */
+  autoTempoSnap?: boolean
+  /**
    * Per-instrument enable flags. When omitted all tracks are charted.
    * `keys` here means standard 5-lane keys; pro-keys is currently always
    * generated alongside keys when enabled.
