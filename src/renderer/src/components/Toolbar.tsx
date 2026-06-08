@@ -73,6 +73,9 @@ export function Toolbar(): React.JSX.Element {
   const [autoChartKeepStems, setAutoChartKeepStems] = useState(false)
   const [autoChartImproveTempo, setAutoChartImproveTempo] = useState(true)
   const [autoChartSnapDrums, setAutoChartSnapDrums] = useState(false)
+  // Optional single-BPM hint typed by the user, treated as authoritative. Empty
+  // = detect by beat-tracking the audio (see strum_worker _beat_track_tempo_map).
+  const [autoChartManualBpm, setAutoChartManualBpm] = useState('')
   const [autoChartAdvancedOpen, setAutoChartAdvancedOpen] = useState(false)
   // Optional user-supplied tempo map. Empty = use STRUM's auto-detection.
   // First entry's BPM (sorted by timeSec) overrides initial detected tempo.
@@ -589,6 +592,10 @@ export function Toolbar(): React.JSX.Element {
         autoTempo: autoChartImproveTempo,
         snapDrums: autoChartSnapDrums,
         enabledTracks: autoChartEnabledTracks,
+        manualBpm: (() => {
+          const bpm = parseFloat(autoChartManualBpm)
+          return Number.isFinite(bpm) && bpm > 0 ? bpm : undefined
+        })(),
         tempoMap: (() => {
           const parsed = autoChartTempoEvents
             .map((e) => ({ timeSec: parseFloat(e.timeSec), bpm: parseFloat(e.bpm) }))
@@ -605,7 +612,7 @@ export function Toolbar(): React.JSX.Element {
         error: error instanceof Error ? error.message : String(error)
       }))
     }
-  }, [autoChartDisableOnlineLookup, autoChartEnabledTracks, autoChartFiles, autoChartFolders, autoChartImproveTempo, autoChartKeepStems, autoChartSnapDrums, autoChartStemFolders, autoChartStemSongs, autoChartProgress.outputDir, autoChartTempoEvents, autoChartUrls, runtimeStatus, updateSettings])
+  }, [autoChartDisableOnlineLookup, autoChartEnabledTracks, autoChartFiles, autoChartFolders, autoChartImproveTempo, autoChartKeepStems, autoChartSnapDrums, autoChartStemFolders, autoChartStemSongs, autoChartProgress.outputDir, autoChartTempoEvents, autoChartManualBpm, autoChartUrls, runtimeStatus, updateSettings])
 
   const handleCancelAutoChart = useCallback(async (): Promise<void> => {
     if (!autoChartProgress.runId) return
@@ -1467,10 +1474,31 @@ export function Toolbar(): React.JSX.Element {
                     <span>
                       Improve tempo accuracy (recommended)
                       <small style={{ display: 'block', opacity: 0.7 }}>
-                        Re-fits the tempo grid to the detected notes so they stop drifting off the beat lines. Corrects a slightly-wrong BPM and, for live recordings, follows tempo changes — while keeping notes in sync with the audio. Disabled automatically when you set a manual tempo map below.
+                        Beat-tracks the audio to align the chart&rsquo;s beat and measure lines to the real performance, so notes stop drifting off the grid. Follows tempo changes in live recordings while keeping notes in sync with the audio. Disabled automatically when you set a manual tempo map below.
                       </small>
                     </span>
                   </label>
+
+                  <div className="auto-chart-bpm-source" style={{ margin: '4px 0 2px' }}>
+                    <label className="settings-checkbox-row" style={{ alignItems: 'flex-start' }}>
+                      <span style={{ flex: 1 }}>
+                        Manual BPM
+                        <small style={{ display: 'block', opacity: 0.7 }}>
+                          Know the song&rsquo;s tempo? Enter it and it&rsquo;s treated as the truth: the beat grid is locked to this BPM (fixing any wrong-tempo or octave detection). With &ldquo;Improve tempo accuracy&rdquo; on, the audio is still beat-tracked to follow drift around this value; with it off, this exact BPM is applied. Leave blank to detect automatically.
+                        </small>
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        step={0.001}
+                        value={autoChartManualBpm}
+                        placeholder="auto"
+                        disabled={autoChartProgress.isRunning}
+                        style={{ width: 84, marginLeft: 12 }}
+                        onChange={(event) => setAutoChartManualBpm(event.target.value)}
+                      />
+                    </label>
+                  </div>
 
                   <label className="settings-checkbox-row">
                     <input

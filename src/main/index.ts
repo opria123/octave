@@ -663,6 +663,7 @@ ipcMain.handle('strum:start', async (_event, options: {
     proKeys?: boolean
   }
   tempoMap?: Array<{ timeSec: number; bpm: number }>
+  manualBpm?: number
 }) => {
   const runId = randomUUID()
 
@@ -685,7 +686,8 @@ ipcMain.handle('strum:start', async (_event, options: {
     autoTempoDrift: options.autoTempoDrift,
     autoTempoSnap: options.autoTempoSnap,
     enabledTracks: options.enabledTracks,
-    tempoMap: options.tempoMap
+    tempoMap: options.tempoMap,
+    manualBpm: options.manualBpm
   })
     .then((result) => {
       for (const win of BrowserWindow.getAllWindows()) {

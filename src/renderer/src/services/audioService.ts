@@ -597,7 +597,15 @@ export function getAudioSources(songId: string): Array<{ filePath: string; filen
     filePath: source.filePath,
     filename: source.filename,
     duration: source.buffer.duration
-  }))
+  }))}
+
+// Get the decoded AudioBuffer for a specific source file (waveform rendering).
+export function getAudioBufferForPath(songId: string, filePath: string): AudioBuffer | null {
+  const state = audioRegistry.get(songId)
+  if (!state) return null
+  const source = state.sources.find((entry) => entry.filePath === filePath)
+    ?? state.sources.find((entry) => entry.filename === filePath)
+  return source?.buffer ?? null
 }
 
 // Cleanup audio for a song
