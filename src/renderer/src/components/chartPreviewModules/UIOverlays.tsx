@@ -54,6 +54,8 @@ export function VenueStateOverlay({ songId }: { songId: string }): React.JSX.Ele
 
 export function InstrumentToggles(): React.JSX.Element {
   const { activeSongId } = useProjectStore()
+  const showHighwayWaveform = useUIStore((s) => s.showHighwayWaveform)
+  const toggleHighwayWaveform = useUIStore((s) => s.toggleHighwayWaveform)
   const [visibleInstruments, setVisibleInstruments] = useState<Set<Instrument>>(
     new Set(['drums', 'guitar', 'bass', 'vocals', 'keys', 'proKeys', 'proGuitar', 'proBass'])
   )
@@ -92,6 +94,13 @@ export function InstrumentToggles(): React.JSX.Element {
           {inst.label}
         </button>
       ))}
+      <button
+        className={`instrument-toggle ${showHighwayWaveform ? 'active' : ''}`}
+        title="Show the song's audio waveform on the note highway"
+        onClick={toggleHighwayWaveform}
+      >
+        Waveform
+      </button>
     </div>
   )
 }

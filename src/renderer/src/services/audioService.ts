@@ -709,3 +709,57 @@ export function stopPitchPreview(): void {
   previewGain = null
   previewPitch = -1
 }
+
+// ── Vocal pitch playback (issue #10) ─────────────────────────────────
+// Schedules a self-releasing sine tone per vocal note while the song plays,
+// so charters can compare the charted pitch against the real vocal in real
+// time. Polyphonic (notes can overlap across a phrase boundary) and each
+// tone stops itself at the note's end.
+
+const activeVocalTones = new Set<{ osc: OscillatorNode; gain: GainNode }>()
+
+export function playVocalTone(midiNote: number, durationSec: number): void {
+  const ctx = getContext()
+  if (ctx.state === 'suspended') ctx.resume()
+
+  const now = ctx.currentTime
+  const dur = Math.max(0.09, Math.min(durationSec, 10))
+
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = 'sine'
+  osc.frequency.value = midiToHz(midiNote)
+  gain.gain.setValueAtTime(0, now)
+  gain.gain.linearRampToValueAtTime(0.16, now + 0.015) // quick attack
+  const releaseStart = Math.max(now + 0.02, now + dur - 0.05)
+  gain.gain.setValueAtTime(0.16, releaseStart)
+  gain.gain.linearRampToValueAtTime(0, now + dur) // short release
+
+  osc.connect(gain)
+  gain.connect(ctx.destination)
+  osc.start(now)
+  osc.stop(now + dur + 0.02)
+
+  const entry = { osc, gain }
+  activeVocalTones.add(entry)
+  osc.onended = (): void => {
+    activeVocalTones.delete(entry)
+    try { osc.disconnect(); gain.disconnect() } catch { /* already disconnected */ }
+  }
+}
+
+/** Immediately silence any in-flight vocal pitch tones (stop/pause/seek). */
+export function stopAllVocalTones(): void {
+  if (activeVocalTones.size === 0) return
+  const ctx = getContext()
+  const now = ctx.currentTime
+  for (const { osc, gain } of activeVocalTones) {
+    try {
+      gain.gain.cancelScheduledValues(now)
+      gain.gain.setValueAtTime(gain.gain.value, now)
+      gain.gain.linearRampToValueAtTime(0, now + 0.04)
+      osc.stop(now + 0.05)
+    } catch { /* already stopped */ }
+  }
+  activeVocalTones.clear()
+}

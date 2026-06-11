@@ -327,6 +327,10 @@ export interface UIState {
   noteModifiers: NoteModifiers
   isPreviewFullscreen: boolean
   isSettingsModalOpen: boolean
+  /** Sound vocal note pitches (sine tones) while the song plays (issue #10). */
+  vocalPitchPlayback: boolean
+  /** Show the audio waveform overlay on the 3D note highway (issue #7). */
+  showHighwayWaveform: boolean
 }
 
 export interface SelectedVenueEventRef {

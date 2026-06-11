@@ -30,7 +30,17 @@ SOURCE_FOLDER_NAME = "strum-source"
 STRUM_SOURCE_VERSION = "2026-05-06.1"
 SOURCE_VERSION_FILE = ".octave-source-version"
 SNAPSHOT_FOLDER_NAME = "strum-checkpoints-snapshot"
-AUDIO_SEPARATION_TIMEOUT_SEC = int(os.environ.get("OCTAVE_STRUM_SEPARATION_TIMEOUT_SEC", "900"))
+# Hard wall-clock ceiling for stem separation. Slow (often older) CPUs can
+# legitimately take >15 min per song with the Python demucs fallback, which is
+# exactly the hardware that needs the fallback in the first place (GitHub
+# issue #9) — so the cap is generous and separation is instead supervised by
+# an idle watchdog (below) that only kills the process when it stops making
+# progress entirely.
+AUDIO_SEPARATION_TIMEOUT_SEC = int(os.environ.get("OCTAVE_STRUM_SEPARATION_TIMEOUT_SEC", "3600"))
+# Stall watchdog: kill separation only if the subprocess produces no output at
+# all for this long. demucs (tqdm) and demucs.cpp both emit progress
+# continuously while working, so silence this long means a genuine hang.
+AUDIO_SEPARATION_IDLE_TIMEOUT_SEC = int(os.environ.get("OCTAVE_STRUM_SEPARATION_IDLE_TIMEOUT_SEC", "300"))
 # Fast analysis bypasses real tempo/key detection and forces 120 BPM. The
 # STRUM benchmark used real detected tempo (feeds STRUM_PHASE_ALIGN beat-grid
 # alignment + tempo-relative drum heuristics), so default to OFF for chart
@@ -146,6 +156,74 @@ def _diagnose_basic_pitch_failure(exc: BaseException) -> None:
         "         OCTAVE_STRUM_PYTHON to a venv that has them).",
         file=_sys.stderr, flush=True,
     )
+
+
+def _run_separation_subprocess(cmd: "list[str]", label: str) -> "tuple[int, int]":
+    """Run a stem-separation subprocess supervised by a stall watchdog.
+
+    The old fixed 900s wall-clock timeout killed perfectly healthy runs on
+    slow CPUs — exactly the older hardware that falls back to the Python
+    demucs engine after a demucs.cpp SIMD crash (GitHub issue #9). Instead of
+    judging by elapsed time, watch the process's combined stdout/stderr:
+    demucs (tqdm progress bars) and demucs.cpp both print continuously while
+    working, so we only kill the process when it has been completely silent
+    for AUDIO_SEPARATION_IDLE_TIMEOUT_SEC (a genuine hang), or exceeds the
+    much more generous AUDIO_SEPARATION_TIMEOUT_SEC hard ceiling.
+
+    Output is forwarded to this worker's stderr so the host app's progress
+    parsing keeps working. Returns ``(returncode, elapsed_seconds)``.
+    """
+    import threading
+
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    last_activity = time.time()
+
+    def _pump() -> None:
+        nonlocal last_activity
+        stream = proc.stdout
+        if stream is None:
+            return
+        try:
+            while True:
+                # read1 returns as soon as any data is available (tqdm emits
+                # \r-terminated updates, so line-based reads would block).
+                chunk = stream.read1(65536)  # type: ignore[attr-defined]
+                if not chunk:
+                    break
+                last_activity = time.time()
+                try:
+                    sys.stderr.buffer.write(chunk)
+                    sys.stderr.flush()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    pump_thread = threading.Thread(target=_pump, daemon=True)
+    pump_thread.start()
+
+    started_at = time.time()
+    while True:
+        returncode = proc.poll()
+        if returncode is not None:
+            pump_thread.join(timeout=5)
+            return returncode, int(time.time() - started_at)
+        now = time.time()
+        if now - started_at > AUDIO_SEPARATION_TIMEOUT_SEC:
+            proc.kill()
+            raise RuntimeError(
+                f"{label} exceeded the {AUDIO_SEPARATION_TIMEOUT_SEC}s hard limit. "
+                "Set OCTAVE_STRUM_SEPARATION_TIMEOUT_SEC to raise it."
+            )
+        if now - last_activity > AUDIO_SEPARATION_IDLE_TIMEOUT_SEC:
+            proc.kill()
+            raise RuntimeError(
+                f"{label} stalled (no output for {AUDIO_SEPARATION_IDLE_TIMEOUT_SEC}s) "
+                f"and was stopped after {int(now - started_at)}s."
+            )
+        time.sleep(1.0)
+
+
 if DISABLE_ONLINE_LOOKUP:
     FAST_AUDIO_METADATA_LOOKUP = False
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".ogg", ".opus", ".flac"}
@@ -1142,7 +1220,9 @@ def build_pipeline(
             if cpp_bin and cpp_weights and Path(cpp_bin).exists() and Path(cpp_weights).exists():
                 try:
                     cpp_stems = self._separate_stems_cpp(audio_path, work_dir, cpp_bin, cpp_weights)
-                    if KEEP_STEMS and cpp_stems:
+                    if cpp_stems:
+                        # Always register (not just for keep-stems): the tempo
+                        # refiner prefers beat-tracking the drums stem (issue #8).
                         SEPARATED_STEM_REGISTRY[Path(audio_path).resolve()] = dict(cpp_stems)
                     return cpp_stems
                 except Exception as exc:
@@ -1179,17 +1259,9 @@ def build_pipeline(
                 str(audio_path),
             ]
 
-            started_at = time.time()
-            try:
-                result = subprocess.run(cmd, timeout=AUDIO_SEPARATION_TIMEOUT_SEC)
-            except subprocess.TimeoutExpired as exc:
-                raise RuntimeError(
-                    f"Demucs separation timed out after {AUDIO_SEPARATION_TIMEOUT_SEC}s."
-                ) from exc
-
-            elapsed = int(time.time() - started_at)
-            if result.returncode != 0:
-                raise RuntimeError(f"Demucs failed with return code {result.returncode} after {elapsed}s")
+            returncode, elapsed = _run_separation_subprocess(cmd, "Demucs separation")
+            if returncode != 0:
+                raise RuntimeError(f"Demucs failed with return code {returncode} after {elapsed}s")
 
             logger.info(f"    Demucs separation complete in {elapsed}s")
 
@@ -1201,7 +1273,9 @@ def build_pipeline(
                     stems[stem] = stem_path
 
             logger.info(f"    Separated stems: {list(stems.keys())}")
-            if KEEP_STEMS and stems:
+            if stems:
+                # Always register (not just for keep-stems): the tempo refiner
+                # prefers beat-tracking the drums stem (issue #8).
                 SEPARATED_STEM_REGISTRY[Path(audio_path).resolve()] = dict(stems)
             return stems
 
@@ -1261,18 +1335,10 @@ def build_pipeline(
             num_threads = max(1, (os.cpu_count() or 4) - 1)
             cmd = [cpp_bin, cpp_weights, str(input_for_demucs), str(demucs_out), str(num_threads)]
 
-            started_at = time.time()
-            try:
-                result = subprocess.run(cmd, timeout=AUDIO_SEPARATION_TIMEOUT_SEC)
-            except subprocess.TimeoutExpired as exc:
+            returncode, elapsed = _run_separation_subprocess(cmd, "demucs.cpp separation")
+            if returncode != 0:
                 raise RuntimeError(
-                    f"demucs.cpp separation timed out after {AUDIO_SEPARATION_TIMEOUT_SEC}s."
-                ) from exc
-
-            elapsed = int(time.time() - started_at)
-            if result.returncode != 0:
-                raise RuntimeError(
-                    f"demucs.cpp failed with return code {result.returncode} after {elapsed}s"
+                    f"demucs.cpp failed with return code {returncode} after {elapsed}s"
                 )
 
             logger.info(f"    demucs.cpp separation complete in {elapsed}s")
@@ -2461,9 +2527,17 @@ def _beat_track_tempo_map(
         return (None, None)
     if y is None or len(y) < sr:  # need at least ~1s of audio
         return (None, None)
+    # Near-silent input (e.g. a drums stem from a drumless track) carries no
+    # rhythmic information — bail so the caller can try the next candidate.
+    if float(np.sqrt(np.mean(np.square(y)))) < 0.004:
+        return (None, None)
 
-    onset_env = librosa.onset.onset_strength(y=y, sr=sr)
-    kwargs: dict[str, Any] = {"onset_envelope": onset_env, "sr": sr, "trim": False}
+    # 256-sample hop (~11.6ms at 22.05kHz) instead of librosa's default 512:
+    # tempo-map accuracy is bounded by onset-envelope resolution, and halving
+    # the hop noticeably tightens beat placement (closer to ConvertHero).
+    hop = 256
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop)
+    kwargs: dict[str, Any] = {"onset_envelope": onset_env, "sr": sr, "hop_length": hop, "trim": False}
     if hint_bpm and hint_bpm > 0:
         # Seed the tracker with the user-asserted tempo and keep the prior tight
         # so it doesn't wander to a half/double-time octave.
@@ -2474,7 +2548,27 @@ def _beat_track_tempo_map(
     except Exception:
         return (None, None)
 
-    beat_times = [float(t) for t in librosa.frames_to_time(np.asarray(beat_frames), sr=sr) if t >= 0]
+    # The DP beat tracker optimises global smoothness, so individual beats can
+    # sit a frame or two off the true percussive attack. Snap each beat to the
+    # strongest onset-envelope peak within ±70ms (ConvertHero-style onset
+    # alignment), keeping the sequence strictly increasing.
+    frames = [int(f) for f in np.asarray(beat_frames).ravel()]
+    snap_radius = max(1, int(round(0.07 * sr / hop)))
+    snapped: list[int] = []
+    for f in frames:
+        lo = max(0, f - snap_radius)
+        hi = min(len(onset_env), f + snap_radius + 1)
+        if hi > lo:
+            f = lo + int(np.argmax(onset_env[lo:hi]))
+        if snapped and f <= snapped[-1]:
+            continue
+        snapped.append(f)
+
+    beat_times = [
+        float(t)
+        for t in librosa.frames_to_time(np.asarray(snapped), sr=sr, hop_length=hop)
+        if t >= 0
+    ]
     if len(beat_times) < 8:
         return (None, None)
 
@@ -2533,6 +2627,7 @@ def _refine_tempo(
     allow_drift: bool,
     hint_bpm: "float | None" = None,
     audio_path: "Path | None" = None,
+    drum_audio_path: "Path | None" = None,
 ) -> str:
     """Align notes.mid's tempo grid to the song.
 
@@ -2549,14 +2644,23 @@ def _refine_tempo(
     """
     _tpb, init_bpm, onsets = _recover_note_onsets(midi_path)
 
-    # 1) Preferred: beat-track the rendered audio.
+    # 1) Preferred: beat-track the rendered audio. The isolated drum stem (when
+    # Demucs produced one) is tried first — percussive onsets without vocals /
+    # sustained instruments smearing the envelope give a noticeably tighter
+    # tempo map (testers got their best maps running ConvertHero on drums.ogg;
+    # see GitHub issue #8). The full mix is the fallback.
+    candidates: list[tuple[Path, str]] = []
+    if drum_audio_path is not None and Path(drum_audio_path).exists():
+        candidates.append((Path(drum_audio_path), "drum-stem beat-track"))
     if audio_path is not None and Path(audio_path).exists():
-        tempo_map, base = _beat_track_tempo_map(audio_path, hint_bpm, allow_drift)
+        candidates.append((Path(audio_path), "audio beat-track"))
+    for cand_path, cand_label in candidates:
+        tempo_map, base = _beat_track_tempo_map(cand_path, hint_bpm, allow_drift)
         if tempo_map and base and init_bpm > 0:
             _retime_midi_to_tempo_map(midi_path, init_bpm, tempo_map)
             if len(tempo_map) > 1:
-                return f"audio beat-track ({len(tempo_map)} tempo events, {base:.2f} BPM base)"
-            return f"audio beat-track (constant {base:.2f} BPM)"
+                return f"{cand_label} ({len(tempo_map)} tempo events, {base:.2f} BPM base)"
+            return f"{cand_label} (constant {base:.2f} BPM)"
 
     # 2) Fallback: fit a tempo to STRUM's MIDI note onsets (legacy method).
     if len(onsets) < 16:
@@ -2807,11 +2911,20 @@ def run_pipeline(payload: dict[str, Any]) -> int:
 
                 if AUTO_TEMPO:
                     try:
+                        # Best drum-stem candidate for beat tracking: the raw
+                        # Demucs drums stem if its temp file still exists,
+                        # otherwise drums.ogg exported into the song folder
+                        # (only present when keep-stems is on). _refine_tempo
+                        # skips candidates that don't exist.
+                        drum_stem = SEPARATED_STEM_REGISTRY.get(source.resolve(), {}).get("drums")
+                        if not (drum_stem and Path(drum_stem).exists()):
+                            drum_stem = Path(result.output_path) / "drums.ogg"
                         status = _refine_tempo(
                             notes_mid,
                             AUTO_TEMPO_DRIFT,
                             hint_bpm=hint_bpm,
                             audio_path=source,
+                            drum_audio_path=drum_stem,
                         )
                         emit_progress(
                             run_id,
