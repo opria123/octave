@@ -2551,40 +2551,48 @@ def _beat_track_tempo_map(
     # The DP beat tracker optimises global smoothness, so individual beats can
     # sit a frame or two off the true percussive attack. Snap each beat to the
     # strongest onset-envelope peak within ±70ms (ConvertHero-style onset
-    # alignment), keeping the sequence strictly increasing.
+    # alignment), then refine to sub-frame precision with parabolic
+    # interpolation around that peak (a frame at hop 256 is ~11.6ms — too
+    # coarse on its own for a grid that must stay locked for 4+ minutes).
     frames = [int(f) for f in np.asarray(beat_frames).ravel()]
     snap_radius = max(1, int(round(0.07 * sr / hop)))
-    snapped: list[int] = []
+    snapped: list[float] = []
     for f in frames:
         lo = max(0, f - snap_radius)
         hi = min(len(onset_env), f + snap_radius + 1)
         if hi > lo:
             f = lo + int(np.argmax(onset_env[lo:hi]))
-        if snapped and f <= snapped[-1]:
+        sub = float(f)
+        if 0 < f < len(onset_env) - 1:
+            a = float(onset_env[f - 1])
+            b = float(onset_env[f])
+            c = float(onset_env[f + 1])
+            denom = a - 2.0 * b + c
+            if abs(denom) > 1e-9:
+                delta = 0.5 * (a - c) / denom
+                if -0.5 <= delta <= 0.5:
+                    sub = f + delta
+        if snapped and sub <= snapped[-1]:
             continue
-        snapped.append(f)
+        snapped.append(sub)
 
-    beat_times = [
-        float(t)
-        for t in librosa.frames_to_time(np.asarray(snapped), sr=sr, hop_length=hop)
-        if t >= 0
-    ]
+    beat_times = [s * hop / sr for s in snapped if s >= 0]
     if len(beat_times) < 8:
         return (None, None)
 
-    # Instantaneous BPM across each beat interval.
-    raw: list[tuple[float, float]] = []
+    # Instantaneous BPM across each beat interval (used for the octave guard).
+    interval_bpms: list[float] = []
     for i in range(len(beat_times) - 1):
         dt = beat_times[i + 1] - beat_times[i]
         if dt <= 1e-3:
             continue
         bpm = 60.0 / dt
         if 30.0 <= bpm <= 300.0:
-            raw.append((beat_times[i], bpm))
-    if len(raw) < 4:
+            interval_bpms.append(bpm)
+    if len(interval_bpms) < 4:
         return (None, None)
 
-    median_bpm = float(np.median([b for _, b in raw]))
+    median_bpm = float(np.median(interval_bpms))
 
     # Truth guard: if the user gave a Manual BPM but the tracker locked onto a
     # clearly different octave (~half/double), don't silently fight them — bail
@@ -2598,22 +2606,23 @@ def _beat_track_tempo_map(
         base = float(hint_bpm) if (hint_bpm and hint_bpm > 0) else round(median_bpm, 3)
         return ([(0.0, base)], base)
 
-    # Smooth the per-beat tempo (5-wide moving average) to damp tracker jitter,
-    # then collapse near-equal consecutive tempos so the map isn't needlessly
-    # dense (mirrors ConvertHero's MovingAverage + agreement collapse).
-    bpms = [b for _, b in raw]
-    times = [t for t, _ in raw]
-    smoothed: list[tuple[float, float]] = []
-    for i in range(len(raw)):
-        lo = max(0, i - 2)
-        hi = min(len(raw), i + 3)
-        smoothed.append((times[i], sum(bpms[lo:hi]) / (hi - lo)))
-
+    # Emit a tempo event on every detected beat, with the BPM computed exactly
+    # from that beat's interval (60 / dt) and NO smoothing. This is what
+    # ConvertHero does (GenerateChartFile: one SyncEvent per tick, collapsed
+    # only when |ΔBPM| < 0.01): because each segment spans exactly one beat,
+    # the grid re-anchors to the measured beat time at every beat and phase
+    # error can never accumulate toward the end of the song. Our previous
+    # 5-wide moving average + 0.25 BPM collapse traded that anchoring away
+    # for a sparser map, which is precisely what caused the end-of-song drift.
     tempo_map: list[tuple[float, float]] = []
-    for t, b in smoothed:
-        if tempo_map and abs(tempo_map[-1][1] - b) < 0.25:
+    for i in range(len(beat_times) - 1):
+        dt = beat_times[i + 1] - beat_times[i]
+        if dt <= 1e-3:
             continue
-        tempo_map.append((round(t, 3), round(b, 3)))
+        b = round(60.0 / dt, 3)
+        if tempo_map and abs(tempo_map[-1][1] - b) < 0.01:
+            continue
+        tempo_map.append((round(beat_times[i], 6), b))
     if not tempo_map:
         return (None, None)
     # Anchor the first tempo at t=0 so notes before the first detected beat use it.
