@@ -2479,6 +2479,30 @@ export function MidiEditor(): React.JSX.Element {
     setScrollX((prev) => Math.min(prev, maxScrollX))
   }, [maxScrollX])
 
+  // Follow external playhead moves while paused (e.g. wheel-scrubbing the 3D
+  // highway, which updates currentTick). If the playhead leaves the visible
+  // area, drag the view along so the piano roll scrolls with the highway.
+  // The editor's own scroll interactions set isUserScrolling and are ignored.
+  const prevFollowTickRef = useRef(currentTick)
+  useEffect(() => {
+    const prevTick = prevFollowTickRef.current
+    prevFollowTickRef.current = currentTick
+    if (currentTick === prevTick) return // re-run from other deps, not a playhead move
+    if (isPlaying || isUserScrolling.current) return
+    const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
+    const playheadX = currentTick * pixelsPerTick
+    const margin = 48
+    setScrollX((prev) => {
+      if (playheadX >= prev + margin && playheadX <= prev + dimensions.width - margin) {
+        return prev // playhead still visible — don't disturb the view
+      }
+      const next = playheadX < prev + margin
+        ? playheadX - margin
+        : playheadX - dimensions.width + margin
+      return Math.min(maxScrollX, Math.max(0, next))
+    })
+  }, [currentTick, isPlaying, zoomLevel, dimensions.width, maxScrollX])
+
   // When pausing, persist the current auto-scroll position so the view does not snap back.
   // useLayoutEffect runs before the browser paints, preventing a flash frame with the old scrollX.
   const prevIsPlayingRef = useRef(isPlaying)
