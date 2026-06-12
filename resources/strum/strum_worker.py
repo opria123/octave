@@ -2580,6 +2580,42 @@ def _beat_track_tempo_map(
     if len(beat_times) < 8:
         return (None, None)
 
+    # Constant-lag correction (issue #8, round 3). The spectral-flux onset
+    # envelope peaks slightly AFTER the physical attack transient — the
+    # analysis window has to integrate the attack before flux peaks — so every
+    # beat mark inherits the same few-ms delay. Per-beat anchoring removed the
+    # cumulative drift, but testers report the whole grid sitting a small,
+    # consistent amount off the waveform (visible against Moonscraper's
+    # waveform view). Measure the lag directly on the raw signal: for each
+    # beat, find the steepest amplitude rise nearby at ~3ms resolution, then
+    # shift the entire grid by the median displacement.
+    try:
+        fine_hop = 64
+        rms = librosa.feature.rms(y=y, frame_length=256, hop_length=fine_hop)[0]
+        rise = np.maximum(0.0, np.diff(rms))
+        radius = max(1, int(round(0.05 * sr / fine_hop)))
+        lag_samples: list[tuple[float, float]] = []  # (rise strength, offset sec)
+        for t in beat_times:
+            c = int(round(t * sr / fine_hop))
+            lo = max(0, c - radius)
+            hi = min(len(rise), c + radius + 1)
+            if hi - lo < 3:
+                continue
+            k = lo + int(np.argmax(rise[lo:hi]))
+            lag_samples.append((float(rise[k]), (k - c) * fine_hop / sr))
+        if len(lag_samples) >= 8:
+            # Only trust beats with a clear attack: keep the stronger half.
+            floor = sorted(s for s, _ in lag_samples)[len(lag_samples) // 2]
+            offsets = [o for s, o in lag_samples if s >= floor]
+            lag = float(np.median(offsets))
+            lag = max(-0.06, min(0.06, lag))
+            if abs(lag) >= 0.003:
+                beat_times = [t + lag for t in beat_times if t + lag >= 0.0]
+    except Exception:
+        pass
+    if len(beat_times) < 8:
+        return (None, None)
+
     # Instantaneous BPM across each beat interval (used for the octave guard).
     interval_bpms: list[float] = []
     for i in range(len(beat_times) - 1):
