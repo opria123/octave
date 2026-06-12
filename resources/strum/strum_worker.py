@@ -2650,6 +2650,14 @@ def _beat_track_tempo_map(
     # error can never accumulate toward the end of the song. Our previous
     # 5-wide moving average + 0.25 BPM collapse traded that anchoring away
     # for a sparser map, which is precisely what caused the end-of-song drift.
+    #
+    # Drop a "beat" detected almost immediately at t=0 (inside the first
+    # half-period): keeping it would force an absurd lead-in tempo below.
+    # ConvertHero does the same head cleanup in PostProcessTicks.
+    period = 60.0 / median_bpm
+    while len(beat_times) > 8 and beat_times[0] < period / 2:
+        beat_times.pop(0)
+
     tempo_map: list[tuple[float, float]] = []
     for i in range(len(beat_times) - 1):
         dt = beat_times[i + 1] - beat_times[i]
@@ -2661,9 +2669,21 @@ def _beat_track_tempo_map(
         tempo_map.append((round(beat_times[i], 6), b))
     if not tempo_map:
         return (None, None)
-    # Anchor the first tempo at t=0 so notes before the first detected beat use it.
-    if tempo_map[0][0] > 0:
-        tempo_map.insert(0, (0.0, tempo_map[0][1]))
+
+    # Lead-in segment: land the FIRST detected beat exactly ON a beat boundary
+    # (tick = n*480). The per-beat events above keep beat SPACING exactly 480
+    # ticks, but the integration from t=0 otherwise puts beat 0 at an arbitrary
+    # fractional tick — so the entire grid sits a constant fraction of a beat
+    # off the measure lines for the whole song (the uniform offset testers see
+    # against the waveform in Moonscraper; shifting beat times can never fix
+    # it). ConvertHero avoids this by constructing beat i at tick 192*i and
+    # deriving the lead-in tempo to make it true; we do the same, choosing n
+    # so the lead-in tempo stays close to the song tempo.
+    first_t = tempo_map[0][0]
+    if first_t > 1e-3:
+        n_beats = max(1, int(round(first_t / period)))
+        lead_bpm = round(60.0 * n_beats / first_t, 3)
+        tempo_map.insert(0, (0.0, lead_bpm))
     return (tempo_map, round(median_bpm, 3))
 
 
