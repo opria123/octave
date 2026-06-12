@@ -388,6 +388,69 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
     }
   }
 
+  // ── Open frets & tap notes (issue #12) ──────────────────────────────
+  // .mid encodes these out-of-band: Phase Shift SysEx phrases
+  // (F0 50 53 00 00 <diff> <code> <on/off> F7; code 01=open, 04=tap — read by
+  // Moonscraper/Clone Hero/YARG) and "Enhanced Open Notes" (note = difficulty
+  // base - 1, gated by an [ENHANCED_OPENS] text event). Collect both per
+  // track so guitar/bass flags survive a save → reopen round-trip.
+  type PsRangeMap = Map<number, Array<[number, number]>> // diffByte → [start, end) ticks
+  const psOpenByTrack = new Map<string, PsRangeMap>()
+  const psTapByTrack = new Map<string, PsRangeMap>()
+  const enhancedOpensTracks = new Set<string>()
+  for (const rawTrack of rawMidi.tracks) {
+    let rawTrackName = ''
+    for (const ev of rawTrack) {
+      if (ev.type === 'trackName' && 'text' in ev) {
+        rawTrackName = String((ev as RawMidiEvent & { text: string }).text || '').toUpperCase()
+        break
+      }
+    }
+    if (!rawTrackName) continue
+    let absTick = 0
+    const pendingStarts = new Map<string, number>()
+    for (const ev of rawTrack) {
+      absTick += ev.deltaTime || 0
+      if (ev.type === 'text' && 'text' in ev) {
+        if (String((ev as RawMidiEvent & { text: string }).text || '').includes('ENHANCED_OPENS')) {
+          enhancedOpensTracks.add(rawTrackName)
+        }
+        continue
+      }
+      if (ev.type !== 'sysEx' || !('data' in ev)) continue
+      const data = (ev as RawMidiEvent & { data: number[] }).data
+      if (!data || data.length < 7 || data[0] !== 0x50 || data[1] !== 0x53 || data[2] !== 0 || data[3] !== 0) continue
+      const diffByte = data[4]
+      const code = data[5]
+      if (code !== 0x01 && code !== 0x04) continue
+      const key = `${diffByte}-${code}`
+      if (data[6] === 1) {
+        pendingStarts.set(key, absTick)
+      } else {
+        const start = pendingStarts.get(key)
+        if (start === undefined) continue
+        pendingStarts.delete(key)
+        const target = code === 0x01 ? psOpenByTrack : psTapByTrack
+        if (!target.has(rawTrackName)) target.set(rawTrackName, new Map())
+        const byDiff = target.get(rawTrackName)!
+        if (!byDiff.has(diffByte)) byDiff.set(diffByte, [])
+        byDiff.get(diffByte)!.push([Math.round(start * tickScale), Math.round(absTick * tickScale)])
+      }
+    }
+  }
+  const PS_DIFF_BYTES: Record<Difficulty, number> = { easy: 0, medium: 1, hard: 2, expert: 3 }
+  const psRangeCovers = (byDiff: PsRangeMap | undefined, difficulty: Difficulty, tick: number): boolean => {
+    if (!byDiff) return false
+    for (const diffByte of [PS_DIFF_BYTES[difficulty], 0xff]) {
+      const ranges = byDiff.get(diffByte)
+      if (!ranges) continue
+      for (const [start, end] of ranges) {
+        if (tick >= start && tick < end) return true
+      }
+    }
+    return false
+  }
+
   // Second pass: process all tracks
   for (const track of midi.tracks) {
     const trackName = track.name?.toUpperCase() || ''
@@ -444,6 +507,17 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
             lane = GUITAR_LANES[laneIndex]
             break
           }
+          // Enhanced Open Notes: difficulty base - 1 is an open strum when
+          // the track carries the [ENHANCED_OPENS] text event.
+          if (laneIndex === -1 && enhancedOpensTracks.has(trackName)) {
+            difficulty = diff
+            lane = 'open'
+            break
+          }
+        }
+        // A PS SysEx open phrase converts the green note inside it to open.
+        if (difficulty && lane === 'green' && psRangeCovers(psOpenByTrack.get(trackName), difficulty, tick)) {
+          lane = 'open'
         }
       } else {
         // Drums
@@ -498,6 +572,7 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
       }
 
       if (difficulty && lane) {
+        const isTap = type === 'guitar' && psRangeCovers(psTapByTrack.get(trackName), difficulty, tick)
         notes.push({
           id: uuidv4(),
           tick,
@@ -505,7 +580,8 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
           instrument,
           difficulty,
           lane,
-          velocity
+          velocity,
+          ...(isTap ? { flags: { isTap: true } } : {})
         })
       }
     }
@@ -1435,6 +1511,20 @@ export function serializeMidiBase64(
     trackNotes.get(trackName)!.push(note)
   }
 
+  // Open frets and tap notes are written as Phase Shift SysEx phrases — the
+  // .mid convention Moonscraper/Clone Hero/YARG all read (issue #12). The open
+  // note itself is stored as green inside its phrase. Ticks are collected here
+  // and injected into the raw tracks below (@tonejs/midi cannot write SysEx).
+  const PS_DIFF_BYTE: Record<Difficulty, number> = { easy: 0, medium: 1, hard: 2, expert: 3 }
+  const psPhraseTicks = new Map<string, Map<string, Set<number>>>() // track → "diffByte-code" → ticks
+  const addPsPhraseTick = (trackName: string, difficulty: Difficulty, code: number, tick: number): void => {
+    if (!psPhraseTicks.has(trackName)) psPhraseTicks.set(trackName, new Map())
+    const byKey = psPhraseTicks.get(trackName)!
+    const key = `${PS_DIFF_BYTE[difficulty]}-${code}`
+    if (!byKey.has(key)) byKey.set(key, new Set())
+    byKey.get(key)!.add(tick)
+  }
+
   // Track for emitting tom markers (one per drum track)
   const emittedTomMarkers = new Set<string>()
 
@@ -1469,7 +1559,16 @@ export function serializeMidiBase64(
         }
       } else {
         const lane = note.lane as GuitarLane
-        laneIndex = GUITAR_LANE_INDEX[lane] ?? 0
+        const isGuitarOrBass = trackName === 'PART GUITAR' || trackName === 'PART BASS'
+        if (lane === 'open' && isGuitarOrBass) {
+          laneIndex = 0 // written as green inside a PS SysEx open phrase
+          addPsPhraseTick(trackName, note.difficulty, 0x01, note.tick)
+        } else {
+          laneIndex = GUITAR_LANE_INDEX[lane] ?? 0
+        }
+        if (note.flags?.isTap && isGuitarOrBass) {
+          addPsPhraseTick(trackName, note.difficulty, 0x04, note.tick)
+        }
       }
 
       const isDoubleKick = isDrums && (note.lane as DrumLane) === 'kick' && !!note.flags?.isDoubleKick
@@ -1608,6 +1707,57 @@ export function serializeMidiBase64(
   // We need raw midi-file format for lyrics meta events
   // First convert existing @tonejs/midi data to raw format, then append vocal tracks
   const rawOut = parseMidi(midi.toArray())
+
+  // Inject the collected PS SysEx open/tap phrases into the raw guitar/bass
+  // tracks. Per-note ticks are merged into contiguous [tick, tick+1) phrases;
+  // at equal ticks a phrase-off sorts before phrase-on, which sorts before
+  // the notes it covers.
+  for (const [psTrackName, byKey] of psPhraseTicks) {
+    const rawTrack = rawOut.tracks.find((t) =>
+      t.some((ev) => ev.type === 'trackName' && 'text' in ev && (ev as RawMidiEvent & { text: string }).text === psTrackName)
+    )
+    if (!rawTrack) continue
+    type AbsEvent = { absTick: number; order: number; ev: RawMidiEvent }
+    const decoded: AbsEvent[] = []
+    let abs = 0
+    for (const ev of rawTrack) {
+      abs += ev.deltaTime || 0
+      if (ev.type === 'endOfTrack') continue
+      decoded.push({ absTick: abs, order: 0, ev })
+    }
+    for (const [key, tickSet] of byKey) {
+      const [diffByte, code] = key.split('-').map(Number)
+      const makeSysEx = (value: number): RawMidiEvent =>
+        ({ type: 'sysEx', deltaTime: 0, data: [0x50, 0x53, 0x00, 0x00, diffByte, code, value, 0xf7] }) as RawMidiEvent
+      const ticks = [...tickSet].sort((a, b) => a - b)
+      let start = -1
+      let end = -1
+      const flush = (): void => {
+        if (start < 0) return
+        decoded.push({ absTick: start, order: -1, ev: makeSysEx(0x01) })
+        decoded.push({ absTick: end, order: -2, ev: makeSysEx(0x00) })
+      }
+      for (const t of ticks) {
+        if (start >= 0 && t <= end) {
+          end = t + 1
+          continue
+        }
+        flush()
+        start = t
+        end = t + 1
+      }
+      flush()
+    }
+    decoded.sort((a, b) => a.absTick - b.absTick || a.order - b.order)
+    let prevTick = 0
+    const rebuilt: RawMidiEvent[] = decoded.map((d) => {
+      const delta = d.absTick - prevTick
+      prevTick = d.absTick
+      return { ...d.ev, deltaTime: delta } as RawMidiEvent
+    })
+    rebuilt.push({ type: 'endOfTrack', deltaTime: 0 } as RawMidiEvent)
+    rawOut.tracks[rawOut.tracks.indexOf(rawTrack)] = rebuilt
+  }
 
   // Group vocal notes and phrases by harmony part
   const vocalsByPart = new Map<HarmonyPart, VocalNote[]>()
