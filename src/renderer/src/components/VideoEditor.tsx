@@ -1,7 +1,7 @@
 // Timeline editor for background media and venue authoring
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { useProjectStore, useUIStore, getSongStore } from '../stores'
-import { tickToSeconds, secondsToTick, getAudioDuration, getAudioSources, onAudioLoaded } from '../services/audioService'
+import { tickToSeconds, secondsToTick, getAudioDuration, getAudioSources, getAudioBufferForPath, onAudioLoaded } from '../services/audioService'
 import * as audioService from '../services/audioService'
 import type {
   VideoSync,
@@ -214,6 +214,76 @@ function TimelineRuler({
   return <canvas ref={canvasRef} className="video-timeline-ruler" />
 }
 
+// Audio clip layout: taller rows so the waveform has room to breathe.
+const AUDIO_CLIP_HEIGHT = 48
+const AUDIO_CLIP_ROW_GAP = 52
+// Cap the canvas backing-store width so extreme zoom can't exceed the
+// browser's max canvas dimension; CSS stretches the (slightly coarser)
+// peaks to fill the clip.
+const WAVEFORM_MAX_COLUMNS = 6000
+
+// Draws a min/max peak waveform for a decoded AudioBuffer into a canvas that
+// fills its parent clip. Recomputes only when the buffer, size, or the clip's
+// source window changes — horizontal dragging (scrollX) doesn't trigger it.
+function WaveformCanvas({
+  buffer, width, height, sourceStartMs, durationMs, color
+}: {
+  buffer: AudioBuffer
+  width: number
+  height: number
+  sourceStartMs: number
+  durationMs: number
+  color: string
+}): React.JSX.Element {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const cols = Math.max(1, Math.min(Math.floor(width), WAVEFORM_MAX_COLUMNS))
+    const dpr = window.devicePixelRatio || 1
+    canvas.width = Math.floor(cols * dpr)
+    canvas.height = Math.max(1, Math.floor(height * dpr))
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, cols, height)
+
+    const data = buffer.getChannelData(0)
+    const sr = buffer.sampleRate
+    const startSample = Math.max(0, Math.floor((sourceStartMs / 1000) * sr))
+    const durSamples = durationMs > 0
+      ? Math.floor((durationMs / 1000) * sr)
+      : data.length - startSample
+    const endSample = Math.min(data.length, startSample + Math.max(0, durSamples))
+    const usable = Math.max(1, endSample - startSample)
+    const samplesPerCol = usable / cols
+    const mid = height / 2
+
+    ctx.fillStyle = color
+    for (let x = 0; x < cols; x++) {
+      const s0 = startSample + Math.floor(x * samplesPerCol)
+      const s1 = Math.min(endSample, startSample + Math.floor((x + 1) * samplesPerCol))
+      let min = 1
+      let max = -1
+      for (let i = s0; i < s1; i++) {
+        const v = data[i]
+        if (v < min) min = v
+        if (v > max) max = v
+      }
+      if (s1 <= s0) {
+        min = 0
+        max = 0
+      }
+      const yTop = mid - max * mid
+      const colHeight = Math.max(1, (max - min) * mid)
+      ctx.fillRect(x, yTop, 1, colHeight)
+    }
+  }, [buffer, width, height, sourceStartMs, durationMs, color])
+
+  return <canvas ref={canvasRef} className="audio-clip-waveform" />
+}
+
 function AudioTrack({
   songId, scrollX, zoom, width, clips, selectedClipId, onSelectClip, onMoveClip
 }: {
@@ -277,7 +347,10 @@ function AudioTrack({
     })
   }, [clips, getClipDurationMs])
 
-  const trackHeight = Math.max(VIDEO_EDITOR_CONFIG.waveformHeight, 28 + Math.max(0, laidOutClips.reduce((max, item) => Math.max(max, item.row), 0)) * 22)
+  const trackHeight = Math.max(
+    VIDEO_EDITOR_CONFIG.waveformHeight,
+    8 + (Math.max(0, laidOutClips.reduce((max, item) => Math.max(max, item.row), 0)) + 1) * AUDIO_CLIP_ROW_GAP
+  )
 
   return (
     <div className="audio-track" style={{ minHeight: trackHeight }}>
@@ -286,11 +359,12 @@ function AudioTrack({
         {laidOutClips.length > 0 && laidOutClips.map(({ clip, durationMs, row }) => {
           const left = clip.startMs * ppm - scrollX
           const clipWidth = Math.max(24, durationMs * ppm)
+          const buffer = getAudioBufferForPath(songId, clip.filePath)
           return (
             <div
               key={clip.id}
               className={`audio-clip ${selectedClipId === clip.id ? 'selected' : ''} ${dragInfo?.clipId === clip.id ? 'dragging' : ''}`}
-              style={{ left, width: clipWidth, top: 4 + row * 22, height: 18 }}
+              style={{ left, width: clipWidth, top: 4 + row * AUDIO_CLIP_ROW_GAP, height: AUDIO_CLIP_HEIGHT }}
               onMouseDown={(e) => handleClipMouseDown(e, clip)}
               onClick={(e) => {
                 e.stopPropagation()
@@ -298,6 +372,16 @@ function AudioTrack({
               }}
               title={`${clip.filename} at ${(clip.startMs / 1000).toFixed(2)}s`}
             >
+              {buffer && (
+                <WaveformCanvas
+                  buffer={buffer}
+                  width={clipWidth}
+                  height={AUDIO_CLIP_HEIGHT}
+                  sourceStartMs={clip.sourceStartMs}
+                  durationMs={durationMs}
+                  color="rgba(150, 200, 255, 0.85)"
+                />
+              )}
               <span className="audio-clip-name">{clip.filename}</span>
             </div>
           )

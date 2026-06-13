@@ -9,6 +9,7 @@ import { HighwayAssetsContext } from './AssetProvider'
 import { Highway } from './Highway'
 import { Strikeline } from './Strikeline'
 import { BeatGrid } from './BeatGrid'
+import { HighwayWaveform, useHighwayWaveform } from './HighwayWaveform'
 import { NotesRenderer } from './NotesRenderer'
 import { HighwayEditLayer } from './HighwayEditLayer'
 import type { Instrument, Difficulty } from '../../types'
@@ -106,8 +107,12 @@ export function AnimatedHighwayScene({
   const isPlaying = useStore(store, (s) => s.isPlaying)
   const assets = useContext(HighwayAssetsContext)
   const { highwaySpeed: _highwaySpeed, leftyFlip } = useSettingsStore()
+  const showHighwayWaveform = useUIStore((s) => s.showHighwayWaveform)
 
   const pixelsPerTick = BASE_PIXELS_PER_TICK
+
+  // Audio waveform overlay texture (issue #7) — built once per song/audio load.
+  const waveform = useHighwayWaveform(songId, tempoEvents, showHighwayWaveform)
 
   // ALL animation state in refs — never triggers React re-renders
   const hitEffectsRef = useRef<HitEffect[]>([])
@@ -265,6 +270,9 @@ export function AnimatedHighwayScene({
             <Highway instrumentType={instrumentType} offsetX={offsetX} currentTick={currentTick} pixelsPerTick={pixelsPerTick} proKeysViewStart={proKeysViewStart} />
             <Strikeline instrumentType={instrumentType} offsetX={offsetX} pressedLanes={lanePresses} />
             <BeatGrid currentTick={currentTick} ticksPerBeat={480} pixelsPerTick={pixelsPerTick} offsetX={offsetX} tempoEvents={tempoEvents} />
+            {waveform && (
+              <HighwayWaveform waveform={waveform} currentTick={currentTick} pixelsPerTick={pixelsPerTick} offsetX={offsetX} />
+            )}
             <StarPowerOverlay
               phrases={starPowerPhrases}
               instrument={instrument}

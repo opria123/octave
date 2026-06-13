@@ -124,6 +124,13 @@ export interface AutoChartRunOptions {
    * positions stay aligned with the audio.
    */
   tempoMap?: Array<{ timeSec: number; bpm: number }>
+  /**
+   * Optional single global BPM hint — the user's authoritative "Manual BPM".
+   * It seeds the audio beat tracker so it locks onto the correct tempo octave
+   * and, when auto-tempo is off, is applied verbatim. Ignored when `tempoMap`
+   * is set.
+   */
+  manualBpm?: number
 }
 
 export interface AutoChartRunResult {

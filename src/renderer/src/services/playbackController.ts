@@ -2,7 +2,7 @@
 // Eliminates duplicate RAF loops that caused desync between components.
 
 import * as audioService from './audioService'
-import { getSongStore, useSettingsStore } from '../stores'
+import { getSongStore, useSettingsStore, useUIStore } from '../stores'
 import type { TempoEvent } from '../types'
 
 let visualRafId: number | null = null
@@ -59,6 +59,37 @@ function secondsToTick(seconds: number, tempoEvents: TempoEvent[]): number {
   return Math.round(prevTick + remainingTicks)
 }
 
+// ── Vocal pitch playback (issue #10) ─────────────────────────────────
+// When the UI toggle is on, sound a sine tone for each vocal note of the
+// active harmony part as the playhead crosses its start tick, so charters can
+// compare charted pitches against the real vocal while the song plays.
+
+function triggerVocalPitchTones(
+  songId: string,
+  fromTick: number,
+  toTick: number,
+  tempoEvents: TempoEvent[],
+  speed: number
+): void {
+  if (!useUIStore.getState().vocalPitchPlayback) return
+  // Ignore backwards jumps and big forward jumps (seeks) — only sound notes
+  // crossed by normal playback progression.
+  if (toTick <= fromTick || toTick - fromTick > TICKS_PER_BEAT * 2) return
+
+  const state = getSongStore(songId).getState()
+  const part = state.activeHarmonyPart
+  for (const note of state.song.vocalNotes) {
+    if (note.harmonyPart !== part || note.isPercussion || note.isPitchless) continue
+    if (typeof note.lane !== 'number') continue
+    if (note.tick >= fromTick && note.tick < toTick) {
+      const durationSec =
+        (tickToSeconds(note.tick + note.duration, tempoEvents) - tickToSeconds(note.tick, tempoEvents)) /
+        Math.max(0.1, speed)
+      audioService.playVocalTone(note.lane, durationSec)
+    }
+  }
+}
+
 function startVisualRaf(songId: string, startTick: number, tempoEvents: TempoEvent[], speed: number = 1.0): void {
   cancelVisualRaf()
   const startSeconds = tickToSeconds(startTick, tempoEvents)
@@ -78,7 +109,9 @@ function startVisualRaf(songId: string, startTick: number, tempoEvents: TempoEve
       const elapsed = (now - startTime) / 1000 * speed
       const currentSeconds = startSeconds + elapsed
       const newTick = secondsToTick(currentSeconds, tempoEvents)
+      const prevTick = store.getState().currentTick
       store.getState().setCurrentTick(newTick)
+      triggerVocalPitchTones(songId, prevTick, newTick, tempoEvents, speed)
     }
     visualRafId = requestAnimationFrame(tick)
   }
@@ -89,6 +122,7 @@ function startVisualRaf(songId: string, startTick: number, tempoEvents: TempoEve
 /** Stop all playback: audio RAF, visual RAF, and store state. */
 export function stopPlayback(songId: string): void {
   audioService.stop(songId)
+  audioService.stopAllVocalTones()
   cancelVisualRaf()
   getSongStore(songId).getState().setIsPlaying(false)
 }
@@ -120,7 +154,9 @@ export async function startPlayback(songId: string): Promise<void> {
       (tick) => {
         // Only update if still playing (prevent stale updates after stop)
         if (getSongStore(songId).getState().isPlaying) {
+          const prevTick = getSongStore(songId).getState().currentTick
           getSongStore(songId).getState().setCurrentTick(tick)
+          triggerVocalPitchTones(songId, prevTick, tick, tempoEvents, speed)
         }
       },
       () => {
@@ -162,5 +198,6 @@ export function stopAndReset(songId: string): void {
 /** Stop everything — used on song switch. */
 export function stopAll(): void {
   audioService.stopAll()
+  audioService.stopAllVocalTones()
   cancelVisualRaf()
 }

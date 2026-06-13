@@ -92,6 +92,8 @@ interface ChartEditorAPI {
      * real-world note positions stay aligned with the audio.
      */
     tempoMap?: Array<{ timeSec: number; bpm: number }>
+    /** Single global BPM hint (the user's authoritative Manual BPM). */
+    manualBpm?: number
   }) => Promise<{ runId: string }>
   cancelAutoChart: (runId: string) => Promise<boolean>
   onAutoChartProgress: (callback: (event: {

@@ -96,6 +96,8 @@ interface UIStore extends UIState {
   clearModifiers: () => void
   togglePreviewFullscreen: () => void
   setSettingsModalOpen: (open: boolean) => void
+  toggleVocalPitchPlayback: () => void
+  toggleHighwayWaveform: () => void
 }
 
 const defaultModifiers: NoteModifiers = {
@@ -120,6 +122,8 @@ export const useUIStore = create<UIStore>()((set) => ({
   noteModifiers: { ...defaultModifiers },
   isPreviewFullscreen: false,
   isSettingsModalOpen: false,
+  vocalPitchPlayback: false,
+  showHighwayWaveform: false,
 
   // Actions
   setLeftPanelWidth: (width) => set({ leftPanelWidth: width }),
@@ -153,5 +157,7 @@ export const useUIStore = create<UIStore>()((set) => ({
     }),
   clearModifiers: () => set({ noteModifiers: { ...defaultModifiers } }),
   togglePreviewFullscreen: () => set((state) => ({ isPreviewFullscreen: !state.isPreviewFullscreen })),
-  setSettingsModalOpen: (open) => set({ isSettingsModalOpen: open })
+  setSettingsModalOpen: (open) => set({ isSettingsModalOpen: open }),
+  toggleVocalPitchPlayback: () => set((state) => ({ vocalPitchPlayback: !state.vocalPitchPlayback })),
+  toggleHighwayWaveform: () => set((state) => ({ showHighwayWaveform: !state.showHighwayWaveform }))
 }))

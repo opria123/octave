@@ -97,6 +97,30 @@ const MIDI_EDITOR_CONFIG = {
 
 // MIDI note names for vocal pitch display
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
+// Toggle for sounding vocal note pitches while the song plays (issue #10).
+function VocalPitchPlaybackToggle(): React.JSX.Element {
+  const enabled = useUIStore((s) => s.vocalPitchPlayback)
+  const toggle = useUIStore((s) => s.toggleVocalPitchPlayback)
+  return (
+    <button
+      title={enabled
+        ? 'Pitch playback on: vocal note pitches sound while the song plays'
+        : 'Pitch playback off: click to hear vocal note pitches while the song plays'}
+      style={{
+        fontSize: 10, padding: '1px 5px', border: 'none', borderRadius: 3,
+        cursor: 'pointer', lineHeight: 1.4,
+        backgroundColor: enabled ? '#E879F9' : 'rgba(255,255,255,0.15)',
+        color: enabled ? '#000' : '#ccc',
+        boxShadow: enabled ? '0 0 6px #E879F980' : 'none'
+      }}
+      onClick={toggle}
+    >
+      🔊
+    </button>
+  )
+}
+
 function midiNoteName(midi: number): string {
   return `${NOTE_NAMES[midi % 12]}${Math.floor(midi / 12) - 1}`
 }
@@ -2455,6 +2479,30 @@ export function MidiEditor(): React.JSX.Element {
     setScrollX((prev) => Math.min(prev, maxScrollX))
   }, [maxScrollX])
 
+  // Follow external playhead moves while paused (e.g. wheel-scrubbing the 3D
+  // highway, which updates currentTick). If the playhead leaves the visible
+  // area, drag the view along so the piano roll scrolls with the highway.
+  // The editor's own scroll interactions set isUserScrolling and are ignored.
+  const prevFollowTickRef = useRef(currentTick)
+  useEffect(() => {
+    const prevTick = prevFollowTickRef.current
+    prevFollowTickRef.current = currentTick
+    if (currentTick === prevTick) return // re-run from other deps, not a playhead move
+    if (isPlaying || isUserScrolling.current) return
+    const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
+    const playheadX = currentTick * pixelsPerTick
+    const margin = 48
+    setScrollX((prev) => {
+      if (playheadX >= prev + margin && playheadX <= prev + dimensions.width - margin) {
+        return prev // playhead still visible — don't disturb the view
+      }
+      const next = playheadX < prev + margin
+        ? playheadX - margin
+        : playheadX - dimensions.width + margin
+      return Math.min(maxScrollX, Math.max(0, next))
+    })
+  }, [currentTick, isPlaying, zoomLevel, dimensions.width, maxScrollX])
+
   // When pausing, persist the current auto-scroll position so the view does not snap back.
   // useLayoutEffect runs before the browser paints, preventing a flash frame with the old scrollX.
   const prevIsPlayingRef = useRef(isPlaying)
@@ -3800,6 +3848,8 @@ export function MidiEditor(): React.JSX.Element {
                                 </button>
                               )
                             })}
+                            {/* Hear charted pitches during playback (issue #10) */}
+                            <VocalPitchPlaybackToggle />
                             {/* Add harmony part button */}
                             {(() => {
                               const usedParts = new Set(vocalNotes.map((n) => n.harmonyPart))

@@ -236,6 +236,27 @@
 .audio-clip {
   background: linear-gradient(135deg, rgba(68, 136, 255, 0.25) 0%, rgba(34, 85, 170, 0.25) 100%);
   border: 1px solid rgba(136, 187, 255, 0.9);
+  padding: 0;
+  align-items: stretch;
+}
+
+.audio-clip-waveform {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.audio-clip .audio-clip-name {
+  position: absolute;
+  top: 2px;
+  left: 6px;
+  right: 6px;
+  z-index: 1;
+  flex: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
 }
 
 .video-clip {

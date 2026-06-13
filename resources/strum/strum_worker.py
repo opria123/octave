@@ -30,7 +30,17 @@ SOURCE_FOLDER_NAME = "strum-source"
 STRUM_SOURCE_VERSION = "2026-05-06.1"
 SOURCE_VERSION_FILE = ".octave-source-version"
 SNAPSHOT_FOLDER_NAME = "strum-checkpoints-snapshot"
-AUDIO_SEPARATION_TIMEOUT_SEC = int(os.environ.get("OCTAVE_STRUM_SEPARATION_TIMEOUT_SEC", "900"))
+# Hard wall-clock ceiling for stem separation. Slow (often older) CPUs can
+# legitimately take >15 min per song with the Python demucs fallback, which is
+# exactly the hardware that needs the fallback in the first place (GitHub
+# issue #9) — so the cap is generous and separation is instead supervised by
+# an idle watchdog (below) that only kills the process when it stops making
+# progress entirely.
+AUDIO_SEPARATION_TIMEOUT_SEC = int(os.environ.get("OCTAVE_STRUM_SEPARATION_TIMEOUT_SEC", "3600"))
+# Stall watchdog: kill separation only if the subprocess produces no output at
+# all for this long. demucs (tqdm) and demucs.cpp both emit progress
+# continuously while working, so silence this long means a genuine hang.
+AUDIO_SEPARATION_IDLE_TIMEOUT_SEC = int(os.environ.get("OCTAVE_STRUM_SEPARATION_IDLE_TIMEOUT_SEC", "300"))
 # Fast analysis bypasses real tempo/key detection and forces 120 BPM. The
 # STRUM benchmark used real detected tempo (feeds STRUM_PHASE_ALIGN beat-grid
 # alignment + tempo-relative drum heuristics), so default to OFF for chart
@@ -109,6 +119,11 @@ AUTO_TEMPO_DRIFT: bool = True
 AUTO_TEMPO_SNAP: bool = True
 AUTO_TEMPO_SNAP_DIVISION: int = 32  # grid resolution for residual jitter snap
 AUTO_TEMPO_SNAP_WINDOW_MS: float = 30.0  # only snap onsets already this close
+# Optional single-BPM hint. Unlike USER_TEMPO_MAP (a full explicit override that
+# disables auto-refinement), the hint is the user's authoritative "Manual BPM":
+# it seeds the audio beat tracker so it locks onto the correct tempo octave and,
+# when drift is disabled, is applied verbatim. Empty = detect from the audio.
+TEMPO_HINT_BPM: "float | None" = None
 # One-shot flag so we only emit the basic_pitch troubleshooting hint once
 # per worker run (the same error fires for guitar+bass+keys).
 _BASIC_PITCH_HINT_EMITTED = False
@@ -141,6 +156,74 @@ def _diagnose_basic_pitch_failure(exc: BaseException) -> None:
         "         OCTAVE_STRUM_PYTHON to a venv that has them).",
         file=_sys.stderr, flush=True,
     )
+
+
+def _run_separation_subprocess(cmd: "list[str]", label: str) -> "tuple[int, int]":
+    """Run a stem-separation subprocess supervised by a stall watchdog.
+
+    The old fixed 900s wall-clock timeout killed perfectly healthy runs on
+    slow CPUs — exactly the older hardware that falls back to the Python
+    demucs engine after a demucs.cpp SIMD crash (GitHub issue #9). Instead of
+    judging by elapsed time, watch the process's combined stdout/stderr:
+    demucs (tqdm progress bars) and demucs.cpp both print continuously while
+    working, so we only kill the process when it has been completely silent
+    for AUDIO_SEPARATION_IDLE_TIMEOUT_SEC (a genuine hang), or exceeds the
+    much more generous AUDIO_SEPARATION_TIMEOUT_SEC hard ceiling.
+
+    Output is forwarded to this worker's stderr so the host app's progress
+    parsing keeps working. Returns ``(returncode, elapsed_seconds)``.
+    """
+    import threading
+
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    last_activity = time.time()
+
+    def _pump() -> None:
+        nonlocal last_activity
+        stream = proc.stdout
+        if stream is None:
+            return
+        try:
+            while True:
+                # read1 returns as soon as any data is available (tqdm emits
+                # \r-terminated updates, so line-based reads would block).
+                chunk = stream.read1(65536)  # type: ignore[attr-defined]
+                if not chunk:
+                    break
+                last_activity = time.time()
+                try:
+                    sys.stderr.buffer.write(chunk)
+                    sys.stderr.flush()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    pump_thread = threading.Thread(target=_pump, daemon=True)
+    pump_thread.start()
+
+    started_at = time.time()
+    while True:
+        returncode = proc.poll()
+        if returncode is not None:
+            pump_thread.join(timeout=5)
+            return returncode, int(time.time() - started_at)
+        now = time.time()
+        if now - started_at > AUDIO_SEPARATION_TIMEOUT_SEC:
+            proc.kill()
+            raise RuntimeError(
+                f"{label} exceeded the {AUDIO_SEPARATION_TIMEOUT_SEC}s hard limit. "
+                "Set OCTAVE_STRUM_SEPARATION_TIMEOUT_SEC to raise it."
+            )
+        if now - last_activity > AUDIO_SEPARATION_IDLE_TIMEOUT_SEC:
+            proc.kill()
+            raise RuntimeError(
+                f"{label} stalled (no output for {AUDIO_SEPARATION_IDLE_TIMEOUT_SEC}s) "
+                f"and was stopped after {int(now - started_at)}s."
+            )
+        time.sleep(1.0)
+
+
 if DISABLE_ONLINE_LOOKUP:
     FAST_AUDIO_METADATA_LOOKUP = False
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".ogg", ".opus", ".flac"}
@@ -1135,10 +1218,28 @@ def build_pipeline(
             cpp_bin = os.environ.get("OCTAVE_DEMUCS_CPP_BIN", "").strip()
             cpp_weights = os.environ.get("OCTAVE_DEMUCS_CPP_WEIGHTS", "").strip()
             if cpp_bin and cpp_weights and Path(cpp_bin).exists() and Path(cpp_weights).exists():
-                cpp_stems = self._separate_stems_cpp(audio_path, work_dir, cpp_bin, cpp_weights)
-                if KEEP_STEMS and cpp_stems:
-                    SEPARATED_STEM_REGISTRY[Path(audio_path).resolve()] = dict(cpp_stems)
-                return cpp_stems
+                try:
+                    cpp_stems = self._separate_stems_cpp(audio_path, work_dir, cpp_bin, cpp_weights)
+                    if cpp_stems:
+                        # Always register (not just for keep-stems): the tempo
+                        # refiner prefers beat-tracking the drums stem (issue #8).
+                        SEPARATED_STEM_REGISTRY[Path(audio_path).resolve()] = dict(cpp_stems)
+                    return cpp_stems
+                except Exception as exc:
+                    # The native demucs.cpp binary crashed (or produced no
+                    # usable stems). On older CPUs it commonly aborts with an
+                    # illegal-instruction / stack-overrun fault because it was
+                    # built with SIMD extensions (AVX/AVX2) the host lacks —
+                    # Windows surfaces this as exit code 3221225501 (0xC0000409),
+                    # which is exactly what users on Win10 22H2 hardware hit.
+                    # Rather than failing the whole auto-chart run, fall back to
+                    # the pure-Python `demucs` package: slower, but it runs
+                    # anywhere torch does. (See GitHub issue #9.)
+                    logger.warning(
+                        f"  demucs.cpp separation failed ({exc}). Falling back to the "
+                        "Python demucs engine — this is slower but works on CPUs the "
+                        "native binary can't run on."
+                    )
 
             logger.info(f"  Separating stems with Demucs (Python) on device={device}...")
 
@@ -1158,17 +1259,9 @@ def build_pipeline(
                 str(audio_path),
             ]
 
-            started_at = time.time()
-            try:
-                result = subprocess.run(cmd, timeout=AUDIO_SEPARATION_TIMEOUT_SEC)
-            except subprocess.TimeoutExpired as exc:
-                raise RuntimeError(
-                    f"Demucs separation timed out after {AUDIO_SEPARATION_TIMEOUT_SEC}s."
-                ) from exc
-
-            elapsed = int(time.time() - started_at)
-            if result.returncode != 0:
-                raise RuntimeError(f"Demucs failed with return code {result.returncode} after {elapsed}s")
+            returncode, elapsed = _run_separation_subprocess(cmd, "Demucs separation")
+            if returncode != 0:
+                raise RuntimeError(f"Demucs failed with return code {returncode} after {elapsed}s")
 
             logger.info(f"    Demucs separation complete in {elapsed}s")
 
@@ -1180,7 +1273,9 @@ def build_pipeline(
                     stems[stem] = stem_path
 
             logger.info(f"    Separated stems: {list(stems.keys())}")
-            if KEEP_STEMS and stems:
+            if stems:
+                # Always register (not just for keep-stems): the tempo refiner
+                # prefers beat-tracking the drums stem (issue #8).
                 SEPARATED_STEM_REGISTRY[Path(audio_path).resolve()] = dict(stems)
             return stems
 
@@ -1240,18 +1335,10 @@ def build_pipeline(
             num_threads = max(1, (os.cpu_count() or 4) - 1)
             cmd = [cpp_bin, cpp_weights, str(input_for_demucs), str(demucs_out), str(num_threads)]
 
-            started_at = time.time()
-            try:
-                result = subprocess.run(cmd, timeout=AUDIO_SEPARATION_TIMEOUT_SEC)
-            except subprocess.TimeoutExpired as exc:
+            returncode, elapsed = _run_separation_subprocess(cmd, "demucs.cpp separation")
+            if returncode != 0:
                 raise RuntimeError(
-                    f"demucs.cpp separation timed out after {AUDIO_SEPARATION_TIMEOUT_SEC}s."
-                ) from exc
-
-            elapsed = int(time.time() - started_at)
-            if result.returncode != 0:
-                raise RuntimeError(
-                    f"demucs.cpp failed with return code {result.returncode} after {elapsed}s"
+                    f"demucs.cpp failed with return code {returncode} after {elapsed}s"
                 )
 
             logger.info(f"    demucs.cpp separation complete in {elapsed}s")
@@ -2407,28 +2494,258 @@ def _estimate_tempo_map(onsets: list[float], global_bpm: float) -> "list[tuple[f
     return tempo_map
 
 
-def _refine_tempo(midi_path: Path, allow_drift: bool) -> str:
-    """Refine notes.mid's tempo grid so it lines up with the detected note
-    onsets, fixing slow drift from a slightly-wrong global BPM (and clear octave
-    errors), plus a piecewise tempo map for genuinely drifting songs when
-    ``allow_drift`` is True. Real-world onset times are preserved — only the
-    tempo and each note's tick change — so playback stays in sync with the audio
-    while notes land on the grid. Returns a short human-readable status.
+def _beat_track_tempo_map(
+    audio_path: Path,
+    hint_bpm: "float | None" = None,
+    allow_drift: bool = True,
+) -> "tuple[list[tuple[float, float]] | None, float | None]":
+    """Beat-track the *audio* (the approach ConvertHero uses) to align the
+    chart's beat grid to the real performance.
+
+    Instead of fitting one global BPM to STRUM's already-quantized MIDI onsets,
+    this runs an onset-strength envelope + a dynamic-programming beat tracker
+    over the rendered audio to find the time of (essentially) every quarter-note
+    beat, then turns consecutive beat intervals into a dense tempo map. Because a
+    tempo event is emitted per beat, the measure/beat lines land on the real
+    beats even when the song speeds up or slows down — which a single global BPM
+    can never do (the core of issue #8).
+
+    ``hint_bpm`` (the user's Manual BPM, treated as the truth) seeds the tracker
+    so it locks onto the correct tempo octave. With ``allow_drift`` False the map
+    is collapsed to a single constant tempo. Returns ``(tempo_map, base_bpm)`` or
+    ``(None, None)`` when audio analysis isn't possible so the caller can fall
+    back to the onset method.
+    """
+    try:
+        import librosa
+        import numpy as np
+    except Exception:
+        return (None, None)
+    try:
+        y, sr = librosa.load(str(audio_path), mono=True)
+    except Exception:
+        return (None, None)
+    if y is None or len(y) < sr:  # need at least ~1s of audio
+        return (None, None)
+    # Near-silent input (e.g. a drums stem from a drumless track) carries no
+    # rhythmic information — bail so the caller can try the next candidate.
+    if float(np.sqrt(np.mean(np.square(y)))) < 0.004:
+        return (None, None)
+
+    # 256-sample hop (~11.6ms at 22.05kHz) instead of librosa's default 512:
+    # tempo-map accuracy is bounded by onset-envelope resolution, and halving
+    # the hop noticeably tightens beat placement (closer to ConvertHero).
+    hop = 256
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop)
+    kwargs: dict[str, Any] = {"onset_envelope": onset_env, "sr": sr, "hop_length": hop, "trim": False}
+    if hint_bpm and hint_bpm > 0:
+        # Seed the tracker with the user-asserted tempo and keep the prior tight
+        # so it doesn't wander to a half/double-time octave.
+        kwargs["start_bpm"] = float(hint_bpm)
+        kwargs["std_bpm"] = 0.5
+    try:
+        _tempo, beat_frames = librosa.beat.beat_track(**kwargs)
+    except Exception:
+        return (None, None)
+
+    # The DP beat tracker optimises global smoothness, so individual beats can
+    # sit a frame or two off the true percussive attack. Snap each beat to the
+    # strongest onset-envelope peak within ±70ms (ConvertHero-style onset
+    # alignment), then refine to sub-frame precision with parabolic
+    # interpolation around that peak (a frame at hop 256 is ~11.6ms — too
+    # coarse on its own for a grid that must stay locked for 4+ minutes).
+    frames = [int(f) for f in np.asarray(beat_frames).ravel()]
+    snap_radius = max(1, int(round(0.07 * sr / hop)))
+    snapped: list[float] = []
+    for f in frames:
+        lo = max(0, f - snap_radius)
+        hi = min(len(onset_env), f + snap_radius + 1)
+        if hi > lo:
+            f = lo + int(np.argmax(onset_env[lo:hi]))
+        sub = float(f)
+        if 0 < f < len(onset_env) - 1:
+            a = float(onset_env[f - 1])
+            b = float(onset_env[f])
+            c = float(onset_env[f + 1])
+            denom = a - 2.0 * b + c
+            if abs(denom) > 1e-9:
+                delta = 0.5 * (a - c) / denom
+                if -0.5 <= delta <= 0.5:
+                    sub = f + delta
+        if snapped and sub <= snapped[-1]:
+            continue
+        snapped.append(sub)
+
+    beat_times = [s * hop / sr for s in snapped if s >= 0]
+    if len(beat_times) < 8:
+        return (None, None)
+
+    # Constant-lag correction (issue #8, round 3). The spectral-flux onset
+    # envelope peaks slightly AFTER the physical attack transient — the
+    # analysis window has to integrate the attack before flux peaks — so every
+    # beat mark inherits the same few-ms delay. Per-beat anchoring removed the
+    # cumulative drift, but testers report the whole grid sitting a small,
+    # consistent amount off the waveform (visible against Moonscraper's
+    # waveform view). Measure the lag directly on the raw signal: for each
+    # beat, find the steepest amplitude rise nearby at ~3ms resolution, then
+    # shift the entire grid by the median displacement.
+    try:
+        fine_hop = 64
+        rms = librosa.feature.rms(y=y, frame_length=256, hop_length=fine_hop)[0]
+        rise = np.maximum(0.0, np.diff(rms))
+        radius = max(1, int(round(0.05 * sr / fine_hop)))
+        lag_samples: list[tuple[float, float]] = []  # (rise strength, offset sec)
+        for t in beat_times:
+            c = int(round(t * sr / fine_hop))
+            lo = max(0, c - radius)
+            hi = min(len(rise), c + radius + 1)
+            if hi - lo < 3:
+                continue
+            k = lo + int(np.argmax(rise[lo:hi]))
+            lag_samples.append((float(rise[k]), (k - c) * fine_hop / sr))
+        if len(lag_samples) >= 8:
+            # Only trust beats with a clear attack: keep the stronger half.
+            floor = sorted(s for s, _ in lag_samples)[len(lag_samples) // 2]
+            offsets = [o for s, o in lag_samples if s >= floor]
+            lag = float(np.median(offsets))
+            lag = max(-0.06, min(0.06, lag))
+            if abs(lag) >= 0.003:
+                beat_times = [t + lag for t in beat_times if t + lag >= 0.0]
+    except Exception:
+        pass
+    if len(beat_times) < 8:
+        return (None, None)
+
+    # Instantaneous BPM across each beat interval (used for the octave guard).
+    interval_bpms: list[float] = []
+    for i in range(len(beat_times) - 1):
+        dt = beat_times[i + 1] - beat_times[i]
+        if dt <= 1e-3:
+            continue
+        bpm = 60.0 / dt
+        if 30.0 <= bpm <= 300.0:
+            interval_bpms.append(bpm)
+    if len(interval_bpms) < 4:
+        return (None, None)
+
+    median_bpm = float(np.median(interval_bpms))
+
+    # Truth guard: if the user gave a Manual BPM but the tracker locked onto a
+    # clearly different octave (~half/double), don't silently fight them — bail
+    # so the caller falls back to the hint-seeded onset method.
+    if hint_bpm and hint_bpm > 0:
+        ratio = median_bpm / hint_bpm
+        if ratio > 1.4 or ratio < 0.72:
+            return (None, None)
+
+    if not allow_drift:
+        base = float(hint_bpm) if (hint_bpm and hint_bpm > 0) else round(median_bpm, 3)
+        return ([(0.0, base)], base)
+
+    # Emit a tempo event on every detected beat, with the BPM computed exactly
+    # from that beat's interval (60 / dt) and NO smoothing. This is what
+    # ConvertHero does (GenerateChartFile: one SyncEvent per tick, collapsed
+    # only when |ΔBPM| < 0.01): because each segment spans exactly one beat,
+    # the grid re-anchors to the measured beat time at every beat and phase
+    # error can never accumulate toward the end of the song. Our previous
+    # 5-wide moving average + 0.25 BPM collapse traded that anchoring away
+    # for a sparser map, which is precisely what caused the end-of-song drift.
+    #
+    # Drop a "beat" detected almost immediately at t=0 (inside the first
+    # half-period): keeping it would force an absurd lead-in tempo below.
+    # ConvertHero does the same head cleanup in PostProcessTicks.
+    period = 60.0 / median_bpm
+    while len(beat_times) > 8 and beat_times[0] < period / 2:
+        beat_times.pop(0)
+
+    tempo_map: list[tuple[float, float]] = []
+    for i in range(len(beat_times) - 1):
+        dt = beat_times[i + 1] - beat_times[i]
+        if dt <= 1e-3:
+            continue
+        b = round(60.0 / dt, 3)
+        if tempo_map and abs(tempo_map[-1][1] - b) < 0.01:
+            continue
+        tempo_map.append((round(beat_times[i], 6), b))
+    if not tempo_map:
+        return (None, None)
+
+    # Lead-in segment: land the FIRST detected beat exactly ON a beat boundary
+    # (tick = n*480). The per-beat events above keep beat SPACING exactly 480
+    # ticks, but the integration from t=0 otherwise puts beat 0 at an arbitrary
+    # fractional tick — so the entire grid sits a constant fraction of a beat
+    # off the measure lines for the whole song (the uniform offset testers see
+    # against the waveform in Moonscraper; shifting beat times can never fix
+    # it). ConvertHero avoids this by constructing beat i at tick 192*i and
+    # deriving the lead-in tempo to make it true; we do the same, choosing n
+    # so the lead-in tempo stays close to the song tempo.
+    first_t = tempo_map[0][0]
+    if first_t > 1e-3:
+        n_beats = max(1, int(round(first_t / period)))
+        lead_bpm = round(60.0 * n_beats / first_t, 3)
+        tempo_map.insert(0, (0.0, lead_bpm))
+    return (tempo_map, round(median_bpm, 3))
+
+
+def _refine_tempo(
+    midi_path: Path,
+    allow_drift: bool,
+    hint_bpm: "float | None" = None,
+    audio_path: "Path | None" = None,
+    drum_audio_path: "Path | None" = None,
+) -> str:
+    """Align notes.mid's tempo grid to the song.
+
+    Primary method (ConvertHero-style): beat-track the *audio* to place a tempo
+    event on every real beat, so beat/measure lines follow the actual
+    performance even when it drifts. Falls back to fitting a tempo to STRUM's
+    MIDI onsets when audio beat-tracking isn't available. Real-world note times
+    are always preserved — only tempo and tick positions move — so playback
+    stays in sync while notes land on the grid.
+
+    ``hint_bpm`` is the user's Manual BPM and is treated as the truth: it seeds
+    the tracker (correcting tempo-octave errors) and, when drift is disabled, is
+    applied verbatim. Returns a short human-readable status.
     """
     _tpb, init_bpm, onsets = _recover_note_onsets(midi_path)
+
+    # 1) Preferred: beat-track the rendered audio. The isolated drum stem (when
+    # Demucs produced one) is tried first — percussive onsets without vocals /
+    # sustained instruments smearing the envelope give a noticeably tighter
+    # tempo map (testers got their best maps running ConvertHero on drums.ogg;
+    # see GitHub issue #8). The full mix is the fallback.
+    candidates: list[tuple[Path, str]] = []
+    if drum_audio_path is not None and Path(drum_audio_path).exists():
+        candidates.append((Path(drum_audio_path), "drum-stem beat-track"))
+    if audio_path is not None and Path(audio_path).exists():
+        candidates.append((Path(audio_path), "audio beat-track"))
+    for cand_path, cand_label in candidates:
+        tempo_map, base = _beat_track_tempo_map(cand_path, hint_bpm, allow_drift)
+        if tempo_map and base and init_bpm > 0:
+            _retime_midi_to_tempo_map(midi_path, init_bpm, tempo_map)
+            if len(tempo_map) > 1:
+                return f"{cand_label} ({len(tempo_map)} tempo events, {base:.2f} BPM base)"
+            return f"{cand_label} (constant {base:.2f} BPM)"
+
+    # 2) Fallback: fit a tempo to STRUM's MIDI note onsets (legacy method).
     if len(onsets) < 16:
+        if hint_bpm and hint_bpm > 0 and init_bpm > 0:
+            _retime_midi_to_tempo_map(midi_path, init_bpm, [(0.0, float(hint_bpm))])
+            return f"applied manual {hint_bpm:.2f} BPM"
         return "skipped (too few onsets to analyse)"
-    global_bpm, _err = _estimate_global_tempo(onsets, init_bpm)
-    tempo_map: list[tuple[float, float]] = [(0.0, global_bpm)]
+    center_bpm = hint_bpm if (hint_bpm and hint_bpm > 0) else init_bpm
+    global_bpm, _err = _estimate_global_tempo(onsets, center_bpm)
+    tempo_map = [(0.0, global_bpm)]
     drift = _estimate_tempo_map(onsets, global_bpm) if allow_drift else None
     if drift:
         tempo_map = drift
-    # Nothing meaningfully changed for a steady song already on the right tempo.
-    if not drift and abs(global_bpm - init_bpm) < 0.05:
+    # Nothing meaningfully changed for a steady song already on the right tempo
+    # (unless the user pinned a Manual BPM we still want to honour).
+    if not drift and abs(global_bpm - init_bpm) < 0.05 and not (hint_bpm and hint_bpm > 0):
         return f"already aligned ({init_bpm:.2f} BPM)"
     _retime_midi_to_tempo_map(midi_path, init_bpm, tempo_map)
     if drift:
-        return f"variable tempo map ({len(tempo_map)} events, {global_bpm:.2f} BPM base)"
+        return f"onset tempo map ({len(tempo_map)} events, {global_bpm:.2f} BPM base)"
     return f"refined {init_bpm:.2f} -> {global_bpm:.2f} BPM"
 
 
@@ -2557,6 +2874,20 @@ def run_pipeline(payload: dict[str, Any]) -> int:
             deduped.insert(0, (0.0, deduped[0][1]))
         USER_TEMPO_MAP = deduped
 
+    # Optional single-BPM hint (the user's authoritative "Manual BPM"). Seeds
+    # the audio beat tracker so it locks onto the right tempo octave; see
+    # _beat_track_tempo_map / _refine_tempo.
+    global TEMPO_HINT_BPM
+    TEMPO_HINT_BPM = None
+    raw_manual_bpm = payload.get("manualBpm")
+    if raw_manual_bpm not in (None, ""):
+        try:
+            manual_bpm = float(raw_manual_bpm)
+            if manual_bpm > 0:
+                TEMPO_HINT_BPM = manual_bpm
+        except (TypeError, ValueError):
+            TEMPO_HINT_BPM = None
+
     modules = ensure_dependencies()
     torch_module = modules["torch"]
     device = resolve_device(torch_module)
@@ -2636,33 +2967,68 @@ def run_pipeline(payload: dict[str, Any]) -> int:
                         )
                 except Exception as exc:
                     errors.append(f"{source.name}: tempo-map post-process failed: {exc}")
-            elif AUTO_TEMPO and notes_mid.exists():
-                try:
-                    status = _refine_tempo(notes_mid, AUTO_TEMPO_DRIFT)
-                    emit_progress(
-                        run_id,
-                        "merge",
-                        f"Tempo refine ({status}) on {notes_mid.name}",
-                        percent=min(96, source_start_percent + 65),
-                        current_item=source.name,
-                    )
-                    if AUTO_TEMPO_SNAP:
-                        cleaned = _quantize_onsets(
+            elif notes_mid.exists():
+                # The user's Manual BPM (if any) is authoritative; otherwise the
+                # tempo is detected by beat-tracking the audio inside
+                # _refine_tempo (our ConvertHero-style replacement for the old
+                # online BPM lookup).
+                hint_bpm = TEMPO_HINT_BPM
+
+                if AUTO_TEMPO:
+                    try:
+                        # Best drum-stem candidate for beat tracking: the raw
+                        # Demucs drums stem if its temp file still exists,
+                        # otherwise drums.ogg exported into the song folder
+                        # (only present when keep-stems is on). _refine_tempo
+                        # skips candidates that don't exist.
+                        drum_stem = SEPARATED_STEM_REGISTRY.get(source.resolve(), {}).get("drums")
+                        if not (drum_stem and Path(drum_stem).exists()):
+                            drum_stem = Path(result.output_path) / "drums.ogg"
+                        status = _refine_tempo(
                             notes_mid,
-                            division=AUTO_TEMPO_SNAP_DIVISION,
-                            window_ms=AUTO_TEMPO_SNAP_WINDOW_MS,
-                            track_predicate=lambda n: n.startswith("PART ") and "VOCAL" not in n,
+                            AUTO_TEMPO_DRIFT,
+                            hint_bpm=hint_bpm,
+                            audio_path=source,
+                            drum_audio_path=drum_stem,
                         )
-                        if cleaned:
-                            emit_progress(
-                                run_id,
-                                "merge",
-                                f"Snapped {cleaned} residual onset(s) to grid in {notes_mid.name}",
-                                percent=min(96, source_start_percent + 65),
-                                current_item=source.name,
+                        emit_progress(
+                            run_id,
+                            "merge",
+                            f"Tempo refine ({status}) on {notes_mid.name}",
+                            percent=min(96, source_start_percent + 65),
+                            current_item=source.name,
+                        )
+                        if AUTO_TEMPO_SNAP:
+                            cleaned = _quantize_onsets(
+                                notes_mid,
+                                division=AUTO_TEMPO_SNAP_DIVISION,
+                                window_ms=AUTO_TEMPO_SNAP_WINDOW_MS,
+                                track_predicate=lambda n: n.startswith("PART ") and "VOCAL" not in n,
                             )
-                except Exception as exc:
-                    errors.append(f"{source.name}: tempo refine failed: {exc}")
+                            if cleaned:
+                                emit_progress(
+                                    run_id,
+                                    "merge",
+                                    f"Snapped {cleaned} residual onset(s) to grid in {notes_mid.name}",
+                                    percent=min(96, source_start_percent + 65),
+                                    current_item=source.name,
+                                )
+                    except Exception as exc:
+                        errors.append(f"{source.name}: tempo refine failed: {exc}")
+                elif hint_bpm:
+                    # Auto-tempo is off but the user pinned a Manual BPM: apply it
+                    # exactly as a single constant tempo (their truth wins).
+                    try:
+                        _retime_midi_to_tempo_map(notes_mid, hint_bpm, [(0.0, hint_bpm)])
+                        emit_progress(
+                            run_id,
+                            "merge",
+                            f"Applied {hint_bpm:.2f} BPM tempo to {notes_mid.name}",
+                            percent=min(96, source_start_percent + 65),
+                            current_item=source.name,
+                        )
+                    except Exception as exc:
+                        errors.append(f"{source.name}: manual BPM apply failed: {exc}")
             if SNAP_DRUMS and notes_mid.exists():
                 try:
                     snapped = _quantize_drum_track(
