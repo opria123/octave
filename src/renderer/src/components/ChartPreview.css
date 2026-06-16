@@ -103,6 +103,23 @@
   color: var(--text-primary);
 }
 
+.waveform-source-select {
+  height: 28px;
+  max-width: 170px;
+  padding: 0 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.waveform-source-select:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 /* Difficulty selector */
 /* Preview snap selector */
 .preview-snap-selector {

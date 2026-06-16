@@ -3,7 +3,8 @@ import { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } fr
 import { useProjectStore, getSongStore, useSettingsStore, useUIStore } from '../stores'
 import type { Note, NoteFlags, NoteModifiers, Instrument, DrumLane, GuitarLane, Difficulty, EditingTool, StarPowerPhrase, SoloSection, LaneMarker, LaneMarkerType, VocalNote, VocalPhrase, HarmonyPart,TempoEvent } from '../types'
 import { PRO_KEYS_MIN, PRO_KEYS_MAX, SUSTAIN_THRESHOLD_MID, SUSTAIN_THRESHOLD_CHART } from '../types'
-import { playPitchPreview, stopPitchPreview, getAudioDuration, onAudioLoaded } from '../services/audioService'
+import { getAudioDuration, getAudioSources, onAudioLoaded, playPitchPreview, stopPitchPreview } from '../services/audioService'
+import { buildTickAlignedWaveformPeaks } from '../services/waveformService'
 import './MidiEditor.css'
 
 // Build note flags from UI toggle modifiers
@@ -145,6 +146,102 @@ function formatLaneLabel(lane: string): string {
   }
 
   return labels[lane] || lane
+}
+
+function PianoRollWaveformStrip({
+  songId,
+  headerWidth,
+  width,
+  currentTick,
+  scrollX,
+  zoomLevel,
+  tempoEvents,
+  sourcePath
+}: {
+  songId: string
+  headerWidth: number
+  width: number
+  currentTick: number
+  scrollX: number
+  zoomLevel: number
+  tempoEvents: TempoEvent[]
+  sourcePath?: string
+}): React.JSX.Element {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [audioVersion, setAudioVersion] = useState(0)
+
+  useEffect(() => onAudioLoaded(songId, () => setAudioVersion((v) => v + 1)), [songId])
+
+  const waveform = useMemo(() => {
+    void audioVersion
+    return buildTickAlignedWaveformPeaks({
+      songId,
+      tempoEvents,
+      rows: 2048,
+      sourcePath,
+      maxSamplesPerRow: 192
+    })
+  }, [songId, tempoEvents, sourcePath, audioVersion])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const w = Math.max(1, canvas.clientWidth)
+    const h = Math.max(1, canvas.clientHeight)
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w
+      canvas.height = h
+    }
+
+    ctx.clearRect(0, 0, w, h)
+    ctx.fillStyle = '#0d1220'
+    ctx.fillRect(0, 0, w, h)
+
+    if (waveform) {
+      const midY = h / 2
+      const { peaks, totalTicks } = waveform
+      const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
+      const visibleTicks = Math.max(1, width / pixelsPerTick)
+      const startTick = Math.max(0, scrollX / pixelsPerTick)
+      ctx.fillStyle = 'rgba(77, 208, 225, 0.75)'
+      for (let x = 0; x < w; x++) {
+        const tick = startTick + (x / w) * visibleTicks
+        const peakIdx = Math.min(peaks.length - 1, Math.floor((tick / totalTicks) * peaks.length))
+        const amp = Math.pow(peaks[peakIdx], 0.75)
+        const halfHeight = Math.max(1, amp * (midY - 1))
+        ctx.fillRect(x, midY - halfHeight, 1, halfHeight * 2)
+      }
+
+      const playheadX = ((currentTick - startTick) / visibleTicks) * w
+      if (playheadX >= 0 && playheadX <= w) {
+        ctx.strokeStyle = '#FFE066'
+        ctx.beginPath()
+        ctx.moveTo(playheadX + 0.5, 0)
+        ctx.lineTo(playheadX + 0.5, h)
+        ctx.stroke()
+      }
+    } else {
+      ctx.fillStyle = 'rgba(220, 220, 220, 0.55)'
+      ctx.font = '11px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('Waveform unavailable', w / 2, h / 2)
+    }
+  }, [waveform, currentTick, scrollX, width, zoomLevel])
+
+  return (
+    <div className="midi-waveform-strip" aria-hidden="true">
+      <div className="midi-waveform-label" style={{ width: headerWidth }}>
+        Waveform
+      </div>
+      <div className="midi-waveform-canvas-wrap">
+        <canvas ref={canvasRef} className="midi-waveform-canvas" />
+      </div>
+    </div>
+  )
 }
 
 // Generate vocal pitch lane labels (high to low for piano roll layout)
@@ -2282,7 +2379,13 @@ export function MidiEditor(): React.JSX.Element {
   const [dimensions, setDimensions] = useState({ width: 800, height: 300 })
   const [scrollX, setScrollX] = useState(0)
   const [scrollY, setScrollY] = useState(0)
-  const { pianoRollZoom: zoomLevel, updateSettings } = useSettingsStore()
+  const {
+    pianoRollZoom: zoomLevel,
+    invertPianoRollVerticalScroll,
+    waveformAudioSourcePath,
+    updateSettings
+  } = useSettingsStore()
+  const showHighwayWaveform = useUIStore((s) => s.showHighwayWaveform)
   const setZoomLevel = useCallback((updater: number | ((prev: number) => number)) => {
     const newZoom = typeof updater === 'function' ? updater(useSettingsStore.getState().pianoRollZoom ?? 2.0) : updater
     updateSettings({ pianoRollZoom: Math.max(0.1, Math.min(5, newZoom)) })
@@ -2314,6 +2417,22 @@ export function MidiEditor(): React.JSX.Element {
   const [activeDifficulty, setActiveDifficulty] = useState<Difficulty>('expert')
   const [tempoEvents, setTempoEvents] = useState<TempoEvent[]>([{ tick: 0, bpm: 120 }])
   const [audioDuration, setAudioDuration] = useState<number>(() => activeSongId ? getAudioDuration(activeSongId) : 0)
+  const [waveformSources, setWaveformSources] = useState<Array<{ filePath: string; filename: string }>>([])
+
+  useEffect(() => {
+    if (!activeSongId) {
+      setWaveformSources([])
+      return
+    }
+
+    const syncSources = (): void => {
+      const sources = getAudioSources(activeSongId)
+      setWaveformSources(sources.map((source) => ({ filePath: source.filePath, filename: source.filename })))
+    }
+
+    syncSources()
+    return onAudioLoaded(activeSongId, syncSources)
+  }, [activeSongId])
 
   // Keep audioDuration in sync when audio loads or song changes
   useEffect(() => {
@@ -2544,6 +2663,10 @@ export function MidiEditor(): React.JSX.Element {
     }, 0)
   }, [displayedInstruments, getLanesForInstrument, getRowHeight])
 
+  const verticalWheelDelta = useCallback((deltaY: number) => {
+    return invertPianoRollVerticalScroll ? -deltaY : deltaY
+  }, [invertPianoRollVerticalScroll])
+
   // Filter notes for current difficulty
   const filteredNotes = useMemo(() => {
     const result = notes.filter(
@@ -2592,13 +2715,14 @@ export function MidiEditor(): React.JSX.Element {
     
     if (e.ctrlKey || e.metaKey) {
       // Zoom
-      const delta = e.deltaY > 0 ? 0.9 : 1.1
+      const wheelY = verticalWheelDelta(e.deltaY)
+      const delta = wheelY > 0 ? 0.9 : 1.1
       setZoomLevel((prev) => Math.max(0.1, Math.min(5, prev * delta)))
     } else if (e.shiftKey) {
       // Shift+scroll = horizontal scroll (timeline)
       isUserScrolling.current = true
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
-      const hDelta = e.deltaX + e.deltaY
+      const hDelta = e.deltaX + verticalWheelDelta(e.deltaY)
       setScrollX((prev) => {
         const newScrollX = Math.min(maxScrollX, Math.max(0, prev + hDelta))
         if (songStore && !songStore.getState().isPlaying) {
@@ -2615,7 +2739,8 @@ export function MidiEditor(): React.JSX.Element {
     } else {
       // Default: deltaY = vertical, deltaX = horizontal
       const maxScrollY = Math.max(0, totalHeight - dimensions.height + 50)
-      setScrollY((prev) => Math.max(0, Math.min(maxScrollY, prev + e.deltaY)))
+      const wheelY = verticalWheelDelta(e.deltaY)
+      setScrollY((prev) => Math.max(0, Math.min(maxScrollY, prev + wheelY)))
       
       if (Math.abs(e.deltaX) > 0) {
         isUserScrolling.current = true
@@ -2636,7 +2761,7 @@ export function MidiEditor(): React.JSX.Element {
         }, 200)
       }
     }
-  }, [songStore, zoomLevel, totalHeight, dimensions.height, maxScrollX])
+  }, [songStore, zoomLevel, totalHeight, dimensions.height, maxScrollX, verticalWheelDelta])
 
   // Handle scroll on lane headers - vertical scroll
   const handleHeaderScroll = useCallback((e: React.WheelEvent) => {
@@ -2645,20 +2770,22 @@ export function MidiEditor(): React.JSX.Element {
     
     // Vertical scroll - ensure max is at least 0
     const maxScroll = Math.max(0, totalHeight - dimensions.height + 50)
-    setScrollY((prev) => Math.max(0, Math.min(maxScroll, prev + e.deltaY)))
-  }, [totalHeight, dimensions.height])
+    const wheelY = verticalWheelDelta(e.deltaY)
+    setScrollY((prev) => Math.max(0, Math.min(maxScroll, prev + wheelY)))
+  }, [totalHeight, dimensions.height, verticalWheelDelta])
 
   // Handle scroll on editor area (fallback)
   const handleScroll = useCallback((e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
       // Zoom
-      const delta = e.deltaY > 0 ? 0.9 : 1.1
+      const wheelY = verticalWheelDelta(e.deltaY)
+      const delta = wheelY > 0 ? 0.9 : 1.1
       setZoomLevel((prev) => prev * delta)
     } else if (e.shiftKey) {
       // Shift+scroll = horizontal scroll (timeline)
       isUserScrolling.current = true
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
-      const hDelta = e.deltaX + e.deltaY
+      const hDelta = e.deltaX + verticalWheelDelta(e.deltaY)
       setScrollX((prev) => {
         const newScrollX = Math.min(maxScrollX, Math.max(0, prev + hDelta))
         if (songStore && !songStore.getState().isPlaying) {
@@ -2675,7 +2802,8 @@ export function MidiEditor(): React.JSX.Element {
     } else {
       // Default: deltaY = vertical, deltaX = horizontal
       const maxScroll = Math.max(0, totalHeight - dimensions.height + 50)
-      setScrollY((prev) => Math.max(0, Math.min(maxScroll, prev + e.deltaY)))
+      const wheelY = verticalWheelDelta(e.deltaY)
+      setScrollY((prev) => Math.max(0, Math.min(maxScroll, prev + wheelY)))
       
       if (Math.abs(e.deltaX) > 0) {
         isUserScrolling.current = true
@@ -2696,7 +2824,7 @@ export function MidiEditor(): React.JSX.Element {
         }, 200)
       }
     }
-  }, [songStore, zoomLevel, totalHeight, dimensions.height, maxScrollX])
+  }, [songStore, zoomLevel, totalHeight, dimensions.height, maxScrollX, verticalWheelDelta])
 
   // Handle note click - tool-aware, supports flag toggling with modifier toggles
   const handleNoteClick = useCallback(
@@ -3575,6 +3703,10 @@ export function MidiEditor(): React.JSX.Element {
     )
   }
 
+  const selectedWaveformSource = waveformSources.some((s) => s.filePath === waveformAudioSourcePath)
+    ? waveformAudioSourcePath
+    : '__mix__'
+
   return (
     <div className="midi-editor" ref={containerRef}>
       {/* Toolbar */}
@@ -3611,6 +3743,22 @@ export function MidiEditor(): React.JSX.Element {
           <button onClick={() => setZoomLevel((z) => z * 0.8)}>-</button>
           <span>{Math.round(zoomLevel * 100)}%</span>
           <button onClick={() => setZoomLevel((z) => z * 1.25)}>+</button>
+        </div>
+        <div className="midi-waveform-source">
+          <label htmlFor="midi-waveform-source">Waveform:</label>
+          <select
+            id="midi-waveform-source"
+            value={selectedWaveformSource}
+            onChange={(event) => {
+              const value = event.target.value
+              updateSettings({ waveformAudioSourcePath: value === '__mix__' ? undefined : value })
+            }}
+          >
+            <option value="__mix__">Mix</option>
+            {waveformSources.map((source) => (
+              <option key={source.filePath} value={source.filePath}>{source.filename}</option>
+            ))}
+          </select>
         </div>
         {/* Pro Guitar/Bass fret property editor â€” shown when pro notes are selected */}
         {(() => {
@@ -3656,6 +3804,19 @@ export function MidiEditor(): React.JSX.Element {
         <div className="midi-scroll-hint">Scroll: vertical | Shift+Scroll: horizontal | Ctrl+Scroll: zoom</div>
         <MidiShortcutHelpButton />
       </div>
+
+      {showHighwayWaveform && (
+        <PianoRollWaveformStrip
+          songId={activeSongId}
+          headerWidth={MIDI_EDITOR_CONFIG.headerWidth}
+          width={Math.max(dimensions.width, 100)}
+          currentTick={currentTick}
+          scrollX={effectiveScrollX}
+          zoomLevel={zoomLevel}
+          tempoEvents={tempoEvents}
+          sourcePath={waveformAudioSourcePath}
+        />
+      )}
 
       {/* Playhead ruler */}
       <PlayheadRuler

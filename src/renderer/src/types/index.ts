@@ -264,9 +264,11 @@ export interface AppSettings {
   snapDivision: number // 1-32
   lastOpenedFolder?: string
   leftyFlip: boolean // Mirror highway left-right for left-handed players
+  waveformAudioSourcePath?: string // Optional audio source path used for waveform rendering (undefined = mixed)
   enableAutoChart: boolean
   autoChartOutputDir?: string
   betaUpdates: boolean // Opt into beta/pre-release auto-updates
+  invertPianoRollVerticalScroll: boolean // Reverse vertical wheel direction in the piano roll
   hotkeys: AppHotkeys
 }
 

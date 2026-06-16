@@ -19,12 +19,14 @@ export function SettingsModal(): React.JSX.Element | null {
   const enableAutoChart = useSettingsStore((s) => s.enableAutoChart)
   const autoChartOutputDir = useSettingsStore((s) => s.autoChartOutputDir)
   const betaUpdates = useSettingsStore((s) => s.betaUpdates)
+  const invertPianoRollVerticalScroll = useSettingsStore((s) => s.invertPianoRollVerticalScroll)
   const updateSettings = useSettingsStore((s) => s.updateSettings)
   const [recordingAction, setRecordingAction] = useState<HotkeyAction | null>(null)
   const [draftHotkeys, setDraftHotkeys] = useState<AppHotkeys>(hotkeys)
   const [draftEnableAutoChart, setDraftEnableAutoChart] = useState(enableAutoChart)
   const [draftAutoChartOutputDir, setDraftAutoChartOutputDir] = useState(autoChartOutputDir ?? '')
   const [draftBetaUpdates, setDraftBetaUpdates] = useState(betaUpdates)
+  const [draftInvertPianoRollVerticalScroll, setDraftInvertPianoRollVerticalScroll] = useState(invertPianoRollVerticalScroll)
 
   useEffect(() => {
     if (isOpen) {
@@ -32,9 +34,10 @@ export function SettingsModal(): React.JSX.Element | null {
       setDraftEnableAutoChart(enableAutoChart)
       setDraftAutoChartOutputDir(autoChartOutputDir ?? '')
       setDraftBetaUpdates(betaUpdates)
+      setDraftInvertPianoRollVerticalScroll(invertPianoRollVerticalScroll)
       setRecordingAction(null)
     }
-  }, [autoChartOutputDir, enableAutoChart, betaUpdates, hotkeys, isOpen])
+  }, [autoChartOutputDir, enableAutoChart, betaUpdates, hotkeys, invertPianoRollVerticalScroll, isOpen])
 
   useEffect(() => {
     if (!isOpen || draftAutoChartOutputDir.trim()) return
@@ -169,6 +172,19 @@ export function SettingsModal(): React.JSX.Element | null {
               </p>
             </div>
           </section>
+          <section className="settings-preferences-group">
+            <h3 className="settings-hotkey-group-title">MIDI Editor</h3>
+            <div className="settings-preferences-body">
+              <label className="settings-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={draftInvertPianoRollVerticalScroll}
+                  onChange={(event) => setDraftInvertPianoRollVerticalScroll(event.target.checked)}
+                />
+                <span>Invert piano-roll vertical mouse wheel scroll</span>
+              </label>
+            </div>
+          </section>
           {hasConflicts && (
             <div className="settings-hotkey-conflicts-banner">
               Resolve duplicate bindings before saving. Conflicting shortcuts are highlighted below.
@@ -234,7 +250,8 @@ export function SettingsModal(): React.JSX.Element | null {
                 hotkeys: draftHotkeys,
                 enableAutoChart: draftEnableAutoChart,
                 autoChartOutputDir: draftAutoChartOutputDir.trim() || undefined,
-                betaUpdates: draftBetaUpdates
+                betaUpdates: draftBetaUpdates,
+                invertPianoRollVerticalScroll: draftInvertPianoRollVerticalScroll
               })
               if (draftBetaUpdates !== betaUpdates) {
                 void window.api.setUpdateChannel(draftBetaUpdates)
