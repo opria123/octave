@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useProjectStore, getSongStore, useUIStore, useSettingsStore } from '../../stores'
 import type { Instrument, Difficulty, NoteModifiers, VocalNote, VocalPhrase, HarmonyPart, VenueTrackData } from '../../types'
 import type { EditingTool } from './types'
-import { playPitchPreview, stopPitchPreview, seek as seekAudio } from '../../services/audioService'
+import { getAudioSources, onAudioLoaded, playPitchPreview, stopPitchPreview, seek as seekAudio } from '../../services/audioService'
 import { resolveVenuePlaybackState } from './venuePlayback'
 
 function formatVenueLabel(value: string): string {
@@ -56,9 +56,12 @@ export function InstrumentToggles(): React.JSX.Element {
   const { activeSongId } = useProjectStore()
   const showHighwayWaveform = useUIStore((s) => s.showHighwayWaveform)
   const toggleHighwayWaveform = useUIStore((s) => s.toggleHighwayWaveform)
+  const waveformAudioSourcePath = useSettingsStore((s) => s.waveformAudioSourcePath)
+  const updateSettings = useSettingsStore((s) => s.updateSettings)
   const [visibleInstruments, setVisibleInstruments] = useState<Set<Instrument>>(
     new Set(['drums', 'guitar', 'bass', 'vocals', 'keys', 'proKeys', 'proGuitar', 'proBass'])
   )
+  const [waveformSources, setWaveformSources] = useState<Array<{ filePath: string; filename: string }>>([])
 
   useEffect(() => {
     if (!activeSongId) return
@@ -68,6 +71,21 @@ export function InstrumentToggles(): React.JSX.Element {
       if (state.visibleInstruments !== prev.visibleInstruments)
         setVisibleInstruments(new Set(state.visibleInstruments))
     })
+  }, [activeSongId])
+
+  useEffect(() => {
+    if (!activeSongId) {
+      setWaveformSources([])
+      return
+    }
+
+    const syncSources = (): void => {
+      const sources = getAudioSources(activeSongId)
+      setWaveformSources(sources.map((s) => ({ filePath: s.filePath, filename: s.filename })))
+    }
+
+    syncSources()
+    return onAudioLoaded(activeSongId, syncSources)
   }, [activeSongId])
 
   if (!activeSongId) return <></>
@@ -82,6 +100,10 @@ export function InstrumentToggles(): React.JSX.Element {
     { id: 'proGuitar', label: 'Pro Guitar' },
     { id: 'proBass', label: 'Pro Bass' }
   ]
+
+  const selectedWaveformSource = waveformSources.some((s) => s.filePath === waveformAudioSourcePath)
+    ? waveformAudioSourcePath
+    : '__mix__'
 
   return (
     <div className="instrument-toggles">
@@ -101,6 +123,22 @@ export function InstrumentToggles(): React.JSX.Element {
       >
         Waveform
       </button>
+      <select
+        className="waveform-source-select"
+        title="Choose which audio source drives waveform rendering"
+        value={selectedWaveformSource}
+        onChange={(event) => {
+          const value = event.target.value
+          updateSettings({ waveformAudioSourcePath: value === '__mix__' ? undefined : value })
+        }}
+      >
+        <option value="__mix__">Waveform: Mix</option>
+        {waveformSources.map((source) => (
+          <option key={source.filePath} value={source.filePath}>
+            Waveform: {source.filename}
+          </option>
+        ))}
+      </select>
     </div>
   )
 }

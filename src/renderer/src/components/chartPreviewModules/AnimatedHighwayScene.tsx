@@ -106,13 +106,13 @@ export function AnimatedHighwayScene({
   const snapDivision = useStore(store, (s) => s.snapDivision)
   const isPlaying = useStore(store, (s) => s.isPlaying)
   const assets = useContext(HighwayAssetsContext)
-  const { highwaySpeed: _highwaySpeed, leftyFlip } = useSettingsStore()
+  const { highwaySpeed: _highwaySpeed, leftyFlip, waveformAudioSourcePath } = useSettingsStore()
   const showHighwayWaveform = useUIStore((s) => s.showHighwayWaveform)
 
   const pixelsPerTick = BASE_PIXELS_PER_TICK
 
   // Audio waveform overlay texture (issue #7) — built once per song/audio load.
-  const waveform = useHighwayWaveform(songId, tempoEvents, showHighwayWaveform)
+  const waveform = useHighwayWaveform(songId, tempoEvents, showHighwayWaveform, waveformAudioSourcePath)
 
   // ALL animation state in refs — never triggers React re-renders
   const hitEffectsRef = useRef<HitEffect[]>([])

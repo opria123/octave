@@ -58,9 +58,11 @@ const defaultSettings: AppSettings = {
   snapDivision: 4,
   lastOpenedFolder: undefined,
   leftyFlip: false,
+  waveformAudioSourcePath: undefined,
   enableAutoChart: true,
   autoChartOutputDir: undefined,
   betaUpdates: false,
+  invertPianoRollVerticalScroll: false,
   hotkeys: cloneDefaultHotkeys()
 }
 
