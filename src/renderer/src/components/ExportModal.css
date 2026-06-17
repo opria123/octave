@@ -410,3 +410,34 @@
   accent-color: var(--accent-color);
   cursor: pointer;
 }
+
+.export-warning-banner {
+  display: flex;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  color: var(--text-primary);
+  margin-top: 10px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.warning-icon {
+  font-size: 18px;
+  align-self: flex-start;
+}
+
+.warning-text strong {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 2px;
+  color: #f59e0b; /* Amber */
+}
+
+.warning-text p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}

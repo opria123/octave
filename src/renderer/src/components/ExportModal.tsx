@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useStore } from 'zustand'
 import { useSettingsStore, useUIStore, useProjectStore, getSongStore } from '../stores'
 import './ExportModal.css'
@@ -28,23 +28,60 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
   const [errorMessage, setErrorMessage] = useState<string>('')
   const [exportedPath, setExportedPath] = useState<string>('')
 
+  const [isInitialized, setIsInitialized] = useState<boolean>(false)
+  const [showOverwriteWarning, setShowOverwriteWarning] = useState<boolean>(false)
+
   // Get current song data reactively
   const songStore = getSongStore(activeSongId || 'default')
   const song = useStore(songStore, (s) => s.song)
 
   const showReset = outputFolder !== (autoChartOutputDir || '')
 
+  const getFullOutputPath = useCallback((folder: string, name: string): string => {
+    if (!folder.trim()) return ''
+    let finalFilename = name.trim()
+    if (!finalFilename) {
+      finalFilename = `${sanitizeFilename(song?.metadata.name || 'song')}.sng`
+    } else if (!finalFilename.toLowerCase().endsWith('.sng')) {
+      finalFilename += '.sng'
+    }
+    const separator = folder.includes('\\') ? '\\' : '/'
+    return folder.endsWith(separator) 
+      ? `${folder}${finalFilename}` 
+      : `${folder}${separator}${finalFilename}`
+  }, [song])
+
+  const checkOverwrite = useCallback(async (folder: string, file: string) => {
+    const fullPath = getFullOutputPath(folder, file)
+    if (!fullPath) {
+      setShowOverwriteWarning(false)
+      return
+    }
+    try {
+      const exists = await window.api.fileExists(fullPath)
+      setShowOverwriteWarning(exists)
+    } catch (err) {
+      console.error('Error checking if file exists:', err)
+      setShowOverwriteWarning(false)
+    }
+  }, [getFullOutputPath])
+
   // Initialize output folder and filename when the modal is opened
   useEffect(() => {
-    if (isOpen && song) {
-      setOutputFolder(sngLastExportDir || autoChartOutputDir || '')
+    if (song && !isInitialized) {
+      const initialFolder = sngLastExportDir || autoChartOutputDir || ''
       const name = song.metadata.name || 'song'
-      setFilename(`${sanitizeFilename(name)}.sng`)
+      const initialFilename = `${sanitizeFilename(name)}.sng`
+      setOutputFolder(initialFolder)
+      setFilename(initialFilename)
+      setIsInitialized(true)
       setStatus('idle')
       setErrorMessage('')
       setExportedPath('')
+      
+      checkOverwrite(initialFolder, initialFilename)
     }
-  }, [isOpen, song, autoChartOutputDir, sngLastExportDir])
+  }, [song, isInitialized, autoChartOutputDir, sngLastExportDir, checkOverwrite])
 
   // Dismiss modal on Escape key press
   useEffect(() => {
@@ -65,6 +102,7 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
       const path = await window.api.openOutputFolderDialog()
       if (path) {
         setOutputFolder(path)
+        checkOverwrite(path, filename)
       }
     } catch (err) {
       console.error('Failed to open output folder dialog:', err)
@@ -112,6 +150,7 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
         setExportedPath(fullOutputPath)
         updateSettings({ sngLastExportDir: outputFolder })
         setStatus('success')
+        setShowOverwriteWarning(false)
       } else {
         setErrorMessage(result.error || 'Failed to export the song package.')
         setStatus('error')
@@ -198,7 +237,11 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
                       {showReset && (
                         <button
                           className="export-reset-button"
-                          onClick={() => setOutputFolder(autoChartOutputDir || '')}
+                          onClick={() => {
+                            const defaultDir = autoChartOutputDir || ''
+                            setOutputFolder(defaultDir)
+                            checkOverwrite(defaultDir, filename)
+                          }}
                           disabled={status === 'saving' || status === 'exporting'}
                         >
                           Reset to Default
@@ -212,6 +255,7 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
                         value={outputFolder}
                         placeholder="Click browse to choose an export directory..."
                         onChange={(e) => setOutputFolder(e.target.value)}
+                        onBlur={() => checkOverwrite(outputFolder, filename)}
                         disabled={status === 'saving' || status === 'exporting'}
                       />
                       <button
@@ -234,9 +278,20 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
                       value={filename}
                       placeholder="e.g. My_Song.sng"
                       onChange={(e) => setFilename(e.target.value)}
+                      onBlur={() => checkOverwrite(outputFolder, filename)}
                       disabled={status === 'saving' || status === 'exporting'}
                     />
                   </div>
+
+                  {showOverwriteWarning && (
+                    <div className="export-warning-banner">
+                      <span className="warning-icon">⚠️</span>
+                      <div className="warning-text">
+                        <strong>File Already Exists</strong>
+                        <p>Exporting will overwrite the existing file at this location.</p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Save before export checkbox */}
                   <label className="export-checkbox-row" style={{ marginTop: '16px' }}>

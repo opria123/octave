@@ -1080,6 +1080,17 @@ ipcMain.handle('song:exportSng', async (_event, songPath: string, metadata: Reco
   }
 })
 
+// Check if a file exists
+ipcMain.handle('fs:fileExists', async (_event, filePath: string) => {
+  try {
+    const resolvedPath = resolve(filePath)
+    const s = await stat(resolvedPath)
+    return s.isFile()
+  } catch {
+    return false
+  }
+})
+
 // Read video.json (video sync/clip data)
 ipcMain.handle('video:readJson', async (_event, songPath: string) => {
   if (!isPathAllowed(songPath)) return null

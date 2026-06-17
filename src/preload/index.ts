@@ -64,6 +64,9 @@ const api = {
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('song:exportSng', songPath, metadata, outputPath),
 
+  fileExists: (filePath: string): Promise<boolean> =>
+    ipcRenderer.invoke('fs:fileExists', filePath),
+
   // Album art APIs
   readAlbumArt: (songPath: string): Promise<string | null> =>
     ipcRenderer.invoke('song:readAlbumArt', songPath),
