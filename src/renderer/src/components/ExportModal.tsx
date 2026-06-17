@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useStore } from 'zustand'
 import { useSettingsStore, useUIStore, useProjectStore, getSongStore } from '../stores'
 import './ExportModal.css'
 
@@ -27,9 +28,9 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
   const [errorMessage, setErrorMessage] = useState<string>('')
   const [exportedPath, setExportedPath] = useState<string>('')
 
-  // Get current song data
-  const songStore = activeSongId ? getSongStore(activeSongId) : null
-  const song = songStore ? songStore.getState().song : null
+  // Get current song data reactively
+  const songStore = getSongStore(activeSongId || 'default')
+  const song = useStore(songStore, (s) => s.song)
 
   const showReset = outputFolder !== (autoChartOutputDir || '')
 
@@ -57,7 +58,7 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, status, setExportModalOpen])
 
-  if (!isOpen || !song) return null
+  if (!isOpen || !activeSongId || !song) return null
 
   const handleBrowse = async () => {
     try {

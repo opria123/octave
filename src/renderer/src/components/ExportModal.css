@@ -1,11 +1,104 @@
+.export-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
 .export-modal {
   width: min(640px, 100%);
   max-height: min(90vh, 700px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
   position: relative;
+}
+
+.export-modal-header,
+.export-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.export-modal-footer {
+  border-bottom: none;
+  border-top: 1px solid var(--border-color);
+  justify-content: flex-end;
+}
+
+.export-modal-title {
+  margin: 0;
+  font-size: 20px;
+  color: var(--text-primary);
+}
+
+.export-modal-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.export-modal-close,
+.export-modal-primary,
+.export-modal-secondary {
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.export-modal-close {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0;
+}
+
+.export-modal-primary {
+  background: var(--accent-color);
+  color: #1f1a13;
+  border-color: rgba(0, 0, 0, 0.18);
+}
+
+.export-modal-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.export-modal-close:hover,
+.export-modal-secondary:hover {
+  background: var(--bg-secondary);
+  border-color: var(--text-secondary);
+}
+
+.export-modal-primary:hover:not(:disabled) {
+  opacity: 0.9;
 }
 
 .export-modal-body {
   padding: 24px;
+  overflow-y: auto;
 }
 
 .export-section {
