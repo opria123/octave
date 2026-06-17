@@ -10,6 +10,7 @@ import icon from '../../resources/icon.png?asset'
 import ffmpeg from 'fluent-ffmpeg'
 import { cancelAutoChart, getStrumRequirementsPath, killAllRunningJobs, openStrumLogsFolder, resolvePythonCommand, runAutoChart } from './strumIntegration/runner'
 import { ensureBootstrappedPython, getRuntimeStatus, isBootstrapTarget } from './strumIntegration/runtimeBootstrap'
+import { packSng } from './sngPacker'
 
 // Point fluent-ffmpeg at the bundled static binary
 try {
@@ -630,6 +631,34 @@ ipcMain.handle('dialog:openOutputFolder', async () => {
   return result.filePaths[0]
 })
 
+// Reveal file in OS file explorer
+ipcMain.handle('dialog:showItemInFolder', async (_event, filePath: string) => {
+  try {
+    const resolvedPath = resolve(filePath)
+    
+    // Validate path exists and is a file
+    const fStat = await stat(resolvedPath)
+    if (!fStat.isFile()) {
+      return false
+    }
+
+    // Safety check: must be a .sng export or belong to the active project folder
+    const isSng = resolvedPath.toLowerCase().endsWith('.sng')
+    const isProjectFile = allowedProjectPath && (resolvedPath === allowedProjectPath || resolvedPath.startsWith(allowedProjectPath + '/') || resolvedPath.startsWith(allowedProjectPath + '\\'))
+    
+    if (!isSng && !isProjectFile) {
+      console.warn('[Security] Refusing to reveal path outside allowed boundaries:', resolvedPath)
+      return false
+    }
+
+    shell.showItemInFolder(resolvedPath)
+    return true
+  } catch (error) {
+    console.error('Error showing item in folder:', error)
+    return false
+  }
+})
+
 ipcMain.handle('strum:getDefaultOutputFolder', async () => {
   const defaultOutputFolder = join(app.getPath('documents'), 'OCTAVE', 'Auto-Chart Output')
   await mkdir(defaultOutputFolder, { recursive: true })
@@ -1018,6 +1047,36 @@ ipcMain.handle('song:writeChart', async (_event, songPath: string, chartText: st
     console.error('Error writing notes.chart:', error)
     try { if (existsSync(tempPath)) await unlink(tempPath) } catch { /* ignore */ }
     return false
+  }
+})
+
+// Export song to .sng package
+ipcMain.handle('song:exportSng', async (_event, songPath: string, metadata: Record<string, unknown>, outputPath: string) => {
+  if (!isPathAllowed(songPath)) {
+    return { success: false, error: 'Path to song directory not allowed' }
+  }
+
+  const resolvedOutput = resolve(outputPath)
+  if (!resolvedOutput.toLowerCase().endsWith('.sng')) {
+    return { success: false, error: 'Output path must end with .sng extension' }
+  }
+
+  const parentDir = resolve(resolvedOutput, '..')
+  try {
+    const parentStat = await stat(parentDir)
+    if (!parentStat.isDirectory()) {
+      return { success: false, error: 'Output directory does not exist' }
+    }
+  } catch {
+    return { success: false, error: 'Output directory does not exist or is inaccessible' }
+  }
+
+  try {
+    await packSng(songPath, metadata as Record<string, string | number | boolean>, resolvedOutput)
+    return { success: true }
+  } catch (error) {
+    console.error('Error packing SNG:', error)
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
   }
 })
 

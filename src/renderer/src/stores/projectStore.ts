@@ -60,6 +60,7 @@ const defaultSettings: AppSettings = {
   leftyFlip: false,
   enableAutoChart: true,
   autoChartOutputDir: undefined,
+  sngLastExportDir: undefined,
   betaUpdates: false,
   hotkeys: cloneDefaultHotkeys()
 }
@@ -96,6 +97,7 @@ interface UIStore extends UIState {
   clearModifiers: () => void
   togglePreviewFullscreen: () => void
   setSettingsModalOpen: (open: boolean) => void
+  setExportModalOpen: (open: boolean) => void
   toggleVocalPitchPlayback: () => void
   toggleHighwayWaveform: () => void
 }
@@ -122,6 +124,7 @@ export const useUIStore = create<UIStore>()((set) => ({
   noteModifiers: { ...defaultModifiers },
   isPreviewFullscreen: false,
   isSettingsModalOpen: false,
+  isExportModalOpen: false,
   vocalPitchPlayback: false,
   showHighwayWaveform: false,
 
@@ -158,6 +161,7 @@ export const useUIStore = create<UIStore>()((set) => ({
   clearModifiers: () => set({ noteModifiers: { ...defaultModifiers } }),
   togglePreviewFullscreen: () => set((state) => ({ isPreviewFullscreen: !state.isPreviewFullscreen })),
   setSettingsModalOpen: (open) => set({ isSettingsModalOpen: open }),
+  setExportModalOpen: (open) => set({ isExportModalOpen: open }),
   toggleVocalPitchPlayback: () => set((state) => ({ vocalPitchPlayback: !state.vocalPitchPlayback })),
   toggleHighwayWaveform: () => set((state) => ({ showHighwayWaveform: !state.showHighwayWaveform }))
 }))

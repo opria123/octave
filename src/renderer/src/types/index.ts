@@ -266,6 +266,7 @@ export interface AppSettings {
   leftyFlip: boolean // Mirror highway left-right for left-handed players
   enableAutoChart: boolean
   autoChartOutputDir?: string
+  sngLastExportDir?: string
   betaUpdates: boolean // Opt into beta/pre-release auto-updates
   hotkeys: AppHotkeys
 }
@@ -327,6 +328,7 @@ export interface UIState {
   noteModifiers: NoteModifiers
   isPreviewFullscreen: boolean
   isSettingsModalOpen: boolean
+  isExportModalOpen: boolean
   /** Sound vocal note pitches (sine tones) while the song plays (issue #10). */
   vocalPitchPlayback: boolean
   /** Show the audio waveform overlay on the 3D note highway (issue #7). */

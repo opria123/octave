@@ -23,6 +23,9 @@ const api = {
   openOutputFolderDialog: (): Promise<string | null> =>
     ipcRenderer.invoke('dialog:openOutputFolder'),
 
+  showItemInFolder: (filePath: string): Promise<boolean> =>
+    ipcRenderer.invoke('dialog:showItemInFolder', filePath),
+
   getDefaultAutoChartOutputDir: (): Promise<string> =>
     ipcRenderer.invoke('strum:getDefaultOutputFolder'),
 
@@ -53,6 +56,13 @@ const api = {
 
   writeSongChart: (songPath: string, chartText: string): Promise<boolean> =>
     ipcRenderer.invoke('song:writeChart', songPath, chartText),
+
+  exportSng: (
+    songPath: string,
+    metadata: Record<string, unknown>,
+    outputPath: string
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('song:exportSng', songPath, metadata, outputPath),
 
   // Album art APIs
   readAlbumArt: (songPath: string): Promise<string | null> =>
