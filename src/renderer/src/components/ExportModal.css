@@ -232,7 +232,8 @@
   font-size: 13px;
   line-height: 1.5;
   color: var(--text-secondary);
-  max-width: 420px;
+  max-width: 520px;
+  text-wrap: pretty;
 }
 
 .export-path-preview {
