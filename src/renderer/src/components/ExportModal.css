@@ -135,9 +135,9 @@
 }
 
 .export-format-card.active {
-  border-color: #3b82f6; /* Accent color */
-  background: rgba(59, 130, 246, 0.05);
-  box-shadow: 0 0 12px rgba(59, 130, 246, 0.15);
+  border-color: var(--accent-color);
+  background: var(--accent-color-transparent);
+  box-shadow: 0 0 12px var(--accent-color-transparent);
 }
 
 .export-format-card-header {
@@ -153,8 +153,8 @@
   text-transform: uppercase;
   padding: 2px 8px;
   border-radius: 99px;
-  background: #3b82f6;
-  color: #ffffff;
+  background: var(--accent-color);
+  color: #1f1a13;
 }
 
 .export-format-icon {
@@ -180,8 +180,8 @@
   gap: 12px;
   padding: 12px 16px;
   border-radius: 8px;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: rgba(240, 109, 109, 0.1);
+  border: 1px solid rgba(240, 109, 109, 0.25);
   color: var(--text-primary);
   margin-bottom: 20px;
 }
@@ -195,7 +195,7 @@
   display: block;
   font-size: 13px;
   margin-bottom: 2px;
-  color: #ef4444;
+  color: var(--danger-color);
 }
 
 .error-text p {
@@ -267,7 +267,7 @@
   font-size: 12px;
   word-break: break-all;
   white-space: pre-wrap;
-  color: #10b981; /* Green tone for path */
+  color: var(--success-color);
 }
 
 .reveal-folder-button {
@@ -301,7 +301,7 @@
   border: none;
   font-size: 11px;
   font-weight: 500;
-  color: #3b82f6;
+  color: var(--accent-color);
   cursor: pointer;
   padding: 0;
   transition: color 0.15s ease;
@@ -309,7 +309,7 @@
 }
 
 .export-reset-button:hover {
-  color: #60a5fa;
+  color: var(--accent-color-hover);
 }
 
 .export-reset-button:disabled {
@@ -337,7 +337,7 @@
   height: 36px;
   border: 3px solid rgba(255, 255, 255, 0.1);
   border-radius: 50%;
-  border-top-color: #3b82f6;
+  border-top-color: var(--accent-color);
   animation: spin 1s linear infinite;
 }
 
@@ -416,8 +416,8 @@
   gap: 12px;
   padding: 10px 14px;
   border-radius: 8px;
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px solid rgba(245, 158, 11, 0.22);
+  background: rgba(242, 166, 90, 0.08);
+  border: 1px solid rgba(242, 166, 90, 0.22);
   color: var(--text-primary);
   margin-top: 10px;
   animation: fadeIn 0.15s ease-out;
@@ -432,7 +432,7 @@
   display: block;
   font-size: 12px;
   margin-bottom: 2px;
-  color: #f59e0b; /* Amber */
+  color: var(--warning-color);
 }
 
 .warning-text p {

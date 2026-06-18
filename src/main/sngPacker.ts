@@ -198,6 +198,11 @@ export async function packSng(
   // 7. Write atomically using temporary file and write stream
   const tempPath = `${outputPath}.tmp`
   const writeStream = createWriteStream(tempPath)
+  let writeError: Error | null = null
+  const onStreamError = (err: Error): void => {
+    writeError = err
+  }
+  writeStream.on('error', onStreamError)
 
   try {
     // Write headers
@@ -208,8 +213,13 @@ export async function packSng(
 
     // Write file payloads sequentially (streaming style, low RAM profile)
     for (const entry of fileEntries) {
+      if (writeError) throw writeError
+
       const filePath = join(songDir, entry.name)
       const rawData = await readFile(filePath)
+      if (rawData.length !== entry.size) {
+        throw new Error(`File changed size during export: ${entry.name}`)
+      }
       
       // Encrypt rawData with keystream relative to each file's start (0-indexed)
       const encrypted = Buffer.from(rawData)
@@ -217,21 +227,47 @@ export async function packSng(
         encrypted[i] ^= keystream[i % 256]
       }
 
+      if (writeError) throw writeError
+
       const canWrite = writeStream.write(encrypted)
       if (!canWrite) {
-        // Wait for drain event if kernel buffers are full
-        await new Promise<void>((resolve) => {
-          writeStream.once('drain', resolve)
+        // Wait for drain event or stream error
+        await new Promise<void>((resolve, reject) => {
+          if (writeError) {
+            reject(writeError)
+            return
+          }
+          const onDrain = (): void => {
+            writeStream.off('error', onError)
+            resolve()
+          }
+          const onError = (err: Error): void => {
+            writeStream.off('drain', onDrain)
+            reject(err)
+          }
+          writeStream.once('drain', onDrain)
+          writeStream.once('error', onError)
         })
       }
     }
 
     // Wait for the stream to finish writing
     await new Promise<void>((resolve, reject) => {
-      writeStream.end(() => {
+      if (writeError) {
+        reject(writeError)
+        return
+      }
+      const onFinish = (): void => {
+        writeStream.off('error', onError)
         resolve()
-      })
-      writeStream.on('error', reject)
+      }
+      const onError = (err: Error): void => {
+        writeStream.off('finish', onFinish)
+        reject(err)
+      }
+      writeStream.once('finish', onFinish)
+      writeStream.once('error', onError)
+      writeStream.end()
     })
 
     // Rename temp file to output path (atomic swap)
@@ -247,5 +283,7 @@ export async function packSng(
       // Ignore cleanup error
     }
     throw err
+  } finally {
+    writeStream.off('error', onStreamError)
   }
 }
