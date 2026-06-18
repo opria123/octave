@@ -267,6 +267,7 @@ export interface AppSettings {
   waveformAudioSourcePath?: string // Optional audio source path used for waveform rendering (undefined = mixed)
   enableAutoChart: boolean
   autoChartOutputDir?: string
+  sngLastExportDir?: string
   betaUpdates: boolean // Opt into beta/pre-release auto-updates
   invertPianoRollVerticalScroll: boolean // Reverse vertical wheel direction in the piano roll
   hotkeys: AppHotkeys
@@ -329,6 +330,7 @@ export interface UIState {
   noteModifiers: NoteModifiers
   isPreviewFullscreen: boolean
   isSettingsModalOpen: boolean
+  isExportModalOpen: boolean
   /** Sound vocal note pitches (sine tones) while the song plays (issue #10). */
   vocalPitchPlayback: boolean
   /** Show the audio waveform overlay on the 3D note highway (issue #7). */

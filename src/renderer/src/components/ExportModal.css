@@ -1,0 +1,444 @@
+.export-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.export-modal {
+  width: min(640px, 100%);
+  max-height: min(90vh, 700px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  position: relative;
+}
+
+.export-modal-header,
+.export-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.export-modal-footer {
+  border-bottom: none;
+  border-top: 1px solid var(--border-color);
+  justify-content: flex-end;
+}
+
+.export-modal-title {
+  margin: 0;
+  font-size: 20px;
+  color: var(--text-primary);
+}
+
+.export-modal-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.export-modal-close,
+.export-modal-primary,
+.export-modal-secondary {
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.export-modal-close {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0;
+}
+
+.export-modal-primary {
+  background: var(--accent-color);
+  color: #1f1a13;
+  border-color: rgba(0, 0, 0, 0.18);
+}
+
+.export-modal-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.export-modal-close:hover,
+.export-modal-secondary:hover {
+  background: var(--bg-secondary);
+  border-color: var(--text-secondary);
+}
+
+.export-modal-primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.export-modal-body {
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.export-section {
+  margin-bottom: 24px;
+}
+
+.export-section:last-of-type {
+  margin-bottom: 0;
+}
+
+.export-section-title {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.export-formats-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.export-format-card {
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.01);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.export-format-card.active {
+  border-color: var(--accent-color);
+  background: var(--accent-color-transparent);
+  box-shadow: 0 0 12px var(--accent-color-transparent);
+}
+
+.export-format-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.export-format-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--accent-color);
+  color: #1f1a13;
+}
+
+.export-format-icon {
+  font-size: 20px;
+}
+
+.export-format-card h4 {
+  margin: 0 0 6px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.export-format-card p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.export-error-banner {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: rgba(240, 109, 109, 0.1);
+  border: 1px solid rgba(240, 109, 109, 0.25);
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+.error-icon {
+  font-size: 20px;
+  align-self: flex-start;
+}
+
+.error-text strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 2px;
+  color: var(--danger-color);
+}
+
+.error-text p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+/* Success View */
+.export-status-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 30px 20px;
+}
+
+.export-status-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  animation: scaleIn 0.3s ease-out;
+}
+
+.export-status-container h3 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.export-success-message {
+  margin: 0 0 24px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-width: 520px;
+  text-wrap: pretty;
+}
+
+.export-path-preview {
+  width: 100%;
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  text-align: left;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.export-path-code-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.export-path-preview strong {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.export-path-preview code {
+  display: block;
+  font-family: monospace;
+  font-size: 12px;
+  word-break: break-all;
+  white-space: pre-wrap;
+  color: var(--success-color);
+}
+
+.reveal-folder-button {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 6px 12px;
+  height: auto;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+/* Folder Input Label Layout */
+.export-folder-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.export-folder-label-row .settings-field-label {
+  margin-bottom: 0;
+}
+
+.export-reset-button {
+  background: none;
+  border: none;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent-color);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease;
+  text-decoration: underline;
+}
+
+.export-reset-button:hover {
+  color: var(--accent-color-hover);
+}
+
+.export-reset-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Loading Overlay */
+.export-loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  z-index: 10;
+  animation: fadeIn 0.2s ease;
+}
+
+.export-loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  border-top-color: var(--accent-color);
+  animation: spin 1s linear infinite;
+}
+
+.export-loading-overlay p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Base Modal Layout Structure (scoped to export) */
+.export-preferences-body {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.export-field-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.export-field-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.export-folder-picker {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+.export-folder-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+.export-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.export-checkbox-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-color);
+  cursor: pointer;
+}
+
+.export-warning-banner {
+  display: flex;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(242, 166, 90, 0.08);
+  border: 1px solid rgba(242, 166, 90, 0.22);
+  color: var(--text-primary);
+  margin-top: 10px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.warning-icon {
+  font-size: 18px;
+  align-self: flex-start;
+}
+
+.warning-text strong {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 2px;
+  color: var(--warning-color);
+}
+
+.warning-text p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}

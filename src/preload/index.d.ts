@@ -12,6 +12,7 @@ interface ChartEditorAPI {
   openAudioFilesDialog: () => Promise<string[]>
   openAudioFolderDialog: () => Promise<string | null>
   openOutputFolderDialog: () => Promise<string | null>
+  showItemInFolder: (filePath: string) => Promise<boolean>
   getDefaultAutoChartOutputDir: () => Promise<string>
   openLyricsFileDialog: () => Promise<{ filePath: string; content: string } | null>
 
@@ -23,6 +24,12 @@ interface ChartEditorAPI {
   readSongMidi: (songPath: string) => Promise<{ type: 'midi' | 'chart'; data: string } | null>
   writeSongMidi: (songPath: string, midiBase64: string) => Promise<boolean>
   writeSongChart: (songPath: string, chartText: string) => Promise<boolean>
+  exportSng: (
+    songPath: string,
+    metadata: Record<string, unknown>,
+    outputPath: string
+  ) => Promise<{ success: boolean; error?: string }>
+  fileExists: (filePath: string) => Promise<boolean>
 
   // Album art APIs
   readAlbumArt: (songPath: string) => Promise<string | null>

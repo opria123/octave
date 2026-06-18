@@ -1,12 +1,13 @@
 // Top toolbar with playback controls and global actions
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useProjectStore, useSettingsStore, getSongStore } from '../stores'
+import { useProjectStore, useSettingsStore, getSongStore, useUIStore } from '../stores'
 import * as audioService from '../services/audioService'
 import * as playbackController from '../services/playbackController'
 import { parseMidiBase64, parseChartFile, serializeMidiBase64, serializeChartFile } from '../utils/midiParser'
 import { validateChart, type ValidationIssue } from '../utils/chartValidation'
 import type { SongMetadata } from '../types'
 import { SettingsModal } from './SettingsModal'
+import { ExportModal } from './ExportModal'
 import './Toolbar.css'
 
 type AutoChartProgressState = {
@@ -38,6 +39,8 @@ const AUTO_CHART_STAGE_ORDER: Record<string, number> = {
 
 export function Toolbar(): React.JSX.Element {
   const { activeSongId, setLoadedFolder, addSong, setActiveSong } = useProjectStore()
+  const isExportModalOpen = useUIStore((s) => s.isExportModalOpen)
+  const setExportModalOpen = useUIStore((s) => s.setExportModalOpen)
   const {
     autosaveEnabled,
     highwaySpeed,
@@ -782,6 +785,15 @@ export function Toolbar(): React.JSX.Element {
         >
           <span className="toolbar-icon">💾</span>
           <span className="toolbar-label">Save</span>
+        </button>
+        <button
+          className="toolbar-button"
+          onClick={() => setExportModalOpen(true)}
+          disabled={!activeSongId}
+          title="Export"
+        >
+          <span className="toolbar-icon">📤</span>
+          <span className="toolbar-label">Export</span>
         </button>
       </div>
 
@@ -1722,6 +1734,7 @@ export function Toolbar(): React.JSX.Element {
       )}
 
       <SettingsModal />
+      {isExportModalOpen && <ExportModal onSaveBeforeExport={handleSave} />}
     </div>
   )
 }
