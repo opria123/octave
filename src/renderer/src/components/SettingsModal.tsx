@@ -21,6 +21,17 @@ export function SettingsModal(): React.JSX.Element | null {
   const betaUpdates = useSettingsStore((s) => s.betaUpdates)
   const invertPianoRollVerticalScroll = useSettingsStore((s) => s.invertPianoRollVerticalScroll)
   const updateSettings = useSettingsStore((s) => s.updateSettings)
+
+  const validationMinSustainGuitar = useSettingsStore((s) => s.validationMinSustainGuitar)
+  const validationMinSustainBass = useSettingsStore((s) => s.validationMinSustainBass)
+  const validationMinSustainKeys = useSettingsStore((s) => s.validationMinSustainKeys)
+  const validationMinSustainDrums = useSettingsStore((s) => s.validationMinSustainDrums)
+  const validationEnableOverlapsCheck = useSettingsStore((s) => s.validationEnableOverlapsCheck)
+  const validationEnableStarPowerCheck = useSettingsStore((s) => s.validationEnableStarPowerCheck)
+  const validationEnableDrumImpossibilityCheck = useSettingsStore((s) => s.validationEnableDrumImpossibilityCheck)
+  const validationDrumTimeThresholdMs = useSettingsStore((s) => s.validationDrumTimeThresholdMs)
+  const validationDrumCrossoverThresholdMs = useSettingsStore((s) => s.validationDrumCrossoverThresholdMs)
+
   const [recordingAction, setRecordingAction] = useState<HotkeyAction | null>(null)
   const [draftHotkeys, setDraftHotkeys] = useState<AppHotkeys>(hotkeys)
   const [draftEnableAutoChart, setDraftEnableAutoChart] = useState(enableAutoChart)
@@ -28,16 +39,42 @@ export function SettingsModal(): React.JSX.Element | null {
   const [draftBetaUpdates, setDraftBetaUpdates] = useState(betaUpdates)
   const [draftInvertPianoRollVerticalScroll, setDraftInvertPianoRollVerticalScroll] = useState(invertPianoRollVerticalScroll)
 
+  const [draftValidationMinSustainGuitar, setDraftValidationMinSustainGuitar] = useState(validationMinSustainGuitar)
+  const [draftValidationMinSustainBass, setDraftValidationMinSustainBass] = useState(validationMinSustainBass)
+  const [draftValidationMinSustainKeys, setDraftValidationMinSustainKeys] = useState(validationMinSustainKeys)
+  const [draftValidationMinSustainDrums, setDraftValidationMinSustainDrums] = useState(validationMinSustainDrums)
+  const [draftValidationEnableOverlapsCheck, setDraftValidationEnableOverlapsCheck] = useState(validationEnableOverlapsCheck)
+  const [draftValidationEnableStarPowerCheck, setDraftValidationEnableStarPowerCheck] = useState(validationEnableStarPowerCheck)
+  const [draftValidationEnableDrumImpossibilityCheck, setDraftValidationEnableDrumImpossibilityCheck] = useState(validationEnableDrumImpossibilityCheck)
+  const [draftValidationDrumTimeThresholdMs, setDraftValidationDrumTimeThresholdMs] = useState(validationDrumTimeThresholdMs)
+  const [draftValidationDrumCrossoverThresholdMs, setDraftValidationDrumCrossoverThresholdMs] = useState(validationDrumCrossoverThresholdMs)
+
   useEffect(() => {
     if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDraftHotkeys(hotkeys)
       setDraftEnableAutoChart(enableAutoChart)
       setDraftAutoChartOutputDir(autoChartOutputDir ?? '')
       setDraftBetaUpdates(betaUpdates)
       setDraftInvertPianoRollVerticalScroll(invertPianoRollVerticalScroll)
       setRecordingAction(null)
+
+      setDraftValidationMinSustainGuitar(validationMinSustainGuitar)
+      setDraftValidationMinSustainBass(validationMinSustainBass)
+      setDraftValidationMinSustainKeys(validationMinSustainKeys)
+      setDraftValidationMinSustainDrums(validationMinSustainDrums)
+      setDraftValidationEnableOverlapsCheck(validationEnableOverlapsCheck)
+      setDraftValidationEnableStarPowerCheck(validationEnableStarPowerCheck)
+      setDraftValidationEnableDrumImpossibilityCheck(validationEnableDrumImpossibilityCheck)
+      setDraftValidationDrumTimeThresholdMs(validationDrumTimeThresholdMs)
+      setDraftValidationDrumCrossoverThresholdMs(validationDrumCrossoverThresholdMs)
     }
-  }, [autoChartOutputDir, enableAutoChart, betaUpdates, hotkeys, invertPianoRollVerticalScroll, isOpen])
+  }, [
+    autoChartOutputDir, enableAutoChart, betaUpdates, hotkeys, invertPianoRollVerticalScroll, isOpen,
+    validationMinSustainGuitar, validationMinSustainBass, validationMinSustainKeys, validationMinSustainDrums,
+    validationEnableOverlapsCheck, validationEnableStarPowerCheck, validationEnableDrumImpossibilityCheck,
+    validationDrumTimeThresholdMs, validationDrumCrossoverThresholdMs
+  ])
 
   useEffect(() => {
     if (!isOpen || draftAutoChartOutputDir.trim()) return
@@ -185,6 +222,98 @@ export function SettingsModal(): React.JSX.Element | null {
               </label>
             </div>
           </section>
+          <section className="settings-preferences-group">
+            <h3 className="settings-hotkey-group-title">Validation Preferences</h3>
+            <div className="settings-preferences-body">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label className="settings-checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={draftValidationEnableOverlapsCheck}
+                      onChange={(event) => setDraftValidationEnableOverlapsCheck(event.target.checked)}
+                    />
+                    <span>Enable overlapping notes check</span>
+                  </label>
+                  <label className="settings-checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={draftValidationEnableStarPowerCheck}
+                      onChange={(event) => setDraftValidationEnableStarPowerCheck(event.target.checked)}
+                    />
+                    <span>Enable missing star power check</span>
+                  </label>
+                  <label className="settings-checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={draftValidationEnableDrumImpossibilityCheck}
+                      onChange={(event) => setDraftValidationEnableDrumImpossibilityCheck(event.target.checked)}
+                    />
+                    <span>Enable drum physical checks</span>
+                  </label>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '13px', color: '#ccc' }}>Guitar min sustain (ticks)</span>
+                    <input
+                      type="number"
+                      style={{ width: '70px', padding: '4px', background: '#2e2e3e', border: '1px solid #444', color: '#fff', borderRadius: '4px' }}
+                      value={draftValidationMinSustainGuitar}
+                      onChange={(e) => setDraftValidationMinSustainGuitar(parseInt(e.target.value, 10) || 0)}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '13px', color: '#ccc' }}>Bass min sustain (ticks)</span>
+                    <input
+                      type="number"
+                      style={{ width: '70px', padding: '4px', background: '#2e2e3e', border: '1px solid #444', color: '#fff', borderRadius: '4px' }}
+                      value={draftValidationMinSustainBass}
+                      onChange={(e) => setDraftValidationMinSustainBass(parseInt(e.target.value, 10) || 0)}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '13px', color: '#ccc' }}>Keys min sustain (ticks)</span>
+                    <input
+                      type="number"
+                      style={{ width: '70px', padding: '4px', background: '#2e2e3e', border: '1px solid #444', color: '#fff', borderRadius: '4px' }}
+                      value={draftValidationMinSustainKeys}
+                      onChange={(e) => setDraftValidationMinSustainKeys(parseInt(e.target.value, 10) || 0)}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '13px', color: '#ccc' }}>Drums min sustain (ticks)</span>
+                    <input
+                      type="number"
+                      style={{ width: '70px', padding: '4px', background: '#2e2e3e', border: '1px solid #444', color: '#fff', borderRadius: '4px' }}
+                      value={draftValidationMinSustainDrums}
+                      onChange={(e) => setDraftValidationMinSustainDrums(parseInt(e.target.value, 10) || 0)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', borderTop: '1px solid #333', marginTop: '12px', paddingTop: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '13px', color: '#ccc' }} title="Speed limit between hits on different drum pads/cymbals">Drum separation limit (ms)</span>
+                  <input
+                    type="number"
+                    style={{ width: '70px', padding: '4px', background: '#2e2e3e', border: '1px solid #444', color: '#fff', borderRadius: '4px' }}
+                    value={draftValidationDrumTimeThresholdMs}
+                    onChange={(e) => setDraftValidationDrumTimeThresholdMs(parseInt(e.target.value, 10) || 0)}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '13px', color: '#ccc' }} title="Speed limit for crossover hits (e.g. Snare to Green)">Crossover limit (ms)</span>
+                  <input
+                    type="number"
+                    style={{ width: '70px', padding: '4px', background: '#2e2e3e', border: '1px solid #444', color: '#fff', borderRadius: '4px' }}
+                    value={draftValidationDrumCrossoverThresholdMs}
+                    onChange={(e) => setDraftValidationDrumCrossoverThresholdMs(parseInt(e.target.value, 10) || 0)}
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
           {hasConflicts && (
             <div className="settings-hotkey-conflicts-banner">
               Resolve duplicate bindings before saving. Conflicting shortcuts are highlighted below.
@@ -251,7 +380,16 @@ export function SettingsModal(): React.JSX.Element | null {
                 enableAutoChart: draftEnableAutoChart,
                 autoChartOutputDir: draftAutoChartOutputDir.trim() || undefined,
                 betaUpdates: draftBetaUpdates,
-                invertPianoRollVerticalScroll: draftInvertPianoRollVerticalScroll
+                invertPianoRollVerticalScroll: draftInvertPianoRollVerticalScroll,
+                validationMinSustainGuitar: draftValidationMinSustainGuitar,
+                validationMinSustainBass: draftValidationMinSustainBass,
+                validationMinSustainKeys: draftValidationMinSustainKeys,
+                validationMinSustainDrums: draftValidationMinSustainDrums,
+                validationEnableOverlapsCheck: draftValidationEnableOverlapsCheck,
+                validationEnableStarPowerCheck: draftValidationEnableStarPowerCheck,
+                validationEnableDrumImpossibilityCheck: draftValidationEnableDrumImpossibilityCheck,
+                validationDrumTimeThresholdMs: draftValidationDrumTimeThresholdMs,
+                validationDrumCrossoverThresholdMs: draftValidationDrumCrossoverThresholdMs
               })
               if (draftBetaUpdates !== betaUpdates) {
                 void window.api.setUpdateChannel(draftBetaUpdates)

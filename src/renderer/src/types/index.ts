@@ -252,6 +252,14 @@ export interface ProjectState {
   activeSongId: string | null
 }
 
+export interface ValidationIssue {
+  severity: 'error' | 'warning'
+  message: string
+  tick?: number
+  instrument?: Instrument
+  difficulty?: Difficulty
+}
+
 // Application settings
 export interface AppSettings {
   autosaveEnabled: boolean
@@ -271,6 +279,15 @@ export interface AppSettings {
   betaUpdates: boolean // Opt into beta/pre-release auto-updates
   invertPianoRollVerticalScroll: boolean // Reverse vertical wheel direction in the piano roll
   hotkeys: AppHotkeys
+  validationMinSustainGuitar: number
+  validationMinSustainBass: number
+  validationMinSustainKeys: number
+  validationMinSustainDrums: number
+  validationEnableOverlapsCheck: boolean
+  validationEnableStarPowerCheck: boolean
+  validationEnableDrumImpossibilityCheck: boolean
+  validationDrumTimeThresholdMs: number
+  validationDrumCrossoverThresholdMs: number
 }
 
 export type HotkeyAction =
@@ -335,6 +352,7 @@ export interface UIState {
   vocalPitchPlayback: boolean
   /** Show the audio waveform overlay on the 3D note highway (issue #7). */
   showHighwayWaveform: boolean
+  validationIssues: ValidationIssue[] | null
 }
 
 export interface SelectedVenueEventRef {
