@@ -15,14 +15,21 @@ npm run dev
 
 ## Making Changes
 
-1. Fork the repository and create a branch from `master`
+> **All pull requests target the `beta` branch**, not `master`. `beta` is the
+> integration branch where changes are verified before being merged into
+> `master` for a stable release (see [Releases & Beta Testing](#releases--beta-testing)).
+
+1. Fork the repository and create a branch from `beta`
 2. Make your changes
 3. Run `npm run typecheck` and `npm run lint` to verify
 4. Commit with a descriptive message using [conventional commits](https://www.conventionalcommits.org/):
    - `feat: add pro keys velocity editing` — new feature (bumps minor version)
    - `fix: correct sustain threshold for .chart files` — bug fix (bumps patch version)
    - `refactor:`, `docs:`, `chore:` — non-release changes
-5. Open a pull request against `master`
+5. Open a pull request against `beta`
+
+CI runs `typecheck` and the test suite on every pull request; these checks must
+pass before a PR can be merged into `beta`.
 
 ## Code Style
 
@@ -83,7 +90,8 @@ it ships — no manual reinstall.
 
 ### Typical fix-verification flow
 
-1. Land the fix on the `beta` branch (`git push origin beta`).
+1. Open a pull request with the fix against `beta`. Once CI passes and it's
+   merged, the fix lands on `beta`.
 2. The beta workflow auto-versions `vX.Y.Z-beta.N`, builds all platforms, and
    publishes a GitHub **pre-release**.
 3. Affected users enable the beta toggle (or download the pre-release installer
