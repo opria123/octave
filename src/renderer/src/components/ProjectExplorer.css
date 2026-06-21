@@ -374,21 +374,17 @@
   cursor: not-allowed;
 }
 
-.explorer-refresh-button {
-  padding: 4px;
-  border-radius: 50%;
+.icon-button.explorer-refresh-button {
+  border-radius: 50% !important;
   opacity: 0.7;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
-.explorer-refresh-button:hover:not(:disabled) {
+.icon-button.explorer-refresh-button:hover:not(:disabled) {
   opacity: 1;
   background-color: rgba(255, 255, 255, 0.08);
 }
 
-.explorer-refresh-button.spinning {
+.icon-button.explorer-refresh-button.spinning {
   animation: spin 1s linear infinite;
   opacity: 0.5;
   cursor: not-allowed;
