@@ -373,3 +373,32 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.explorer-refresh-button {
+  padding: 4px;
+  border-radius: 4px;
+  opacity: 0.7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.explorer-refresh-button:hover:not(:disabled) {
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.explorer-refresh-button.spinning {
+  animation: spin 1s linear infinite;
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
