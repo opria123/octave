@@ -43,3 +43,6 @@ docs/.vitepress/cache/
 
 # Screenshot harness fixtures (local-only sample projects)
 scripts/screenshots/fixtures/
+
+# Plans
+docs/plans/

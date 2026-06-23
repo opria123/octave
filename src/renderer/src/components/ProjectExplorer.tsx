@@ -148,8 +148,17 @@ function SongItem({
 }
 
 export function ProjectExplorer(): React.JSX.Element {
-  const { loadedFolderPath, songIds, activeSongId, libraryLoadVersion, setActiveSong, setLoadedFolder, addSong, removeSong } =
-    useProjectStore()
+  const {
+    loadedFolderPath,
+    songIds,
+    activeSongId,
+    libraryLoadVersion,
+    setActiveSong,
+    setPendingActiveSong,
+    setLoadedFolder,
+    addSong,
+    removeSong
+  } = useProjectStore()
   const { lastOpenedFolder, updateSettings } = useSettingsStore()
   const [isLoading, setIsLoading] = useState(false)
   const [showNewSongDialog, setShowNewSongDialog] = useState(false)
@@ -165,7 +174,8 @@ export function ProjectExplorer(): React.JSX.Element {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_expandedFolders, _setExpandedFolders] = useState<Set<string>>(new Set())
 
-  // Load a folder's songs (shared between initial load and handleOpenFolder)
+  // Load a folder's songs (shared between initial load and handleOpenFolder).
+  // Cached metadata renders immediately while the filesystem scan validates it.
   const loadFolder = useCallback(async (folderPath: string, preferredActiveId?: string | null) => {
     const generation = ++loadGenerationRef.current
     setIsLoading(true)
@@ -240,7 +250,7 @@ export function ProjectExplorer(): React.JSX.Element {
 
       const songFolders = await window.api.scanFolder(folderPath)
       if (!isCurrentLoad()) return
-      const freshResults = await Promise.all(
+      const freshSongs = await Promise.all(
         songFolders.map(async (songFolder): Promise<CachedLibrarySong> => {
           try {
             const iniData = await window.api.readSongIni(songFolder.path)
@@ -278,7 +288,6 @@ export function ProjectExplorer(): React.JSX.Element {
         })
       )
       if (!isCurrentLoad()) return
-      const freshSongs = freshResults
       setSongAddedTimes(new Map(freshSongs.map((song) => [song.id, song.addedAt ?? 0])))
 
       const freshIds = new Set(freshSongs.map(({ id }) => id))
@@ -295,9 +304,11 @@ export function ProjectExplorer(): React.JSX.Element {
       })
       if (!isCurrentLoad()) return
 
-      const currentActiveId = useProjectStore.getState().activeSongId
-      if (preferredActiveId && freshIds.has(preferredActiveId)) {
-        setActiveSong(preferredActiveId)
+      const { activeSongId: currentActiveId, pendingActiveSongId } = useProjectStore.getState()
+      if (pendingActiveSongId) setPendingActiveSong(null)
+      const requestedActiveId = pendingActiveSongId ?? preferredActiveId
+      if (requestedActiveId && freshIds.has(requestedActiveId)) {
+        setActiveSong(requestedActiveId)
       } else if ((!currentActiveId || !freshIds.has(currentActiveId)) && freshSongs.length > 0) {
         const firstSong = organizeLibrarySongs(
           freshSongs.map(({ id, metadata }) => ({ id, name: metadata.name, artist: metadata.artist })),
@@ -308,11 +319,31 @@ export function ProjectExplorer(): React.JSX.Element {
         setActiveSong(firstSong.id)
       }
     } catch (error) {
-      if (isCurrentLoad()) console.error(`Failed to load library ${folderPath}:`, error)
+      if (!isCurrentLoad()) return
+      console.error(`Failed to load library ${folderPath}:`, error)
+      const message = error instanceof Error ? error.message : String(error)
+      try {
+        const defaultPath = await window.api.getDefaultAutoChartOutputDir()
+        if (defaultPath !== folderPath) {
+          alert(
+            `Could not open this folder: ${message}\n\nOpening the default auto-chart folder instead.`
+          )
+          updateSettings({ lastOpenedFolder: defaultPath })
+          for (const songId of useProjectStore.getState().songIds) {
+            removeSongStore(songId)
+          }
+          setLoadedFolder(defaultPath)
+        } else {
+          alert(`Could not open the default auto-chart folder: ${message}`)
+        }
+      } catch (fallbackError) {
+        console.error('Failed to open the default auto-chart folder:', fallbackError)
+        alert(`Could not open this folder: ${message}`)
+      }
     } finally {
       if (loadGenerationRef.current === generation) setIsLoading(false)
     }
-  }, [addSong, removeSong, setActiveSong, setLoadedFolder])
+  }, [addSong, removeSong, setActiveSong, setLoadedFolder, setPendingActiveSong, updateSettings])
 
   // Auto-load last opened folder on startup
   useEffect(() => {
@@ -557,6 +588,7 @@ export function ProjectExplorer(): React.JSX.Element {
   const handleOpenFolder = async (): Promise<void> => {
     try {
       setIsLoading(true)
+      setPendingActiveSong(null)
 
       // 1. Open folder dialog
       const folderPath = await window.api.openFolder()
@@ -588,6 +620,7 @@ export function ProjectExplorer(): React.JSX.Element {
     if (!loadedFolderPath) return
     try {
       setIsLoading(true)
+      setPendingActiveSong(null)
 
       // Clean up existing song stores
       const preferredActiveId = activeSongId

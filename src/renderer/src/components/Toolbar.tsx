@@ -41,7 +41,7 @@ const AUTO_CHART_STAGE_ORDER: Record<string, number> = {
 }
 
 export function Toolbar(): React.JSX.Element {
-  const { activeSongId, setLoadedFolder } = useProjectStore()
+  const { activeSongId, setLoadedFolder, setPendingActiveSong } = useProjectStore()
   const isExportModalOpen = useUIStore((s) => s.isExportModalOpen)
   const setExportModalOpen = useUIStore((s) => s.setExportModalOpen)
   const validationIssues = useUIStore((s) => s.validationIssues)
@@ -375,7 +375,7 @@ export function Toolbar(): React.JSX.Element {
   }, [updateSettings])
 
   const loadProjectFolder = useCallback(
-    async (folderPath: string): Promise<void> => {
+    (folderPath: string, preferredActiveSongId?: string): void => {
       // ProjectExplorer owns metadata-first loading and IndexedDB cache validation.
       // Updating the shared folder path triggers that loader without eagerly parsing
       // every MIDI/chart on the toolbar action path.
@@ -385,15 +385,16 @@ export function Toolbar(): React.JSX.Element {
         for (const songId of project.songIds) removeSongStore(songId)
       }
       setLoadedFolder(folderPath)
+      setPendingActiveSong(preferredActiveSongId ?? null)
     },
-    [setLoadedFolder, updateSettings]
+    [setLoadedFolder, setPendingActiveSong, updateSettings]
   )
 
   const handleOpenFolder = async (): Promise<void> => {
     try {
       const folderPath = await window.api.openFolder()
       if (!folderPath) return
-      await loadProjectFolder(folderPath)
+      loadProjectFolder(folderPath)
     } catch (error) {
       console.error('Failed to open folder:', error)
     }
@@ -459,11 +460,15 @@ export function Toolbar(): React.JSX.Element {
         }
       })
 
-      if (event.success) {
+      const newSongId = event.success && event.songFolders.length > 0
+        ? event.songFolders[0].split(/[\\/]/).pop()
+        : undefined
+
+      if (event.outputDir) {
         updateSettings({ autoChartOutputDir: event.outputDir, lastOpenedFolder: event.outputDir })
         // Optionally pull the source video for any URL inputs into their
         // resulting song folders so it shows up in the timeline / in-game.
-        if (autoChartDownloadVideo && event.urlSongFolders && event.urlSongFolders.length > 0) {
+        if (event.success && autoChartDownloadVideo && event.urlSongFolders && event.urlSongFolders.length > 0) {
           void Promise.allSettled(
             event.urlSongFolders.map((entry) =>
               window.api.downloadVideoUrl(entry.songFolder, entry.url).catch((err) => {
@@ -472,11 +477,14 @@ export function Toolbar(): React.JSX.Element {
               })
             )
           ).then(() => {
-            void loadProjectFolder(event.outputDir)
+            loadProjectFolder(event.outputDir, newSongId)
           })
         } else {
-          void loadProjectFolder(event.outputDir)
+          loadProjectFolder(event.outputDir, newSongId)
         }
+      }
+
+      if (event.success) {
         setAutoChartCloseCountdown(5)
       }
     })

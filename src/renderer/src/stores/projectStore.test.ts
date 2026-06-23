@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 let useSettingsStore: (typeof import('./projectStore'))['useSettingsStore']
+let useProjectStore: (typeof import('./projectStore'))['useProjectStore']
 
 describe('Auto-Chart settings', () => {
   beforeAll(async () => {
@@ -15,10 +16,13 @@ describe('Auto-Chart settings', () => {
         return values.size
       }
     })
-    ;({ useSettingsStore } = await import('./projectStore'))
+    ;({ useProjectStore, useSettingsStore } = await import('./projectStore'))
   })
 
-  afterEach(() => useSettingsStore.getState().resetSettings())
+  afterEach(() => {
+    useSettingsStore.getState().resetSettings()
+    useProjectStore.getState().clearProject()
+  })
 
   it('keeps reusable run preferences in the persisted settings store', () => {
     useSettingsStore.getState().updateSettings({
@@ -72,5 +76,18 @@ describe('Auto-Chart settings', () => {
         proKeys: false
       }
     })
+  })
+
+  it('keeps an auto-chart selection for an in-place refresh only', () => {
+    const project = useProjectStore.getState()
+    project.setLoadedFolder('/songs')
+    project.setPendingActiveSong('new-song')
+    project.setLoadedFolder('/songs')
+
+    expect(useProjectStore.getState().pendingActiveSongId).toBe('new-song')
+
+    useProjectStore.getState().setLoadedFolder('/other-songs')
+
+    expect(useProjectStore.getState().pendingActiveSongId).toBeNull()
   })
 })
