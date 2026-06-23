@@ -851,6 +851,7 @@ ipcMain.handle('folder:scan', async (_event, folderPath: string) => {
     }
   } catch (error) {
     console.error('Error scanning folder:', error)
+    throw error
   }
 
   return songs

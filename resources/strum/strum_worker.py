@@ -158,6 +158,25 @@ def _diagnose_basic_pitch_failure(exc: BaseException) -> None:
     )
 
 
+def _sanitize_string_to_latin1(s: str) -> str:
+    if not s:
+        return s
+    _SMART_MAP = {
+        "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'",
+        "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u201f": '"',
+        "\u2013": "-", "\u2014": "-", "\u2026": "...",
+        "\u266a": "", "\u266b": "", "\u266c": "", "\u2669": "",
+        "\xa0": " ",
+    }
+    for k, v in _SMART_MAP.items():
+        if k in s:
+            s = s.replace(k, v)
+    try:
+        return s.encode("latin-1", errors="ignore").decode("latin-1")
+    except Exception:
+        return s
+
+
 def _run_separation_subprocess(cmd: "list[str]", label: str) -> "tuple[int, int]":
     """Run a stem-separation subprocess supervised by a stall watchdog.
 
@@ -177,9 +196,10 @@ def _run_separation_subprocess(cmd: "list[str]", label: str) -> "tuple[int, int]
 
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     last_activity = time.time()
+    completed_progress = False
 
     def _pump() -> None:
-        nonlocal last_activity
+        nonlocal last_activity, completed_progress
         stream = proc.stdout
         if stream is None:
             return
@@ -191,6 +211,13 @@ def _run_separation_subprocess(cmd: "list[str]", label: str) -> "tuple[int, int]
                 if not chunk:
                     break
                 last_activity = time.time()
+                try:
+                    # Detect progress bar completion to bypass idle timeout during post-completion write.
+                    text = chunk.decode("utf-8", errors="ignore")
+                    if "100%" in text:
+                        completed_progress = True
+                except Exception:
+                    pass
                 try:
                     sys.stderr.buffer.write(chunk)
                     sys.stderr.flush()
@@ -215,7 +242,7 @@ def _run_separation_subprocess(cmd: "list[str]", label: str) -> "tuple[int, int]
                 f"{label} exceeded the {AUDIO_SEPARATION_TIMEOUT_SEC}s hard limit. "
                 "Set OCTAVE_STRUM_SEPARATION_TIMEOUT_SEC to raise it."
             )
-        if now - last_activity > AUDIO_SEPARATION_IDLE_TIMEOUT_SEC:
+        if not completed_progress and now - last_activity > AUDIO_SEPARATION_IDLE_TIMEOUT_SEC:
             proc.kill()
             raise RuntimeError(
                 f"{label} stalled (no output for {AUDIO_SEPARATION_IDLE_TIMEOUT_SEC}s) "
@@ -802,6 +829,42 @@ def build_pipeline(
                 audio_path = str(override)
             return super().detect_harmonies(audio_path, lead_phrases)
 
+        def transcribe_vocals(self, vocals_stem: Path, artist: str, title: str):
+            print(f"[OCTAVE] >>> transcribe_vocals(stem={vocals_stem.name})", file=sys.stderr, flush=True)
+            artist = _sanitize_string_to_latin1(artist)
+            title = _sanitize_string_to_latin1(title)
+            try:
+                result = super().transcribe_vocals(vocals_stem, artist, title)
+                if not result:
+                    return result
+                
+                lead = result[0] if isinstance(result, tuple) and len(result) > 0 else None
+                harm = result[1] if isinstance(result, tuple) and len(result) > 1 else None
+
+                # Sanitize all lyrics in lead/harmony phrases to prevent latin-1 crashes in MetaMessage/mido.
+                if lead:
+                    for phrase in lead:
+                        if hasattr(phrase, 'notes') and phrase.notes:
+                            for note in phrase.notes:
+                                if hasattr(note, 'lyric') and note.lyric:
+                                    note.lyric = _sanitize_string_to_latin1(note.lyric)
+                if harm:
+                    for phrase in harm:
+                        if hasattr(phrase, 'notes') and phrase.notes:
+                            for note in phrase.notes:
+                                if hasattr(note, 'lyric') and note.lyric:
+                                    note.lyric = _sanitize_string_to_latin1(note.lyric)
+
+                n = len(lead) if lead else 0
+                print(f"[OCTAVE] <<< transcribe_vocals produced {n} lead phrases", file=sys.stderr, flush=True)
+                return result
+            except Exception as exc:
+                import traceback as _tb
+                print(f"[OCTAVE] !!! transcribe_vocals EXCEPTION: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+                _tb.print_exc(file=sys.stderr)
+                sys.stderr.flush()
+                return None, None
+
         def transcribe_lyrics(self, audio_path):
             cpp_bin = os.environ.get("OCTAVE_WHISPER_CPP_BIN", "").strip()
             cpp_model = os.environ.get("OCTAVE_WHISPER_CPP_MODEL", "").strip()
@@ -945,10 +1008,7 @@ def build_pipeline(
                 "\xa0": " ",
             }
             def _sanitize_lyric(s: str) -> str:
-                for k, v in _SMART_MAP.items():
-                    if k in s:
-                        s = s.replace(k, v)
-                return s.encode("latin-1", errors="ignore").decode("latin-1")
+                return _sanitize_string_to_latin1(s)
 
             words = []
             for entry in payload.get("transcription", []):
@@ -1007,9 +1067,12 @@ def build_pipeline(
                     flags=re.IGNORECASE,
                 ).strip()
                 if artist and title:
-                    return artist.strip(), title
+                    return _sanitize_string_to_latin1(artist.strip()), _sanitize_string_to_latin1(title)
 
-            return super().parse_filename(path)
+            res = super().parse_filename(path)
+            if isinstance(res, tuple) and len(res) == 2:
+                return _sanitize_string_to_latin1(res[0]), _sanitize_string_to_latin1(res[1])
+            return res
 
         @property
         def vocals_charter(self):
@@ -1548,6 +1611,10 @@ def build_pipeline(
                 result = super().analyze_audio(audio_path, artist, title)
                 if USER_TEMPO_MAP and isinstance(result, dict):
                     result["tempo_bpm"] = round(USER_TEMPO_MAP[0][1], 3)
+                if isinstance(result, dict):
+                    for k in ("album", "year", "genre"):
+                        if k in result:
+                            result[k] = _sanitize_string_to_latin1(result[k])
                 return result
 
             logger = logging.getLogger(__name__)
@@ -1598,9 +1665,9 @@ def build_pipeline(
                 "duration_ms": int(duration_sec * 1000),
                 "duration_sec": duration_sec,
                 "preview_start_ms": int(preview_sec * 1000),
-                "album": metadata.get("album", ""),
-                "year": metadata.get("year", ""),
-                "genre": metadata.get("genre", ""),
+                "album": _sanitize_string_to_latin1(metadata.get("album", "")),
+                "year": _sanitize_string_to_latin1(metadata.get("year", "")),
+                "genre": _sanitize_string_to_latin1(metadata.get("genre", "")),
             }
 
     tracks = enabled_tracks or {}
