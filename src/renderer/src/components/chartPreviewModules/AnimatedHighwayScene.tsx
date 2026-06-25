@@ -4,7 +4,15 @@ import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { useStore } from 'zustand'
 import { getSongStore, useSettingsStore, useUIStore } from '../../stores'
-import { BASE_PIXELS_PER_TICK, TRACK_WIDTH, STRIKE_LINE_POS, HIGHWAY_LENGTH, HIT_EFFECT_TICKS, FRET_PRESS_TICKS, computeProKeysViewStart } from './constants'
+import {
+  BASE_PIXELS_PER_TICK,
+  TRACK_WIDTH,
+  STRIKE_LINE_POS,
+  HIGHWAY_LENGTH,
+  HIT_EFFECT_TICKS,
+  FRET_PRESS_TICKS,
+  computeProKeysViewStart
+} from './constants'
 import { HighwayAssetsContext } from './AssetProvider'
 import { Highway } from './Highway'
 import { Strikeline } from './Strikeline'
@@ -70,13 +78,16 @@ function getLabelTexture(instrument: string): THREE.CanvasTexture {
 }
 
 // Track label sprite rendered above the strikeline
-function TrackLabel({ instrument, offsetX }: { instrument: string; offsetX: number }): React.JSX.Element {
+function TrackLabel({
+  instrument,
+  offsetX
+}: {
+  instrument: string
+  offsetX: number
+}): React.JSX.Element {
   const tex = useMemo(() => getLabelTexture(instrument), [instrument])
   return (
-    <sprite
-      position={[offsetX, 0.08, STRIKE_LINE_POS + 0.55]}
-      scale={[1.6, 0.3, 1]}
-    >
+    <sprite position={[offsetX, 0.08, STRIKE_LINE_POS + 0.55]} scale={[1.6, 0.3, 1]}>
       <spriteMaterial map={tex} transparent depthWrite={false} sizeAttenuation />
     </sprite>
   )
@@ -112,11 +123,18 @@ export function AnimatedHighwayScene({
   const pixelsPerTick = BASE_PIXELS_PER_TICK
 
   // Audio waveform overlay texture (issue #7) — built once per song/audio load.
-  const waveform = useHighwayWaveform(songId, tempoEvents, showHighwayWaveform, waveformAudioSourcePath)
+  const waveform = useHighwayWaveform(
+    songId,
+    tempoEvents,
+    showHighwayWaveform,
+    waveformAudioSourcePath
+  )
 
   // ALL animation state in refs — never triggers React re-renders
   const hitEffectsRef = useRef<HitEffect[]>([])
-  const pressedLanesRef = useRef<Map<string, { index: number; startTick: number; endTick: number }[]>>(new Map())
+  const pressedLanesRef = useRef<
+    Map<string, { index: number; startTick: number; endTick: number }[]>
+  >(new Map())
   const hitNotesRef = useRef<Set<string>>(new Set())
   const wasPlayingRef = useRef<boolean>(false)
 
@@ -212,13 +230,11 @@ export function AnimatedHighwayScene({
   )
 
   // Pre-filter pro keys notes once instead of every render inside the map
-  const proKeysNotes = useMemo(
-    () => notes.filter((n) => n.instrument === 'proKeys'),
-    [notes]
-  )
+  const proKeysNotes = useMemo(() => notes.filter((n) => n.instrument === 'proKeys'), [notes])
   // Fit all tracks within a max width budget based on camera FOV
   const maxTotalWidth = 8.5 // fits comfortably in FOV 55 at camera distance 3
-  const naturalWidth = instrumentArray.length * TRACK_WIDTH + (instrumentArray.length - 1) * highwayGap
+  const naturalWidth =
+    instrumentArray.length * TRACK_WIDTH + (instrumentArray.length - 1) * highwayGap
   const layoutScale = naturalWidth > maxTotalWidth ? maxTotalWidth / naturalWidth : 1
   // Use unscaled positions inside a scaled group
   const startX = -naturalWidth / 2 + TRACK_WIDTH / 2
@@ -227,14 +243,17 @@ export function AnimatedHighwayScene({
     <group scale={[leftyFlip ? -layoutScale : layoutScale, 1, 1]} renderOrder={20}>
       {instrumentArray.map((instrument, index) => {
         const offsetX = startX + index * (TRACK_WIDTH + highwayGap)
-        const instrumentType = instrument === 'drums' ? 'drums'
-          : instrument === 'proKeys' ? 'proKeys'
-          : (instrument === 'proGuitar' || instrument === 'proBass') ? 'proGuitar'
-          : 'guitar'
+        const instrumentType =
+          instrument === 'drums'
+            ? 'drums'
+            : instrument === 'proKeys'
+              ? 'proKeys'
+              : instrument === 'proGuitar' || instrument === 'proBass'
+                ? 'proGuitar'
+                : 'guitar'
         // Pro keys sliding viewport: compute which keys are currently visible
-        const proKeysViewStart = instrument === 'proKeys'
-          ? computeProKeysViewStart(proKeysNotes, currentTick)
-          : undefined
+        const proKeysViewStart =
+          instrument === 'proKeys' ? computeProKeysViewStart(proKeysNotes, currentTick) : undefined
         const instrumentKey = `${instrument}-${index}`
 
         // Compute fret presses from ref — sustain notes keep frets active until endTick
@@ -267,11 +286,32 @@ export function AnimatedHighwayScene({
         return (
           <group key={instrument}>
             <TrackLabel instrument={instrument} offsetX={offsetX} />
-            <Highway instrumentType={instrumentType} offsetX={offsetX} currentTick={currentTick} pixelsPerTick={pixelsPerTick} proKeysViewStart={proKeysViewStart} />
-            <Strikeline instrumentType={instrumentType} offsetX={offsetX} pressedLanes={lanePresses} />
-            <BeatGrid currentTick={currentTick} ticksPerBeat={480} pixelsPerTick={pixelsPerTick} offsetX={offsetX} tempoEvents={tempoEvents} />
+            <Highway
+              instrumentType={instrumentType}
+              offsetX={offsetX}
+              currentTick={currentTick}
+              pixelsPerTick={pixelsPerTick}
+              proKeysViewStart={proKeysViewStart}
+            />
+            <Strikeline
+              instrumentType={instrumentType}
+              offsetX={offsetX}
+              pressedLanes={lanePresses}
+            />
+            <BeatGrid
+              currentTick={currentTick}
+              ticksPerBeat={480}
+              pixelsPerTick={pixelsPerTick}
+              offsetX={offsetX}
+              tempoEvents={tempoEvents}
+            />
             {waveform && (
-              <HighwayWaveform waveform={waveform} currentTick={currentTick} pixelsPerTick={pixelsPerTick} offsetX={offsetX} />
+              <HighwayWaveform
+                waveform={waveform}
+                currentTick={currentTick}
+                pixelsPerTick={pixelsPerTick}
+                offsetX={offsetX}
+              />
             )}
             <StarPowerOverlay
               phrases={starPowerPhrases}
@@ -408,11 +448,23 @@ function StarPowerOverlay({
           <group key={`sp-edges-${sp.id}`}>
             <mesh position={[offsetX, 0.004, startZ]}>
               <boxGeometry args={[TRACK_WIDTH * 0.98, 0.003, 0.03]} />
-              <meshBasicMaterial color={isSelected ? '#33EEFF' : '#00CCFF'} transparent opacity={isSelected ? 0.9 : 0.6} depthWrite={false} toneMapped={false} />
+              <meshBasicMaterial
+                color={isSelected ? '#33EEFF' : '#00CCFF'}
+                transparent
+                opacity={isSelected ? 0.9 : 0.6}
+                depthWrite={false}
+                toneMapped={false}
+              />
             </mesh>
             <mesh position={[offsetX, 0.004, endZ]}>
               <boxGeometry args={[TRACK_WIDTH * 0.98, 0.003, 0.03]} />
-              <meshBasicMaterial color={isSelected ? '#33EEFF' : '#00CCFF'} transparent opacity={isSelected ? 0.9 : 0.6} depthWrite={false} toneMapped={false} />
+              <meshBasicMaterial
+                color={isSelected ? '#33EEFF' : '#00CCFF'}
+                transparent
+                opacity={isSelected ? 0.9 : 0.6}
+                depthWrite={false}
+                toneMapped={false}
+              />
             </mesh>
           </group>
         )
@@ -495,11 +547,23 @@ function SoloOverlay({
           <group key={`solo-edges-${s.id}`}>
             <mesh position={[offsetX, 0.003, startZ]}>
               <boxGeometry args={[TRACK_WIDTH * 0.98, 0.003, 0.03]} />
-              <meshBasicMaterial color={isSelected ? '#FFEA00' : '#FFD700'} transparent opacity={isSelected ? 0.9 : 0.6} depthWrite={false} toneMapped={false} />
+              <meshBasicMaterial
+                color={isSelected ? '#FFEA00' : '#FFD700'}
+                transparent
+                opacity={isSelected ? 0.9 : 0.6}
+                depthWrite={false}
+                toneMapped={false}
+              />
             </mesh>
             <mesh position={[offsetX, 0.003, endZ]}>
               <boxGeometry args={[TRACK_WIDTH * 0.98, 0.003, 0.03]} />
-              <meshBasicMaterial color={isSelected ? '#FFEA00' : '#FFD700'} transparent opacity={isSelected ? 0.9 : 0.6} depthWrite={false} toneMapped={false} />
+              <meshBasicMaterial
+                color={isSelected ? '#FFEA00' : '#FFD700'}
+                transparent
+                opacity={isSelected ? 0.9 : 0.6}
+                depthWrite={false}
+                toneMapped={false}
+              />
             </mesh>
           </group>
         )

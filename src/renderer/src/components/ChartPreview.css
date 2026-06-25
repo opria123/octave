@@ -331,7 +331,13 @@
   height: 100%;
   position: relative;
   overflow: hidden;
-  background: linear-gradient(90deg, rgba(20, 40, 60, 0.3) 0%, transparent 5%, transparent 95%, rgba(20, 40, 60, 0.3) 100%);
+  background: linear-gradient(
+    90deg,
+    rgba(20, 40, 60, 0.3) 0%,
+    transparent 5%,
+    transparent 95%,
+    rgba(20, 40, 60, 0.3) 100%
+  );
 }
 
 .venue-state-overlay {
@@ -386,7 +392,9 @@
   bottom: 6px;
   width: 4px;
   background: linear-gradient(180deg, #14b8a6 0%, #0ea5e9 50%, #14b8a6 100%);
-  box-shadow: 0 0 15px #0ea5e9, 0 0 30px rgba(14, 165, 233, 0.5);
+  box-shadow:
+    0 0 15px #0ea5e9,
+    0 0 30px rgba(14, 165, 233, 0.5);
   border-radius: 2px;
   z-index: 2;
 }
@@ -396,12 +404,17 @@
   min-width: 0;
   padding: 0;
   box-sizing: border-box;
-  transition: background 0.1s ease, outline 0.1s ease, box-shadow 0.1s ease;
+  transition:
+    background 0.1s ease,
+    outline 0.1s ease,
+    box-shadow 0.1s ease;
 }
 
 /* Currently being sung */
 .vocal-phrase.current {
-  box-shadow: 0 0 20px rgba(14, 184, 166, 0.7), 0 4px 15px rgba(14, 165, 233, 0.5);
+  box-shadow:
+    0 0 20px rgba(14, 184, 166, 0.7),
+    0 4px 15px rgba(14, 165, 233, 0.5);
 }
 
 /* Already sung - faded out */

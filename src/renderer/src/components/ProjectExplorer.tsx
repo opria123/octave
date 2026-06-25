@@ -35,19 +35,24 @@ function useAlbumArt(folderPath: string): string | null {
 
     // Load from disk
     let mounted = true
-    window.api.readAlbumArt(folderPath).then((url) => {
-      if (mounted) {
-        albumArtCache.set(folderPath, url)
-        setArtUrl(url)
-      }
-    }).catch(() => {
-      if (mounted) {
-        albumArtCache.set(folderPath, null)
-        setArtUrl(null)
-      }
-    })
+    window.api
+      .readAlbumArt(folderPath)
+      .then((url) => {
+        if (mounted) {
+          albumArtCache.set(folderPath, url)
+          setArtUrl(url)
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          albumArtCache.set(folderPath, null)
+          setArtUrl(null)
+        }
+      })
 
-    return () => { mounted = false }
+    return () => {
+      mounted = false
+    }
   }, [folderPath])
 
   return artUrl
@@ -80,14 +85,20 @@ function SongItem({
     }
     document.addEventListener('mousedown', handleClose)
     document.addEventListener('keydown', handleKey)
-    return () => { document.removeEventListener('mousedown', handleClose); document.removeEventListener('keydown', handleKey) }
+    return () => {
+      document.removeEventListener('mousedown', handleClose)
+      document.removeEventListener('keydown', handleKey)
+    }
   }, [contextMenu])
 
   return (
     <div
       className={`explorer-song-item ${isActive ? 'active' : ''}`}
       onClick={onSelect}
-      onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY }) }}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        setContextMenu({ x: e.clientX, y: e.clientY })
+      }}
     >
       <div className="explorer-song-icon">
         {artUrl ? (
@@ -104,15 +115,46 @@ function SongItem({
         <div className="explorer-song-artist">{song.artist}</div>
       </div>
       <div className="explorer-song-instruments">
-        {song.hasDrums && <span className="instrument-badge" title="Drums">🥁</span>}
-        {song.hasGuitar && <span className="instrument-badge" title="Guitar">🎸</span>}
-        {song.hasBass && <span className="instrument-badge" title="Bass">🎸</span>}
-        {song.hasVocals && <span className="instrument-badge" title="Vocals">🎤</span>}
-        {song.hasKeys && <span className="instrument-badge" title="Keys">🎹</span>}
+        {song.hasDrums && (
+          <span className="instrument-badge" title="Drums">
+            🥁
+          </span>
+        )}
+        {song.hasGuitar && (
+          <span className="instrument-badge" title="Guitar">
+            🎸
+          </span>
+        )}
+        {song.hasBass && (
+          <span className="instrument-badge" title="Bass">
+            🎸
+          </span>
+        )}
+        {song.hasVocals && (
+          <span className="instrument-badge" title="Vocals">
+            🎤
+          </span>
+        )}
+        {song.hasKeys && (
+          <span className="instrument-badge" title="Keys">
+            🎹
+          </span>
+        )}
       </div>
       {contextMenu && (
-        <div ref={menuRef} className="song-context-menu" style={{ top: contextMenu.y, left: contextMenu.x }}>
-          <button className="song-context-menu-item delete" onClick={(e) => { e.stopPropagation(); setContextMenu(null); onDelete() }}>
+        <div
+          ref={menuRef}
+          className="song-context-menu"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          <button
+            className="song-context-menu-item delete"
+            onClick={(e) => {
+              e.stopPropagation()
+              setContextMenu(null)
+              onDelete()
+            }}
+          >
             🗑️ Delete Song
           </button>
         </div>
@@ -122,8 +164,15 @@ function SongItem({
 }
 
 export function ProjectExplorer(): React.JSX.Element {
-  const { loadedFolderPath, songIds, activeSongId, setActiveSong, setLoadedFolder, addSong, removeSong } =
-    useProjectStore()
+  const {
+    loadedFolderPath,
+    songIds,
+    activeSongId,
+    setActiveSong,
+    setLoadedFolder,
+    addSong,
+    removeSong
+  } = useProjectStore()
   const { lastOpenedFolder, updateSettings } = useSettingsStore()
   const [isLoading, setIsLoading] = useState(false)
   const [showNewSongDialog, setShowNewSongDialog] = useState(false)
@@ -133,62 +182,72 @@ export function ProjectExplorer(): React.JSX.Element {
   const [_expandedFolders, _setExpandedFolders] = useState<Set<string>>(new Set())
 
   // Load a folder's songs (shared between initial load and handleOpenFolder)
-  const loadFolder = useCallback(async (folderPath: string) => {
-    const songFolders = await window.api.scanFolder(folderPath)
-    console.log('Found songs:', songFolders)
+  const loadFolder = useCallback(
+    async (folderPath: string) => {
+      const songFolders = await window.api.scanFolder(folderPath)
+      console.log('Found songs:', songFolders)
 
-    // Only clear state after we've confirmed the scan succeeded
-    setLoadedFolder(folderPath)
+      // Only clear state after we've confirmed the scan succeeded
+      setLoadedFolder(folderPath)
 
-    for (const songFolder of songFolders) {
-      try {
-        const iniData = await window.api.readSongIni(songFolder.path)
+      for (const songFolder of songFolders) {
+        try {
+          const iniData = await window.api.readSongIni(songFolder.path)
 
-        // Spread the full ini so per-instrument difficulties (diff_drums,
-        // diff_guitar, ...) and any other custom keys flow through to the
-        // PropertyPanel; then override the typed display fields.
-        const metadata: SongMetadata = {
-          ...(iniData ?? {}),
-          name: (iniData?.name as string) || (iniData?.title as string) || songFolder.name,
-          artist: (iniData?.artist as string) || 'Unknown Artist',
-          album: iniData?.album as string,
-          genre: iniData?.genre as string,
-          year: iniData?.year !== undefined ? String(iniData.year) : undefined,
-          charter: iniData?.charter as string,
-          song_length: iniData?.song_length as number,
-          preview_start_time: iniData?.preview_start_time as number
+          // Spread the full ini so per-instrument difficulties (diff_drums,
+          // diff_guitar, ...) and any other custom keys flow through to the
+          // PropertyPanel; then override the typed display fields.
+          const metadata: SongMetadata = {
+            ...(iniData ?? {}),
+            name: (iniData?.name as string) || (iniData?.title as string) || songFolder.name,
+            artist: (iniData?.artist as string) || 'Unknown Artist',
+            album: iniData?.album as string,
+            genre: iniData?.genre as string,
+            year: iniData?.year !== undefined ? String(iniData.year) : undefined,
+            charter: iniData?.charter as string,
+            song_length: iniData?.song_length as number,
+            preview_start_time: iniData?.preview_start_time as number
+          }
+
+          const store = getSongStore(songFolder.id)
+          store.getState().loadSong({
+            id: songFolder.id,
+            folderPath: songFolder.path,
+            metadata,
+            notes: [],
+            vocalNotes: [],
+            vocalPhrases: [],
+            starPowerPhrases: [],
+            soloSections: [],
+            laneMarkers: [],
+            songSections: [],
+            tempoEvents: [{ tick: 0, bpm: 120 }],
+            timeSignatures: [{ tick: 0, numerator: 4, denominator: 4 }],
+            videoSync: { clips: [], offsetMs: 0, trimStartMs: 0, trimEndMs: 0 },
+            audioSync: { clips: [] },
+            venueTrack: {
+              autoGenerated: false,
+              lighting: [],
+              postProcessing: [],
+              stage: [],
+              performer: [],
+              cameraCuts: []
+            },
+            sourceFormat: 'midi'
+          })
+
+          addSong(songFolder.id)
+        } catch (error) {
+          console.error(`Failed to load song ${songFolder.name}:`, error)
         }
-
-        const store = getSongStore(songFolder.id)
-        store.getState().loadSong({
-          id: songFolder.id,
-          folderPath: songFolder.path,
-          metadata,
-          notes: [],
-          vocalNotes: [],
-          vocalPhrases: [],
-          starPowerPhrases: [],
-          soloSections: [],
-          laneMarkers: [],
-          songSections: [],
-          tempoEvents: [{ tick: 0, bpm: 120 }],
-          timeSignatures: [{ tick: 0, numerator: 4, denominator: 4 }],
-          videoSync: { clips: [], offsetMs: 0, trimStartMs: 0, trimEndMs: 0 },
-          audioSync: { clips: [] },
-          venueTrack: { autoGenerated: false, lighting: [], postProcessing: [], stage: [], performer: [], cameraCuts: [] },
-          sourceFormat: 'midi'
-        })
-
-        addSong(songFolder.id)
-      } catch (error) {
-        console.error(`Failed to load song ${songFolder.name}:`, error)
       }
-    }
 
-    if (songFolders.length > 0) {
-      setActiveSong(songFolders[0].id)
-    }
-  }, [setLoadedFolder, addSong, setActiveSong])
+      if (songFolders.length > 0) {
+        setActiveSong(songFolders[0].id)
+      }
+    },
+    [setLoadedFolder, addSong, setActiveSong]
+  )
 
   // Auto-load last opened folder on startup
   useEffect(() => {
@@ -224,12 +283,24 @@ export function ProjectExplorer(): React.JSX.Element {
     try {
       const result = await window.api.readSongMidi(folderPath)
       if (!result) {
-        console.warn(`[loadSongMidi] No MIDI/chart data returned for "${folderPath}" — notes.mid/notes.chart may be missing or invalid`)
+        console.warn(
+          `[loadSongMidi] No MIDI/chart data returned for "${folderPath}" — notes.mid/notes.chart may be missing or invalid`
+        )
         return
       }
 
-      const { notes, vocalNotes, vocalPhrases, starPowerPhrases, soloSections, laneMarkers, songSections, venueTrack, tempoEvents, timeSignatures } =
-        result.type === 'chart' ? parseChartFile(result.data) : parseMidiBase64(result.data)
+      const {
+        notes,
+        vocalNotes,
+        vocalPhrases,
+        starPowerPhrases,
+        soloSections,
+        laneMarkers,
+        songSections,
+        venueTrack,
+        tempoEvents,
+        timeSignatures
+      } = result.type === 'chart' ? parseChartFile(result.data) : parseMidiBase64(result.data)
       const store = getSongStore(songId)
       const currentState = store.getState()
 
@@ -262,7 +333,16 @@ export function ProjectExplorer(): React.JSX.Element {
       if (chartedInstruments.size > 0) {
         // Set visible instruments to those that have notes
         const newState = store.getState()
-        const allInstruments: Instrument[] = ['drums', 'guitar', 'bass', 'vocals', 'keys', 'proKeys', 'proGuitar', 'proBass']
+        const allInstruments: Instrument[] = [
+          'drums',
+          'guitar',
+          'bass',
+          'vocals',
+          'keys',
+          'proKeys',
+          'proGuitar',
+          'proBass'
+        ]
         for (const inst of allInstruments) {
           const isCharted = chartedInstruments.has(inst)
           const isVisible = newState.visibleInstruments.has(inst)
@@ -357,11 +437,19 @@ export function ProjectExplorer(): React.JSX.Element {
 
       const venueTrack: Partial<VenueTrackData> = {
         autoGenerated: !!venueJson.autoGenerated,
-        lighting: Array.isArray(venueJson.lighting) ? venueJson.lighting as VenueTrackData['lighting'] : [],
-        postProcessing: Array.isArray(venueJson.postProcessing) ? venueJson.postProcessing as VenueTrackData['postProcessing'] : [],
-        stage: Array.isArray(venueJson.stage) ? venueJson.stage as VenueTrackData['stage'] : [],
-        performer: Array.isArray(venueJson.performer) ? venueJson.performer as VenueTrackData['performer'] : [],
-        cameraCuts: Array.isArray(venueJson.cameraCuts) ? venueJson.cameraCuts as VenueTrackData['cameraCuts'] : []
+        lighting: Array.isArray(venueJson.lighting)
+          ? (venueJson.lighting as VenueTrackData['lighting'])
+          : [],
+        postProcessing: Array.isArray(venueJson.postProcessing)
+          ? (venueJson.postProcessing as VenueTrackData['postProcessing'])
+          : [],
+        stage: Array.isArray(venueJson.stage) ? (venueJson.stage as VenueTrackData['stage']) : [],
+        performer: Array.isArray(venueJson.performer)
+          ? (venueJson.performer as VenueTrackData['performer'])
+          : [],
+        cameraCuts: Array.isArray(venueJson.cameraCuts)
+          ? (venueJson.cameraCuts as VenueTrackData['cameraCuts'])
+          : []
       }
 
       store.getState().updateVenueTrack(venueTrack)
@@ -394,12 +482,12 @@ export function ProjectExplorer(): React.JSX.Element {
       }
       const venueTrack = getSongStore(activeSongId).getState().song.venueTrack
       if (
-        !venueTrack.autoGenerated
-        && venueTrack.lighting.length === 0
-        && venueTrack.postProcessing.length === 0
-        && venueTrack.stage.length === 0
-        && venueTrack.performer.length === 0
-        && venueTrack.cameraCuts.length === 0
+        !venueTrack.autoGenerated &&
+        venueTrack.lighting.length === 0 &&
+        venueTrack.postProcessing.length === 0 &&
+        venueTrack.stage.length === 0 &&
+        venueTrack.performer.length === 0 &&
+        venueTrack.cameraCuts.length === 0
       ) {
         await loadVenueTrack(activeSongId, folderPath)
       }
@@ -455,7 +543,11 @@ export function ProjectExplorer(): React.JSX.Element {
     if (!name || !loadedFolderPath) return
 
     try {
-      const result = await window.api.createSongFolder(loadedFolderPath, name, newSongAudioPath ?? undefined)
+      const result = await window.api.createSongFolder(
+        loadedFolderPath,
+        name,
+        newSongAudioPath ?? undefined
+      )
       if (!result) return
 
       // Initialize the song store with defaults
@@ -475,7 +567,14 @@ export function ProjectExplorer(): React.JSX.Element {
         timeSignatures: [{ tick: 0, numerator: 4, denominator: 4 }],
         videoSync: { clips: [], offsetMs: 0, trimStartMs: 0, trimEndMs: 0 },
         audioSync: { clips: [] },
-        venueTrack: { autoGenerated: false, lighting: [], postProcessing: [], stage: [], performer: [], cameraCuts: [] },
+        venueTrack: {
+          autoGenerated: false,
+          lighting: [],
+          postProcessing: [],
+          stage: [],
+          performer: [],
+          cameraCuts: []
+        },
         sourceFormat: 'midi'
       })
 
@@ -504,7 +603,9 @@ export function ProjectExplorer(): React.JSX.Element {
     if (!result) return
     await audioService.loadAudio(activeSongId, folderPath)
     const sources = audioService.getAudioSources(activeSongId)
-    const source = sources.find((entry) => entry.filePath === result.filePath) ?? sources.find((entry) => entry.filename === result.filename)
+    const source =
+      sources.find((entry) => entry.filePath === result.filePath) ??
+      sources.find((entry) => entry.filename === result.filename)
     store.getState().updateAudioSync({
       clips: [
         ...store.getState().song.audioSync.clips,
@@ -520,7 +621,11 @@ export function ProjectExplorer(): React.JSX.Element {
     })
   }
 
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string; folderPath: string } | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{
+    id: string
+    name: string
+    folderPath: string
+  } | null>(null)
 
   const handleDeleteSong = (songId: string): void => {
     const store = getSongStore(songId)
@@ -561,10 +666,20 @@ export function ProjectExplorer(): React.JSX.Element {
           <span>Explorer</span>
         </span>
         <div className="panel-header-actions">
-          <button className="icon-button" onClick={handleImportAudio} title="Import Audio" disabled={!activeSongId}>
+          <button
+            className="icon-button"
+            onClick={handleImportAudio}
+            title="Import Audio"
+            disabled={!activeSongId}
+          >
             🔊
           </button>
-          <button className="icon-button" onClick={() => loadedFolderPath ? setShowNewSongDialog(true) : undefined} title="New Song" disabled={!loadedFolderPath}>
+          <button
+            className="icon-button"
+            onClick={() => (loadedFolderPath ? setShowNewSongDialog(true) : undefined)}
+            title="New Song"
+            disabled={!loadedFolderPath}
+          >
             +
           </button>
           <button className="icon-button" onClick={handleOpenFolder} title="Open Folder">
@@ -599,9 +714,7 @@ export function ProjectExplorer(): React.JSX.Element {
               ) : (
                 <div className="explorer-empty">
                   <span>No songs found</span>
-                  <span className="explorer-empty-hint">
-                    Add folders containing song.ini files
-                  </span>
+                  <span className="explorer-empty-hint">Add folders containing song.ini files</span>
                 </div>
               )}
             </div>
@@ -644,7 +757,13 @@ export function ProjectExplorer(): React.JSX.Element {
 
       {/* New Song Dialog */}
       {showNewSongDialog && (
-        <div className="new-song-dialog-overlay" onClick={() => { setShowNewSongDialog(false); setNewSongAudioPath(null) }}>
+        <div
+          className="new-song-dialog-overlay"
+          onClick={() => {
+            setShowNewSongDialog(false)
+            setNewSongAudioPath(null)
+          }}
+        >
           <div className="new-song-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="new-song-dialog-title">New Song</div>
             <label className="new-song-dialog-label">Song Name</label>
@@ -670,7 +789,13 @@ export function ProjectExplorer(): React.JSX.Element {
               </button>
             </div>
             <div className="new-song-dialog-actions">
-              <button className="new-song-dialog-btn cancel" onClick={() => { setShowNewSongDialog(false); setNewSongAudioPath(null) }}>
+              <button
+                className="new-song-dialog-btn cancel"
+                onClick={() => {
+                  setShowNewSongDialog(false)
+                  setNewSongAudioPath(null)
+                }}
+              >
                 Cancel
               </button>
               <button

@@ -56,7 +56,20 @@ export interface AutoChartRunOptions {
    */
   stemSongs?: Array<{
     name?: string
-    stems: Partial<Record<'drums' | 'bass' | 'vocals' | 'other' | 'guitar' | 'piano' | 'vocalsHarm2' | 'vocalsHarm3' | 'crowd', string>>
+    stems: Partial<
+      Record<
+        | 'drums'
+        | 'bass'
+        | 'vocals'
+        | 'other'
+        | 'guitar'
+        | 'piano'
+        | 'vocalsHarm2'
+        | 'vocalsHarm3'
+        | 'crowd',
+        string
+      >
+    >
     extras?: string[]
   }>
   urls: string[]
@@ -146,4 +159,3 @@ export interface AutoChartRunResult {
    */
   urlSongFolders?: Array<{ url: string; songFolder: string }>
 }
-

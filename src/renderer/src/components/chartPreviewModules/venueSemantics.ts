@@ -6,7 +6,15 @@ import type {
   VenuePerformerEvent
 } from '../../types'
 
-export type VenuePerformerTarget = 'guitar' | 'bass' | 'drums' | 'vocals' | 'keys' | 'all' | 'crowd' | 'other'
+export type VenuePerformerTarget =
+  | 'guitar'
+  | 'bass'
+  | 'drums'
+  | 'vocals'
+  | 'keys'
+  | 'all'
+  | 'crowd'
+  | 'other'
 
 export type VenueLightingSemantic = {
   rawType: string
@@ -46,12 +54,15 @@ function performerTargetFromText(value: string): VenuePerformerTarget {
   if (value.includes('drum')) return 'drums'
   if (value.includes('vocal')) return 'vocals'
   if (value.includes('keys')) return 'keys'
-  if (value.includes('crowd') || value.includes('stagedive') || value.includes('crowdsurf')) return 'crowd'
+  if (value.includes('crowd') || value.includes('stagedive') || value.includes('crowdsurf'))
+    return 'crowd'
   if (value.includes('all') || value.includes('front')) return 'all'
   return 'other'
 }
 
-export function normalizeVenueLightingEvent(event: VenueLightingEvent | null): VenueLightingSemantic | null {
+export function normalizeVenueLightingEvent(
+  event: VenueLightingEvent | null
+): VenueLightingSemantic | null {
   if (!event) return null
   const rawType = event.type
   const cue = normalizeText(event.type)
@@ -65,7 +76,9 @@ export function normalizeVenueLightingEvent(event: VenueLightingEvent | null): V
   return { rawType, mood }
 }
 
-export function normalizeVenuePostProcessingEvent(event: VenuePostProcessingEvent | null): VenuePostProcessingSemantic | null {
+export function normalizeVenuePostProcessingEvent(
+  event: VenuePostProcessingEvent | null
+): VenuePostProcessingSemantic | null {
   if (!event) return null
   const rawType = event.type
   const effectName = normalizeText(event.type)
@@ -75,8 +88,10 @@ export function normalizeVenuePostProcessingEvent(event: VenuePostProcessingEven
   else if (effectName.includes('negative')) effect = 'negative'
   else if (effectName.includes('sepia')) effect = 'sepia'
   else if (effectName.includes('bw') || effectName.includes('desat')) effect = 'desaturate'
-  else if (effectName.includes('posterize') || effectName.includes('photocopy')) effect = 'posterize'
-  else if (effectName.includes('security') || effectName.includes('shitty_tv')) effect = 'security_cam'
+  else if (effectName.includes('posterize') || effectName.includes('photocopy'))
+    effect = 'posterize'
+  else if (effectName.includes('security') || effectName.includes('shitty_tv'))
+    effect = 'security_cam'
 
   return { rawType, effect }
 }
@@ -89,12 +104,15 @@ export function normalizeVenueStageEvent(event: VenueStageEvent): VenueStageSema
   if (effectName.includes('fogon')) effect = 'fog_on'
   else if (effectName.includes('fogoff')) effect = 'fog_off'
   else if (effectName.includes('bonusfx')) effect = 'bonus_fx'
-  else if (effectName === 'first' || effectName === 'next' || effectName === 'prev') effect = 'sequence'
+  else if (effectName === 'first' || effectName === 'next' || effectName === 'prev')
+    effect = 'sequence'
 
   return { rawEffect, effect }
 }
 
-export function normalizeVenueCameraCutEvent(event: VenueCameraCutEvent | null): VenueCameraSemantic | null {
+export function normalizeVenueCameraCutEvent(
+  event: VenueCameraCutEvent | null
+): VenueCameraSemantic | null {
   if (!event) return null
   const rawSubject = event.subject
   const subject = normalizeText(event.subject)
@@ -102,8 +120,10 @@ export function normalizeVenueCameraCutEvent(event: VenueCameraCutEvent | null):
 
   let framing: VenueCameraSemantic['framing'] = 'default'
   if (subject.includes('all_far') || subject.includes('behind')) framing = 'wide'
-  else if (subject.includes('all_near') || subject.includes('_near') || subject.includes('_np')) framing = 'near'
-  else if (subject.includes('closeup') || subject.includes('_cls') || subject.includes('_cam')) framing = 'closeup'
+  else if (subject.includes('all_near') || subject.includes('_near') || subject.includes('_np'))
+    framing = 'near'
+  else if (subject.includes('closeup') || subject.includes('_cls') || subject.includes('_cam'))
+    framing = 'closeup'
 
   return { rawSubject, target, framing }
 }
@@ -118,20 +138,30 @@ export function normalizeVenuePerformerEvent(event: VenuePerformerEvent): VenueP
   if (typeName.includes('spot')) cue = 'spotlight'
   else if (typeName.includes('sing')) cue = 'singalong'
 
-  const target = performerName ? performerTargetFromText(performerName) : performerTargetFromText(typeName)
+  const target = performerName
+    ? performerTargetFromText(performerName)
+    : performerTargetFromText(typeName)
 
   return { rawType, rawPerformer, cue, target }
 }
 
 export function getVenuePerformerTargetLabel(target: VenuePerformerTarget): string {
   switch (target) {
-    case 'guitar': return 'Guitar'
-    case 'bass': return 'Bass'
-    case 'drums': return 'Drums'
-    case 'vocals': return 'Vocals'
-    case 'keys': return 'Keys'
-    case 'all': return 'All'
-    case 'crowd': return 'Crowd'
-    default: return 'Other'
+    case 'guitar':
+      return 'Guitar'
+    case 'bass':
+      return 'Bass'
+    case 'drums':
+      return 'Drums'
+    case 'vocals':
+      return 'Vocals'
+    case 'keys':
+      return 'Keys'
+    case 'all':
+      return 'All'
+    case 'crowd':
+      return 'Crowd'
+    default:
+      return 'Other'
   }
 }

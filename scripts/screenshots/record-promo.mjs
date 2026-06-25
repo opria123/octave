@@ -50,9 +50,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 async function probeDurationSec(filePath) {
   if (!ffmpegPath) return 0
   return new Promise((resolve) => {
-    const child = spawn(ffmpegPath, ['-hide_banner', '-i', filePath], { stdio: ['ignore', 'ignore', 'pipe'] })
+    const child = spawn(ffmpegPath, ['-hide_banner', '-i', filePath], {
+      stdio: ['ignore', 'ignore', 'pipe']
+    })
     let stderr = ''
-    child.stderr?.on('data', (chunk) => { stderr += String(chunk) })
+    child.stderr?.on('data', (chunk) => {
+      stderr += String(chunk)
+    })
     child.on('close', () => {
       const m = stderr.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/)
       if (!m) return resolve(0)
@@ -84,10 +88,17 @@ async function runTour(page, captureClock) {
   // ~12s: open the stems mixer popover, then close.
   const stemBtn = page.locator('.stem-mixer-button')
   if (await stemBtn.count()) {
-    await stemBtn.first().click().catch(() => {})
+    await stemBtn
+      .first()
+      .click()
+      .catch(() => {})
     await page.waitForTimeout(4000)
     const close = page.locator('.stem-mixer-close')
-    if (await close.count()) await close.first().click().catch(() => {})
+    if (await close.count())
+      await close
+        .first()
+        .click()
+        .catch(() => {})
   } else {
     await page.waitForTimeout(4000)
   }
@@ -158,19 +169,31 @@ function startCapture(rawPath, region) {
   const h = Math.floor(region.height / 2) * 2
   const args = [
     '-hide_banner',
-    '-loglevel', 'warning',
+    '-loglevel',
+    'warning',
     '-y',
-    '-f', 'gdigrab',
-    '-framerate', String(FRAME_RATE),
-    '-draw_mouse', '0',
-    '-offset_x', String(region.x),
-    '-offset_y', String(region.y),
-    '-video_size', `${w}x${h}`,
-    '-i', 'desktop',
-    '-c:v', 'libx264',
-    '-preset', 'ultrafast',
-    '-pix_fmt', 'yuv420p',
-    '-crf', '20',
+    '-f',
+    'gdigrab',
+    '-framerate',
+    String(FRAME_RATE),
+    '-draw_mouse',
+    '0',
+    '-offset_x',
+    String(region.x),
+    '-offset_y',
+    String(region.y),
+    '-video_size',
+    `${w}x${h}`,
+    '-i',
+    'desktop',
+    '-c:v',
+    'libx264',
+    '-preset',
+    'ultrafast',
+    '-pix_fmt',
+    'yuv420p',
+    '-crf',
+    '20',
     rawPath
   ]
   console.log('[promo] capture:', ffmpegPath, args.join(' '))
@@ -194,11 +217,19 @@ async function stopCapture(child) {
       child.stdin?.write('q')
       child.stdin?.end()
     } catch {
-      try { child.kill('SIGINT') } catch { /* noop */ }
+      try {
+        child.kill('SIGINT')
+      } catch {
+        /* noop */
+      }
     }
     setTimeout(() => {
       if (!child.killed && child.exitCode === null) {
-        try { child.kill('SIGTERM') } catch { /* noop */ }
+        try {
+          child.kill('SIGTERM')
+        } catch {
+          /* noop */
+        }
       }
     }, 4000)
     setTimeout(finish, 8000)
@@ -246,7 +277,9 @@ async function main() {
 
   // Re-maximize after the reload (renderer can resize on first mount).
   const region = await maximizeWindow(app)
-  console.log(`[promo] capture region: ${region.width}x${region.height} @ (${region.x},${region.y})`)
+  console.log(
+    `[promo] capture region: ${region.width}x${region.height} @ (${region.x},${region.y})`
+  )
 
   // Pin OCTAVE on top so gdigrab doesn't capture whatever else the user has
   // open in the same screen region. Windows refuses cross-process focus
@@ -267,7 +300,9 @@ async function main() {
   const timing = await runTour(page, captureClock)
   console.log(`[promo] Tour finished in ${((Date.now() - tourStart) / 1000).toFixed(1)}s.`)
   if (timing.pressedAtSec !== null) {
-    console.log(`[promo] Space pressed at capture t=${timing.pressedAtSec.toFixed(2)}s — audio aligned there.`)
+    console.log(
+      `[promo] Space pressed at capture t=${timing.pressedAtSec.toFixed(2)}s — audio aligned there.`
+    )
   }
 
   console.log('[promo] Stopping capture…')
@@ -298,19 +333,31 @@ async function main() {
   await fsp.rm(OUTPUT_PATH, { force: true })
   await runFfmpeg([
     '-y',
-    '-i', rawPath,
-    '-i', songOgg,
-    '-filter_complex', filter,
-    '-map', '0:v:0',
-    '-map', '[a]',
-    '-c:v', 'libx264',
-    '-preset', 'medium',
-    '-crf', '22',
-    '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac',
-    '-b:a', '192k',
+    '-i',
+    rawPath,
+    '-i',
+    songOgg,
+    '-filter_complex',
+    filter,
+    '-map',
+    '0:v:0',
+    '-map',
+    '[a]',
+    '-c:v',
+    'libx264',
+    '-preset',
+    'medium',
+    '-crf',
+    '22',
+    '-pix_fmt',
+    'yuv420p',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '192k',
     '-shortest',
-    '-movflags', '+faststart',
+    '-movflags',
+    '+faststart',
     OUTPUT_PATH
   ])
 

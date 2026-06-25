@@ -1,7 +1,14 @@
 // Timeline editor for background media and venue authoring
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { useProjectStore, useUIStore, getSongStore } from '../stores'
-import { tickToSeconds, secondsToTick, getAudioDuration, getAudioSources, getAudioBufferForPath, onAudioLoaded } from '../services/audioService'
+import {
+  tickToSeconds,
+  secondsToTick,
+  getAudioDuration,
+  getAudioSources,
+  getAudioBufferForPath,
+  onAudioLoaded
+} from '../services/audioService'
 import * as audioService from '../services/audioService'
 import type {
   VideoSync,
@@ -32,27 +39,64 @@ const TIMELINE_LABEL_WIDTH = 120
 // Exhaustive RB3/YARG lighting cue list
 const LIGHTING_PRESETS = [
   // Keyframed cues
-  'verse', 'chorus', 'dischord', 'manual_cool', 'manual_warm', 'stomp',
+  'verse',
+  'chorus',
+  'dischord',
+  'manual_cool',
+  'manual_warm',
+  'stomp',
   // Automatic cues
-  'blackout_fast', 'blackout_slow', 'blackout_spot', 'bre',
-  'flare_fast', 'flare_slow', 'frenzy', 'harmony', 'intro',
-  'loop_cool', 'loop_warm', 'searchlights',
-  'silhouettes', 'silhouettes_spot',
-  'strobe_fast', 'strobe_slow', 'sweep'
+  'blackout_fast',
+  'blackout_slow',
+  'blackout_spot',
+  'bre',
+  'flare_fast',
+  'flare_slow',
+  'frenzy',
+  'harmony',
+  'intro',
+  'loop_cool',
+  'loop_warm',
+  'searchlights',
+  'silhouettes',
+  'silhouettes_spot',
+  'strobe_fast',
+  'strobe_slow',
+  'sweep'
 ]
 
 // Exhaustive RB3 post-processing effect list
 const POST_PROCESSING_PRESETS = [
-  'ProFilm_a.pp', 'ProFilm_b.pp', 'ProFilm_mirror_a.pp', 'ProFilm_psychedelic_blue_red.pp',
-  'bloom.pp', 'bright.pp',
-  'clean_trails.pp', 'video_trails.pp', 'flicker_trails.pp', 'desat_posterize_trails.pp', 'space_woosh.pp',
-  'contrast_a.pp', 'desat_blue.pp',
-  'film_16mm.pp', 'film_b+w.pp', 'film_blue_filter.pp',
-  'film_contrast.pp', 'film_contrast_blue.pp', 'film_contrast_green.pp', 'film_contrast_red.pp',
-  'film_sepia_ink.pp', 'film_silvertone.pp',
-  'horror_movie_special.pp', 'photo_negative.pp', 'photocopy.pp', 'posterize.pp',
+  'ProFilm_a.pp',
+  'ProFilm_b.pp',
+  'ProFilm_mirror_a.pp',
+  'ProFilm_psychedelic_blue_red.pp',
+  'bloom.pp',
+  'bright.pp',
+  'clean_trails.pp',
+  'video_trails.pp',
+  'flicker_trails.pp',
+  'desat_posterize_trails.pp',
+  'space_woosh.pp',
+  'contrast_a.pp',
+  'desat_blue.pp',
+  'film_16mm.pp',
+  'film_b+w.pp',
+  'film_blue_filter.pp',
+  'film_contrast.pp',
+  'film_contrast_blue.pp',
+  'film_contrast_green.pp',
+  'film_contrast_red.pp',
+  'film_sepia_ink.pp',
+  'film_silvertone.pp',
+  'horror_movie_special.pp',
+  'photo_negative.pp',
+  'photocopy.pp',
+  'posterize.pp',
   'shitty_tv.pp',
-  'video_a.pp', 'video_bw.pp', 'video_security.pp'
+  'video_a.pp',
+  'video_bw.pp',
+  'video_security.pp'
 ]
 
 const STAGE_PRESETS = ['FogOn', 'FogOff', 'bonusfx', 'bonusfx_optional', 'first', 'next', 'prev']
@@ -60,47 +104,110 @@ const STAGE_PRESETS = ['FogOn', 'FogOff', 'bonusfx', 'bonusfx_optional', 'first'
 // Exhaustive RB3 camera cut list (coop + directed)
 const CAMERA_CUT_PRESETS = [
   // One-character coop cuts
-  'coop_g_behind', 'coop_g_near', 'coop_g_closeup_hand', 'coop_g_closeup_head',
-  'coop_b_behind', 'coop_b_near', 'coop_b_closeup_hand', 'coop_b_closeup_head',
-  'coop_d_behind', 'coop_d_near', 'coop_d_closeup_hand', 'coop_d_closeup_head',
-  'coop_v_behind', 'coop_v_near', 'coop_v_closeup',
-  'coop_k_behind', 'coop_k_near', 'coop_k_closeup_hand', 'coop_k_closeup_head',
+  'coop_g_behind',
+  'coop_g_near',
+  'coop_g_closeup_hand',
+  'coop_g_closeup_head',
+  'coop_b_behind',
+  'coop_b_near',
+  'coop_b_closeup_hand',
+  'coop_b_closeup_head',
+  'coop_d_behind',
+  'coop_d_near',
+  'coop_d_closeup_hand',
+  'coop_d_closeup_head',
+  'coop_v_behind',
+  'coop_v_near',
+  'coop_v_closeup',
+  'coop_k_behind',
+  'coop_k_near',
+  'coop_k_closeup_hand',
+  'coop_k_closeup_head',
   // Two-character coop cuts
-  'coop_gv_behind', 'coop_gv_near', 'coop_gk_behind', 'coop_gk_near',
-  'coop_bg_behind', 'coop_bg_near', 'coop_bd_near',
-  'coop_bv_behind', 'coop_bv_near', 'coop_bk_behind', 'coop_bk_near',
-  'coop_dg_near', 'coop_dv_near',
-  'coop_kv_behind', 'coop_kv_near',
+  'coop_gv_behind',
+  'coop_gv_near',
+  'coop_gk_behind',
+  'coop_gk_near',
+  'coop_bg_behind',
+  'coop_bg_near',
+  'coop_bd_near',
+  'coop_bv_behind',
+  'coop_bv_near',
+  'coop_bk_behind',
+  'coop_bk_near',
+  'coop_dg_near',
+  'coop_dv_near',
+  'coop_kv_behind',
+  'coop_kv_near',
   // Three-character coop cuts
-  'coop_front_behind', 'coop_front_near',
+  'coop_front_behind',
+  'coop_front_near',
   // Full-band coop cuts
-  'coop_all_behind', 'coop_all_far', 'coop_all_near',
+  'coop_all_behind',
+  'coop_all_far',
+  'coop_all_near',
   // Directed cuts – full band
-  'directed_all', 'directed_all_cam', 'directed_all_lt', 'directed_all_yeah',
-  'directed_bre', 'directed_brej', 'directed_crowd',
+  'directed_all',
+  'directed_all_cam',
+  'directed_all_lt',
+  'directed_all_yeah',
+  'directed_bre',
+  'directed_brej',
+  'directed_crowd',
   // Directed cuts – guitarist
-  'directed_guitar', 'directed_guitar_np', 'directed_guitar_cls',
-  'directed_guitar_cam_pr', 'directed_guitar_cam_pt', 'directed_crowd_g',
+  'directed_guitar',
+  'directed_guitar_np',
+  'directed_guitar_cls',
+  'directed_guitar_cam_pr',
+  'directed_guitar_cam_pt',
+  'directed_crowd_g',
   // Directed cuts – bassist
-  'directed_bass', 'directed_bass_np', 'directed_bass_cam', 'directed_bass_cls', 'directed_crowd_b',
+  'directed_bass',
+  'directed_bass_np',
+  'directed_bass_cam',
+  'directed_bass_cls',
+  'directed_crowd_b',
   // Directed cuts – drummer
-  'directed_drums', 'directed_drums_lt', 'directed_drums_np', 'directed_drums_pnt', 'directed_drums_kd',
+  'directed_drums',
+  'directed_drums_lt',
+  'directed_drums_np',
+  'directed_drums_pnt',
+  'directed_drums_kd',
   // Directed cuts – vocalist
-  'directed_vocals', 'directed_vocals_np', 'directed_vocals_cls',
-  'directed_vocals_cam_pr', 'directed_vocals_cam_pt',
-  'directed_stagedive', 'directed_crowdsurf',
+  'directed_vocals',
+  'directed_vocals_np',
+  'directed_vocals_cls',
+  'directed_vocals_cam_pr',
+  'directed_vocals_cam_pt',
+  'directed_stagedive',
+  'directed_crowdsurf',
   // Directed cuts – keys
-  'directed_keys', 'directed_keys_np', 'directed_keys_cam',
+  'directed_keys',
+  'directed_keys_np',
+  'directed_keys_cam',
   // Directed cuts – two characters
-  'directed_duo_guitar', 'directed_duo_bass', 'directed_duo_drums', 'directed_duo_kv',
-  'directed_duo_gb', 'directed_duo_kg', 'directed_duo_kb'
+  'directed_duo_guitar',
+  'directed_duo_bass',
+  'directed_duo_drums',
+  'directed_duo_kv',
+  'directed_duo_gb',
+  'directed_duo_kg',
+  'directed_duo_kb'
 ]
 
 const PERFORMER_TYPE_PRESETS = ['spotlight', 'singalong']
 const PERFORMER_TARGET_PRESETS = ['guitar', 'bass', 'drums', 'vocals', 'keys']
 
-type VenueLaneKey = keyof Pick<VenueTrackData, 'lighting' | 'postProcessing' | 'stage' | 'cameraCuts' | 'performer'>
-type VenueEvent = VenueLightingEvent | VenuePostProcessingEvent | VenueStageEvent | VenueCameraCutEvent | VenuePerformerEvent
+type VenueLaneKey = keyof Pick<
+  VenueTrackData,
+  'lighting' | 'postProcessing' | 'stage' | 'cameraCuts' | 'performer'
+>
+type VenueEvent =
+  | VenueLightingEvent
+  | VenuePostProcessingEvent
+  | VenueStageEvent
+  | VenueCameraCutEvent
+  | VenuePerformerEvent
 
 type VenueTrackProps = {
   laneKey: VenueLaneKey
@@ -168,9 +275,15 @@ function getVenueLaneLabel(lane: VenueLaneKey): string {
 }
 
 function TimelineRuler({
-  duration, scrollX, zoom, width
+  duration,
+  scrollX,
+  zoom,
+  width
 }: {
-  duration: number; scrollX: number; zoom: number; width: number
+  duration: number
+  scrollX: number
+  zoom: number
+  width: number
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -226,7 +339,12 @@ const WAVEFORM_MAX_COLUMNS = 6000
 // fills its parent clip. Recomputes only when the buffer, size, or the clip's
 // source window changes — horizontal dragging (scrollX) doesn't trigger it.
 function WaveformCanvas({
-  buffer, width, height, sourceStartMs, durationMs, color
+  buffer,
+  width,
+  height,
+  sourceStartMs,
+  durationMs,
+  color
 }: {
   buffer: AudioBuffer
   width: number
@@ -252,9 +370,8 @@ function WaveformCanvas({
     const data = buffer.getChannelData(0)
     const sr = buffer.sampleRate
     const startSample = Math.max(0, Math.floor((sourceStartMs / 1000) * sr))
-    const durSamples = durationMs > 0
-      ? Math.floor((durationMs / 1000) * sr)
-      : data.length - startSample
+    const durSamples =
+      durationMs > 0 ? Math.floor((durationMs / 1000) * sr) : data.length - startSample
     const endSample = Math.min(data.length, startSample + Math.max(0, durSamples))
     const usable = Math.max(1, endSample - startSample)
     const samplesPerCol = usable / cols
@@ -285,16 +402,30 @@ function WaveformCanvas({
 }
 
 function AudioTrack({
-  songId, scrollX, zoom, width, clips, selectedClipId, onSelectClip, onMoveClip
+  songId,
+  scrollX,
+  zoom,
+  width,
+  clips,
+  selectedClipId,
+  onSelectClip,
+  onMoveClip
 }: {
-  songId: string; scrollX: number; zoom: number; width: number
+  songId: string
+  scrollX: number
+  zoom: number
+  width: number
   clips: AudioClip[]
   selectedClipId: string | null
   onSelectClip: (id: string | null) => void
   onMoveClip: (clipId: string, newStartMs: number) => void
 }): React.JSX.Element {
   const [sources, setSources] = useState(() => getAudioSources(songId))
-  const [dragInfo, setDragInfo] = useState<{ clipId: string; startX: number; origStartMs: number } | null>(null)
+  const [dragInfo, setDragInfo] = useState<{
+    clipId: string
+    startX: number
+    origStartMs: number
+  } | null>(null)
   const pps = VIDEO_EDITOR_CONFIG.pixelsPerSecond * zoom
   const ppm = pps / 1000
 
@@ -304,18 +435,26 @@ function AudioTrack({
     return onAudioLoaded(songId, sync)
   }, [songId])
 
-  const getClipDurationMs = useCallback((clip: AudioClip): number => {
-    if (clip.durationMs > 0) return clip.durationMs
-    const source = sources.find((entry) => entry.filePath === clip.filePath) ?? sources.find((entry) => entry.filename === clip.filename)
-    if (!source) return 0
-    return Math.max(0, Math.round(source.duration * 1000) - clip.sourceStartMs)
-  }, [sources])
+  const getClipDurationMs = useCallback(
+    (clip: AudioClip): number => {
+      if (clip.durationMs > 0) return clip.durationMs
+      const source =
+        sources.find((entry) => entry.filePath === clip.filePath) ??
+        sources.find((entry) => entry.filename === clip.filename)
+      if (!source) return 0
+      return Math.max(0, Math.round(source.duration * 1000) - clip.sourceStartMs)
+    },
+    [sources]
+  )
 
-  const handleClipMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>, clip: AudioClip) => {
-    e.stopPropagation()
-    onSelectClip(clip.id)
-    setDragInfo({ clipId: clip.id, startX: e.clientX, origStartMs: clip.startMs })
-  }, [onSelectClip])
+  const handleClipMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>, clip: AudioClip) => {
+      e.stopPropagation()
+      onSelectClip(clip.id)
+      setDragInfo({ clipId: clip.id, startX: e.clientX, origStartMs: clip.startMs })
+    },
+    [onSelectClip]
+  )
 
   useEffect(() => {
     if (!dragInfo) return
@@ -349,45 +488,61 @@ function AudioTrack({
 
   const trackHeight = Math.max(
     VIDEO_EDITOR_CONFIG.waveformHeight,
-    8 + (Math.max(0, laidOutClips.reduce((max, item) => Math.max(max, item.row), 0)) + 1) * AUDIO_CLIP_ROW_GAP
+    8 +
+      (Math.max(
+        0,
+        laidOutClips.reduce((max, item) => Math.max(max, item.row), 0)
+      ) +
+        1) *
+        AUDIO_CLIP_ROW_GAP
   )
 
   return (
     <div className="audio-track" style={{ minHeight: trackHeight }}>
-      <div className="audio-track-label"><span>Audio</span></div>
+      <div className="audio-track-label">
+        <span>Audio</span>
+      </div>
       <div className="audio-track-timeline" style={{ width, minHeight: trackHeight }}>
-        {laidOutClips.length > 0 && laidOutClips.map(({ clip, durationMs, row }) => {
-          const left = clip.startMs * ppm - scrollX
-          const clipWidth = Math.max(24, durationMs * ppm)
-          const buffer = getAudioBufferForPath(songId, clip.filePath)
-          return (
-            <div
-              key={clip.id}
-              className={`audio-clip ${selectedClipId === clip.id ? 'selected' : ''} ${dragInfo?.clipId === clip.id ? 'dragging' : ''}`}
-              style={{ left, width: clipWidth, top: 4 + row * AUDIO_CLIP_ROW_GAP, height: AUDIO_CLIP_HEIGHT }}
-              onMouseDown={(e) => handleClipMouseDown(e, clip)}
-              onClick={(e) => {
-                e.stopPropagation()
-                onSelectClip(clip.id)
-              }}
-              title={`${clip.filename} at ${(clip.startMs / 1000).toFixed(2)}s`}
-            >
-              {buffer && (
-                <WaveformCanvas
-                  buffer={buffer}
-                  width={clipWidth}
-                  height={AUDIO_CLIP_HEIGHT}
-                  sourceStartMs={clip.sourceStartMs}
-                  durationMs={durationMs}
-                  color="rgba(150, 200, 255, 0.85)"
-                />
-              )}
-              <span className="audio-clip-name">{clip.filename}</span>
-            </div>
-          )
-        })}
+        {laidOutClips.length > 0 &&
+          laidOutClips.map(({ clip, durationMs, row }) => {
+            const left = clip.startMs * ppm - scrollX
+            const clipWidth = Math.max(24, durationMs * ppm)
+            const buffer = getAudioBufferForPath(songId, clip.filePath)
+            return (
+              <div
+                key={clip.id}
+                className={`audio-clip ${selectedClipId === clip.id ? 'selected' : ''} ${dragInfo?.clipId === clip.id ? 'dragging' : ''}`}
+                style={{
+                  left,
+                  width: clipWidth,
+                  top: 4 + row * AUDIO_CLIP_ROW_GAP,
+                  height: AUDIO_CLIP_HEIGHT
+                }}
+                onMouseDown={(e) => handleClipMouseDown(e, clip)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSelectClip(clip.id)
+                }}
+                title={`${clip.filename} at ${(clip.startMs / 1000).toFixed(2)}s`}
+              >
+                {buffer && (
+                  <WaveformCanvas
+                    buffer={buffer}
+                    width={clipWidth}
+                    height={AUDIO_CLIP_HEIGHT}
+                    sourceStartMs={clip.sourceStartMs}
+                    durationMs={durationMs}
+                    color="rgba(150, 200, 255, 0.85)"
+                  />
+                )}
+                <span className="audio-clip-name">{clip.filename}</span>
+              </div>
+            )
+          })}
         {laidOutClips.length === 0 && (
-          <div className="audio-track-empty"><span>No audio clips on timeline</span></div>
+          <div className="audio-track-empty">
+            <span>No audio clips on timeline</span>
+          </div>
         )}
       </div>
     </div>
@@ -395,22 +550,40 @@ function AudioTrack({
 }
 
 function VideoTrack({
-  videoPath, clips, scrollX, zoom, width,
-  selectedClipId, onSelectClip, onMoveClip
+  videoPath,
+  clips,
+  scrollX,
+  zoom,
+  width,
+  selectedClipId,
+  onSelectClip,
+  onMoveClip
 }: {
-  videoPath?: string; clips: VideoClip[]; scrollX: number; zoom: number; width: number
-  selectedClipId: string | null; onSelectClip: (id: string | null) => void
+  videoPath?: string
+  clips: VideoClip[]
+  scrollX: number
+  zoom: number
+  width: number
+  selectedClipId: string | null
+  onSelectClip: (id: string | null) => void
   onMoveClip: (id: string, newStartMs: number) => void
 }): React.JSX.Element {
-  const [dragInfo, setDragInfo] = useState<{ clipId: string; startX: number; origMs: number } | null>(null)
+  const [dragInfo, setDragInfo] = useState<{
+    clipId: string
+    startX: number
+    origMs: number
+  } | null>(null)
   const pps = VIDEO_EDITOR_CONFIG.pixelsPerSecond * zoom
   const ppm = pps / 1000
 
-  const handleClipMouseDown = useCallback((e: React.MouseEvent, clip: VideoClip) => {
-    e.stopPropagation()
-    onSelectClip(clip.id)
-    setDragInfo({ clipId: clip.id, startX: e.clientX, origMs: clip.startMs })
-  }, [onSelectClip])
+  const handleClipMouseDown = useCallback(
+    (e: React.MouseEvent, clip: VideoClip) => {
+      e.stopPropagation()
+      onSelectClip(clip.id)
+      setDragInfo({ clipId: clip.id, startX: e.clientX, origMs: clip.startMs })
+    },
+    [onSelectClip]
+  )
 
   useEffect(() => {
     if (!dragInfo) return
@@ -429,28 +602,35 @@ function VideoTrack({
 
   return (
     <div className="video-track">
-      <div className="video-track-label"><span>Video</span></div>
+      <div className="video-track-label">
+        <span>Video</span>
+      </div>
       <div className="video-track-timeline" style={{ width }} onClick={() => onSelectClip(null)}>
-        {videoPath && clips.length > 0 ? clips.map((clip) => {
-          const clipX = clip.startMs * ppm - scrollX
-          const clipW = Math.max(10, clip.durationMs * ppm)
-          return (
-            <div
-              key={clip.id}
-              className={`video-clip ${clip.id === selectedClipId ? 'selected' : ''} ${dragInfo?.clipId === clip.id ? 'dragging' : ''}`}
-              style={{ left: clipX, width: clipW }}
-              onMouseDown={(e) => handleClipMouseDown(e, clip)}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="video-clip-content">
-                <span className="video-clip-name">
-                  {(clip.sourceStartMs / 1000).toFixed(1)}s - {((clip.sourceStartMs + clip.durationMs) / 1000).toFixed(1)}s
-                </span>
+        {videoPath && clips.length > 0 ? (
+          clips.map((clip) => {
+            const clipX = clip.startMs * ppm - scrollX
+            const clipW = Math.max(10, clip.durationMs * ppm)
+            return (
+              <div
+                key={clip.id}
+                className={`video-clip ${clip.id === selectedClipId ? 'selected' : ''} ${dragInfo?.clipId === clip.id ? 'dragging' : ''}`}
+                style={{ left: clipX, width: clipW }}
+                onMouseDown={(e) => handleClipMouseDown(e, clip)}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="video-clip-content">
+                  <span className="video-clip-name">
+                    {(clip.sourceStartMs / 1000).toFixed(1)}s -{' '}
+                    {((clip.sourceStartMs + clip.durationMs) / 1000).toFixed(1)}s
+                  </span>
+                </div>
               </div>
-            </div>
-          )
-        }) : (
-          <div className="video-track-empty"><span>No video loaded. Use Import File or Import URL.</span></div>
+            )
+          })
+        ) : (
+          <div className="video-track-empty">
+            <span>No video loaded. Use Import File or Import URL.</span>
+          </div>
         )}
       </div>
     </div>
@@ -490,57 +670,82 @@ function VenueTrack({
   getEventLabel,
   getEventDuration
 }: VenueTrackProps): React.JSX.Element {
-  const [dragInfo, setDragInfo] = useState<{ eventId: string; startX: number; originSeconds: number } | null>(null)
-  const [resizeInfo, setResizeInfo] = useState<{ eventId: string; startX: number; originTick: number; originDuration: number } | null>(null)
-  const [selectionBox, setSelectionBox] = useState<{ startX: number; currentX: number } | null>(null)
+  const [dragInfo, setDragInfo] = useState<{
+    eventId: string
+    startX: number
+    originSeconds: number
+  } | null>(null)
+  const [resizeInfo, setResizeInfo] = useState<{
+    eventId: string
+    startX: number
+    originTick: number
+    originDuration: number
+  } | null>(null)
+  const [selectionBox, setSelectionBox] = useState<{ startX: number; currentX: number } | null>(
+    null
+  )
   const [stackPicker, setStackPicker] = useState<StackPicker | null>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
   const dragMovedRef = useRef(false)
   const pps = VIDEO_EDITOR_CONFIG.pixelsPerSecond * zoom
 
-  const getEventLeft = useCallback((event: VenueEvent): number => {
-    return tickToSeconds(event.tick, tempoEvents) * pps - scrollX
-  }, [tempoEvents, pps, scrollX])
+  const getEventLeft = useCallback(
+    (event: VenueEvent): number => {
+      return tickToSeconds(event.tick, tempoEvents) * pps - scrollX
+    },
+    [tempoEvents, pps, scrollX]
+  )
 
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>, event: VenueEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    dragMovedRef.current = false
-    // Find all events whose left edge is within STACK_THRESHOLD_PX of this event
-    const thisLeft = getEventLeft(event)
-    const stacked = events.filter((other) => Math.abs(getEventLeft(other) - thisLeft) < STACK_THRESHOLD_PX)
-    if (stacked.length > 1) {
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>, event: VenueEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      dragMovedRef.current = false
+      // Find all events whose left edge is within STACK_THRESHOLD_PX of this event
+      const thisLeft = getEventLeft(event)
+      const stacked = events.filter(
+        (other) => Math.abs(getEventLeft(other) - thisLeft) < STACK_THRESHOLD_PX
+      )
+      if (stacked.length > 1) {
+        onSelectEvent(event.id)
+        // Show stack picker instead of immediately selecting
+        const rect = timelineRef.current?.getBoundingClientRect()
+        const px = e.clientX - (rect?.left ?? 0)
+        const py = e.clientY - (rect?.top ?? 0)
+        setStackPicker({ x: px, y: py, events: stacked })
+        return
+      }
       onSelectEvent(event.id)
-      // Show stack picker instead of immediately selecting
+      setDragInfo({
+        eventId: event.id,
+        startX: e.clientX,
+        originSeconds: tickToSeconds(event.tick, tempoEvents)
+      })
+    },
+    [onSelectEvent, tempoEvents, events, getEventLeft]
+  )
+
+  const handleLaneMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (e.target !== e.currentTarget) return
       const rect = timelineRef.current?.getBoundingClientRect()
-      const px = e.clientX - (rect?.left ?? 0)
-      const py = e.clientY - (rect?.top ?? 0)
-      setStackPicker({ x: px, y: py, events: stacked })
-      return
-    }
-    onSelectEvent(event.id)
-    setDragInfo({
-      eventId: event.id,
-      startX: e.clientX,
-      originSeconds: tickToSeconds(event.tick, tempoEvents)
-    })
-  }, [onSelectEvent, tempoEvents, events, getEventLeft])
+      const startX = e.clientX - (rect?.left ?? 0)
+      setStackPicker(null)
+      const next = { startX, currentX: startX }
+      setSelectionBox(next)
+      onSharedSelectionBoxChange(next)
+    },
+    [onSharedSelectionBoxChange]
+  )
 
-  const handleLaneMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target !== e.currentTarget) return
-    const rect = timelineRef.current?.getBoundingClientRect()
-    const startX = e.clientX - (rect?.left ?? 0)
-    setStackPicker(null)
-    const next = { startX, currentX: startX }
-    setSelectionBox(next)
-    onSharedSelectionBoxChange(next)
-  }, [onSharedSelectionBoxChange])
-
-  const handlePickerSelect = useCallback((event: VenueEvent) => {
-    setStackPicker(null)
-    onSelectEvent(event.id)
-  }, [onSelectEvent])
+  const handlePickerSelect = useCallback(
+    (event: VenueEvent) => {
+      setStackPicker(null)
+      onSelectEvent(event.id)
+    },
+    [onSelectEvent]
+  )
 
   // Close picker only when clicking outside this track
   useEffect(() => {
@@ -609,7 +814,11 @@ function VenueTrack({
         }
 
         const inRange = events
-          .filter((event) => event.tick >= Math.min(startTick, endTick) && event.tick <= Math.max(startTick, endTick))
+          .filter(
+            (event) =>
+              event.tick >= Math.min(startTick, endTick) &&
+              event.tick <= Math.max(startTick, endTick)
+          )
           .sort((a, b) => a.tick - b.tick)
 
         onSelectEvent(inRange.length > 0 ? inRange[0].id : null)
@@ -624,7 +833,17 @@ function VenueTrack({
       window.removeEventListener('mousemove', handleMove)
       window.removeEventListener('mouseup', handleUp)
     }
-  }, [events, laneKey, onSelectEvent, onSelectRange, onSharedSelectionBoxChange, pps, scrollX, selectionBox, tempoEvents])
+  }, [
+    events,
+    laneKey,
+    onSelectEvent,
+    onSelectRange,
+    onSharedSelectionBoxChange,
+    pps,
+    scrollX,
+    selectionBox,
+    tempoEvents
+  ])
 
   useEffect(() => {
     if (!resizeInfo || !onResizeEvent) return
@@ -648,56 +867,74 @@ function VenueTrack({
 
   return (
     <div className="venue-track" ref={trackRef}>
-      <div className="venue-track-label"><span>{icon}</span><span>{label}</span></div>
+      <div className="venue-track-label">
+        <span>{icon}</span>
+        <span>{label}</span>
+      </div>
       <div
         className="venue-track-timeline"
         style={{ width }}
         ref={timelineRef}
         onMouseDown={handleLaneMouseDown}
       >
-        {events.length > 0 ? events.map((event) => {
-          const startSeconds = tickToSeconds(event.tick, tempoEvents)
-          const durationTicks = getEventDuration?.(event) ?? 0
-          const endSeconds = durationTicks > 0 ? tickToSeconds(event.tick + durationTicks, tempoEvents) : startSeconds + 1.6
-          const left = startSeconds * pps - scrollX
-          const itemWidth = Math.max(84, (endSeconds - startSeconds) * pps)
-          return (
-            <div
-              key={event.id}
-              className={`venue-event venue-event-${tone} ${selectedEventId === event.id ? 'selected' : ''} ${dragInfo?.eventId === event.id ? 'dragging' : ''}`}
-              style={{ left, width: itemWidth }}
-              onMouseDown={(e) => handleMouseDown(e, event)}
-              onClick={(e) => { e.stopPropagation(); onSelectEvent(event.id) }}
-              onDragStart={(e) => e.preventDefault()}
-              title={`${label}: ${getEventLabel(event)} @ tick ${event.tick}`}
-            >
-              <span className="venue-event-name">{getEventLabel(event)}</span>
-              {onResizeEvent && selectedEventId === event.id && (
-                <div
-                  className="venue-event-resize-handle"
-                  title="Drag to change duration (hold Shift for fine adjustment)"
-                  onMouseDown={(e) => {
-                    e.preventDefault()
+        {events.length > 0 ? (
+          events.map((event) => {
+            const startSeconds = tickToSeconds(event.tick, tempoEvents)
+            const durationTicks = getEventDuration?.(event) ?? 0
+            const endSeconds =
+              durationTicks > 0
+                ? tickToSeconds(event.tick + durationTicks, tempoEvents)
+                : startSeconds + 1.6
+            const left = startSeconds * pps - scrollX
+            const itemWidth = Math.max(84, (endSeconds - startSeconds) * pps)
+            return (
+              <div
+                key={event.id}
+                className={`venue-event venue-event-${tone} ${selectedEventId === event.id ? 'selected' : ''} ${dragInfo?.eventId === event.id ? 'dragging' : ''}`}
+                style={{ left, width: itemWidth }}
+                onMouseDown={(e) => handleMouseDown(e, event)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSelectEvent(event.id)
+                }}
+                onDragStart={(e) => e.preventDefault()}
+                title={`${label}: ${getEventLabel(event)} @ tick ${event.tick}`}
+              >
+                <span className="venue-event-name">{getEventLabel(event)}</span>
+                {onResizeEvent && selectedEventId === event.id && (
+                  <div
+                    className="venue-event-resize-handle"
+                    title="Drag to change duration (hold Shift for fine adjustment)"
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setResizeInfo({
+                        eventId: event.id,
+                        startX: e.clientX,
+                        originTick: event.tick,
+                        originDuration: Math.max(durationTicks, VENUE_MIN_DURATION_TICKS)
+                      })
+                    }}
+                  />
+                )}
+                <button
+                  className="venue-event-delete"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
                     e.stopPropagation()
-                    setResizeInfo({
-                      eventId: event.id,
-                      startX: e.clientX,
-                      originTick: event.tick,
-                      originDuration: Math.max(durationTicks, VENUE_MIN_DURATION_TICKS)
-                    })
+                    onDeleteEvent(event.id)
                   }}
-                />
-              )}
-              <button
-                className="venue-event-delete"
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); onDeleteEvent(event.id) }}
-                title="Delete event"
-              >✕</button>
-            </div>
-          )
-        }) : (
-          <div className="venue-track-empty"><span>No authored events</span></div>
+                  title="Delete event"
+                >
+                  ✕
+                </button>
+              </div>
+            )
+          })
+        ) : (
+          <div className="venue-track-empty">
+            <span>No authored events</span>
+          </div>
         )}
 
         {/* Dense-tick stack picker popover */}
@@ -707,7 +944,9 @@ function VenueTrack({
             style={{ left: stackPicker.x, top: stackPicker.y }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="venue-stack-picker-header">Select event ({stackPicker.events.length} stacked)</div>
+            <div className="venue-stack-picker-header">
+              Select event ({stackPicker.events.length} stacked)
+            </div>
             {stackPicker.events.map((ev) => (
               <button
                 key={ev.id}
@@ -736,9 +975,16 @@ function VenueTrack({
 }
 
 function Playhead({
-  currentTime, scrollX, zoom, height, onSeek
+  currentTime,
+  scrollX,
+  zoom,
+  height,
+  onSeek
 }: {
-  currentTime: number; scrollX: number; zoom: number; height: number
+  currentTime: number
+  scrollX: number
+  zoom: number
+  height: number
   onSeek: (seconds: number) => void
 }): React.JSX.Element {
   const pps = VIDEO_EDITOR_CONFIG.pixelsPerSecond * zoom
@@ -746,11 +992,14 @@ function Playhead({
   const [isDragging, setIsDragging] = useState(false)
   const dragRef = useRef({ startX: 0, startTime: 0 })
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    setIsDragging(true)
-    dragRef.current = { startX: e.clientX, startTime: currentTime }
-  }, [currentTime])
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation()
+      setIsDragging(true)
+      dragRef.current = { startX: e.clientX, startTime: currentTime }
+    },
+    [currentTime]
+  )
 
   useEffect(() => {
     if (!isDragging) return
@@ -782,10 +1031,15 @@ function Playhead({
 }
 
 function URLImportModal({
-  onSubmit, onCancel, isDownloading, downloadProgress
+  onSubmit,
+  onCancel,
+  isDownloading,
+  downloadProgress
 }: {
-  onSubmit: (url: string) => void; onCancel: () => void
-  isDownloading: boolean; downloadProgress: number
+  onSubmit: (url: string) => void
+  onCancel: () => void
+  isDownloading: boolean
+  downloadProgress: number
 }): React.JSX.Element {
   const [url, setUrl] = useState('')
   return (
@@ -809,13 +1063,24 @@ function URLImportModal({
         {isDownloading && (
           <div style={{ marginTop: 8 }}>
             <div style={{ height: 4, background: '#333', borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${downloadProgress}%`, background: '#4488FF', transition: 'width 0.3s' }} />
+              <div
+                style={{
+                  height: '100%',
+                  width: `${downloadProgress}%`,
+                  background: '#4488FF',
+                  transition: 'width 0.3s'
+                }}
+              />
             </div>
-            <span style={{ fontSize: 11, color: '#888' }}>Downloading... {Math.round(downloadProgress)}%</span>
+            <span style={{ fontSize: 11, color: '#888' }}>
+              Downloading... {Math.round(downloadProgress)}%
+            </span>
           </div>
         )}
         <div className="video-url-modal-actions">
-          <button onClick={onCancel} disabled={isDownloading}>Cancel</button>
+          <button onClick={onCancel} disabled={isDownloading}>
+            Cancel
+          </button>
           <button disabled={!url.trim() || isDownloading} onClick={() => onSubmit(url.trim())}>
             {isDownloading ? 'Downloading...' : 'Import'}
           </button>
@@ -841,7 +1106,12 @@ export function VideoEditor(): React.JSX.Element {
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null)
   const [selectedAudioClipId, setSelectedAudioClipId] = useState<string | null>(null)
 
-  const [videoSync, setVideoSync] = useState<VideoSync>({ clips: [], offsetMs: 0, trimStartMs: 0, trimEndMs: 0 })
+  const [videoSync, setVideoSync] = useState<VideoSync>({
+    clips: [],
+    offsetMs: 0,
+    trimStartMs: 0,
+    trimEndMs: 0
+  })
   const [audioSync, setAudioSync] = useState<AudioSync>({ clips: [] })
   const [venueTrack, setVenueTrack] = useState<VenueTrackData>({
     autoGenerated: false,
@@ -854,7 +1124,10 @@ export function VideoEditor(): React.JSX.Element {
   const [currentTick, setCurrentTick] = useState(0)
   const [tempoEvents, setTempoEvents] = useState([{ tick: 0, bpm: 120 }])
   const [songDuration, setSongDuration] = useState(180)
-  const [venueSelectionBox, setVenueSelectionBox] = useState<{ startX: number; currentX: number } | null>(null)
+  const [venueSelectionBox, setVenueSelectionBox] = useState<{
+    startX: number
+    currentX: number
+  } | null>(null)
 
   useEffect(() => {
     setSelectedVenueEvent(null)
@@ -870,7 +1143,11 @@ export function VideoEditor(): React.JSX.Element {
       setVenueTrack(state.song.venueTrack)
       setCurrentTick(state.currentTick)
       setTempoEvents(state.song.tempoEvents)
-      setSongDuration(state.song.metadata.song_length ? state.song.metadata.song_length / 1000 : getAudioDuration(activeSongId, state.song.audioSync) || 180)
+      setSongDuration(
+        state.song.metadata.song_length
+          ? state.song.metadata.song_length / 1000
+          : getAudioDuration(activeSongId, state.song.audioSync) || 180
+      )
     }
     sync()
     return store.subscribe(sync)
@@ -880,7 +1157,11 @@ export function VideoEditor(): React.JSX.Element {
     if (!activeSongId) return
     const updateDuration = (): void => {
       const state = getSongStore(activeSongId).getState()
-      setSongDuration(state.song.metadata.song_length ? state.song.metadata.song_length / 1000 : getAudioDuration(activeSongId, state.song.audioSync) || 180)
+      setSongDuration(
+        state.song.metadata.song_length
+          ? state.song.metadata.song_length / 1000
+          : getAudioDuration(activeSongId, state.song.audioSync) || 180
+      )
     }
     updateDuration()
     return onAudioLoaded(activeSongId, updateDuration)
@@ -931,7 +1212,14 @@ export function VideoEditor(): React.JSX.Element {
             const currentVideoSync = store.getState().song.videoSync
             if (currentVideoSync.clips.length === 0) {
               store.getState().updateVideoSync({
-                clips: [{ id: `clip-${Date.now()}`, startMs: 0, sourceStartMs: 0, durationMs: fallbackDurationMs }]
+                clips: [
+                  {
+                    id: `clip-${Date.now()}`,
+                    startMs: 0,
+                    sourceStartMs: 0,
+                    durationMs: fallbackDurationMs
+                  }
+                ]
               })
             }
           }
@@ -943,7 +1231,9 @@ export function VideoEditor(): React.JSX.Element {
     }
 
     probe()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [videoSync.videoPath, songDuration, activeSongId])
 
   useEffect(() => {
@@ -979,10 +1269,13 @@ export function VideoEditor(): React.JSX.Element {
     }
   }, [])
 
-  const withSongStore = useCallback((callback: (store: ReturnType<typeof getSongStore>) => void) => {
-    if (!activeSongId) return
-    callback(getSongStore(activeSongId))
-  }, [activeSongId])
+  const withSongStore = useCallback(
+    (callback: (store: ReturnType<typeof getSongStore>) => void) => {
+      if (!activeSongId) return
+      callback(getSongStore(activeSongId))
+    },
+    [activeSongId]
+  )
 
   const handleImportFile = useCallback(async () => {
     if (!activeSongId) return
@@ -996,38 +1289,43 @@ export function VideoEditor(): React.JSX.Element {
     }
   }, [activeSongId])
 
-  const handleImportUrl = useCallback(async (url: string) => {
-    if (!activeSongId) return
-    const store = getSongStore(activeSongId)
-    const songPath = store.getState().song.folderPath
+  const handleImportUrl = useCallback(
+    async (url: string) => {
+      if (!activeSongId) return
+      const store = getSongStore(activeSongId)
+      const songPath = store.getState().song.folderPath
 
-    if (/\.(mp4|webm|mkv|avi|mov)(\?|$)/i.test(url)) {
-      store.getState().updateVideoSync({ videoPath: url, clips: [] })
-      setShowUrlModal(false)
-      return
-    }
-
-    setIsDownloading(true)
-    setDownloadProgress(0)
-    const unsubscribe = window.api.onDownloadProgress((percent) => setDownloadProgress(percent))
-
-    try {
-      const result = await window.api.downloadVideoUrl(songPath, url)
-      unsubscribe()
-      setIsDownloading(false)
-
-      if (result.success && result.filePath) {
-        store.getState().updateVideoSync({ videoPath: result.filePath, clips: [] })
+      if (/\.(mp4|webm|mkv|avi|mov)(\?|$)/i.test(url)) {
+        store.getState().updateVideoSync({ videoPath: url, clips: [] })
         setShowUrlModal(false)
-      } else {
-        alert(`Download failed: ${result.error || 'Unknown error'}\n\nMake sure yt-dlp is installed and the URL is valid.`)
+        return
       }
-    } catch (error) {
-      unsubscribe()
-      setIsDownloading(false)
-      alert(`Download error: ${error}`)
-    }
-  }, [activeSongId])
+
+      setIsDownloading(true)
+      setDownloadProgress(0)
+      const unsubscribe = window.api.onDownloadProgress((percent) => setDownloadProgress(percent))
+
+      try {
+        const result = await window.api.downloadVideoUrl(songPath, url)
+        unsubscribe()
+        setIsDownloading(false)
+
+        if (result.success && result.filePath) {
+          store.getState().updateVideoSync({ videoPath: result.filePath, clips: [] })
+          setShowUrlModal(false)
+        } else {
+          alert(
+            `Download failed: ${result.error || 'Unknown error'}\n\nMake sure yt-dlp is installed and the URL is valid.`
+          )
+        }
+      } catch (error) {
+        unsubscribe()
+        setIsDownloading(false)
+        alert(`Download error: ${error}`)
+      }
+    },
+    [activeSongId]
+  )
 
   const handleRemoveVideo = useCallback(() => {
     withSongStore((store) => {
@@ -1046,14 +1344,18 @@ export function VideoEditor(): React.JSX.Element {
     if (!activeSongId) return
     const store = getSongStore(activeSongId)
     const songPath = store.getState().song.folderPath
-    const insertTimeMs = Math.round(tickToSeconds(store.getState().currentTick, store.getState().song.tempoEvents) * 1000)
+    const insertTimeMs = Math.round(
+      tickToSeconds(store.getState().currentTick, store.getState().song.tempoEvents) * 1000
+    )
     const filePath = await window.api.openAudioDialog()
     if (!filePath) return
     const result = await window.api.importAudio(songPath, filePath)
     if (!result) return
     await audioService.loadAudio(activeSongId, songPath)
     const sources = getAudioSources(activeSongId)
-    const source = sources.find((entry) => entry.filePath === result.filePath) ?? sources.find((entry) => entry.filename === result.filename)
+    const source =
+      sources.find((entry) => entry.filePath === result.filePath) ??
+      sources.find((entry) => entry.filename === result.filename)
     store.getState().updateAudioSync({
       clips: [
         ...store.getState().song.audioSync.clips,
@@ -1069,21 +1371,34 @@ export function VideoEditor(): React.JSX.Element {
     })
   }, [activeSongId])
 
-  const currentTime = useMemo(() => tickToSeconds(currentTick, tempoEvents), [currentTick, tempoEvents])
+  const currentTime = useMemo(
+    () => tickToSeconds(currentTick, tempoEvents),
+    [currentTick, tempoEvents]
+  )
 
-  const updateVenueLane = useCallback(<T extends VenueLaneKey>(lane: T, updater: (events: VenueTrackData[T]) => VenueTrackData[T]) => {
-    withSongStore((store) => {
-      const currentVenueTrack = store.getState().song.venueTrack
-      store.getState().updateVenueTrack({ [lane]: updater(currentVenueTrack[lane]) } as Partial<VenueTrackData>)
-    })
-  }, [withSongStore])
+  const updateVenueLane = useCallback(
+    <T extends VenueLaneKey>(
+      lane: T,
+      updater: (events: VenueTrackData[T]) => VenueTrackData[T]
+    ) => {
+      withSongStore((store) => {
+        const currentVenueTrack = store.getState().song.venueTrack
+        store
+          .getState()
+          .updateVenueTrack({ [lane]: updater(currentVenueTrack[lane]) } as Partial<VenueTrackData>)
+      })
+    },
+    [withSongStore]
+  )
 
   const handleSplitAtPlayhead = useCallback(() => {
     if (!activeSongId || !videoSync.videoPath) return
     const splitMs = currentTime * 1000
     const store = getSongStore(activeSongId)
     const currentVideoSync = store.getState().song.videoSync
-    const clipIndex = currentVideoSync.clips.findIndex((clip) => splitMs > clip.startMs && splitMs < clip.startMs + clip.durationMs)
+    const clipIndex = currentVideoSync.clips.findIndex(
+      (clip) => splitMs > clip.startMs && splitMs < clip.startMs + clip.durationMs
+    )
     if (clipIndex < 0) return
 
     const clip = currentVideoSync.clips[clipIndex]
@@ -1120,31 +1435,43 @@ export function VideoEditor(): React.JSX.Element {
     if (!selectedAudioClipId) return
     withSongStore((store) => {
       store.getState().updateAudioSync({
-        clips: store.getState().song.audioSync.clips.filter((clip) => clip.id !== selectedAudioClipId)
+        clips: store
+          .getState()
+          .song.audioSync.clips.filter((clip) => clip.id !== selectedAudioClipId)
       })
     })
     setSelectedAudioClipId(null)
   }, [selectedAudioClipId, withSongStore])
 
-  const handleMoveClip = useCallback((clipId: string, newStartMs: number) => {
-    withSongStore((store) => {
-      store.getState().updateVideoSync({
-        clips: store.getState().song.videoSync.clips.map((clip) => (
-          clip.id === clipId ? { ...clip, startMs: Math.max(0, newStartMs) } : clip
-        ))
+  const handleMoveClip = useCallback(
+    (clipId: string, newStartMs: number) => {
+      withSongStore((store) => {
+        store.getState().updateVideoSync({
+          clips: store
+            .getState()
+            .song.videoSync.clips.map((clip) =>
+              clip.id === clipId ? { ...clip, startMs: Math.max(0, newStartMs) } : clip
+            )
+        })
       })
-    })
-  }, [withSongStore])
+    },
+    [withSongStore]
+  )
 
-  const handleMoveAudioClip = useCallback((clipId: string, newStartMs: number) => {
-    withSongStore((store) => {
-      store.getState().updateAudioSync({
-        clips: store.getState().song.audioSync.clips.map((clip) => (
-          clip.id === clipId ? { ...clip, startMs: Math.max(0, Math.round(newStartMs)) } : clip
-        ))
+  const handleMoveAudioClip = useCallback(
+    (clipId: string, newStartMs: number) => {
+      withSongStore((store) => {
+        store.getState().updateAudioSync({
+          clips: store
+            .getState()
+            .song.audioSync.clips.map((clip) =>
+              clip.id === clipId ? { ...clip, startMs: Math.max(0, Math.round(newStartMs)) } : clip
+            )
+        })
       })
-    })
-  }, [withSongStore])
+    },
+    [withSongStore]
+  )
 
   const handleSelectAudioClip = useCallback((clipId: string | null) => {
     setSelectedAudioClipId(clipId)
@@ -1164,73 +1491,122 @@ export function VideoEditor(): React.JSX.Element {
     setSelectedAudioClipId(null)
   }, [])
 
-  const handleSelectVenueRange = useCallback((startTick: number, endTick: number) => {
-    const lanes: VenueLaneKey[] = ['lighting', 'postProcessing', 'stage', 'cameraCuts', 'performer']
-    const hits: SelectedVenueEventRef[] = []
+  const handleSelectVenueRange = useCallback(
+    (startTick: number, endTick: number) => {
+      const lanes: VenueLaneKey[] = [
+        'lighting',
+        'postProcessing',
+        'stage',
+        'cameraCuts',
+        'performer'
+      ]
+      const hits: SelectedVenueEventRef[] = []
 
-    for (const lane of lanes) {
-      const laneEvents = venueTrack[lane] as VenueEvent[]
-      for (const event of laneEvents) {
-        if (event.tick >= startTick && event.tick <= endTick) {
-          hits.push({ lane, id: event.id })
+      for (const lane of lanes) {
+        const laneEvents = venueTrack[lane] as VenueEvent[]
+        for (const event of laneEvents) {
+          if (event.tick >= startTick && event.tick <= endTick) {
+            hits.push({ lane, id: event.id })
+          }
         }
       }
-    }
 
-    if (hits.length === 0) {
-      setSelectedVenueEvent(null)
-      return
-    }
+      if (hits.length === 0) {
+        setSelectedVenueEvent(null)
+        return
+      }
 
-    hits.sort((a, b) => {
-      const aTick = (venueTrack[a.lane] as VenueEvent[]).find((event) => event.id === a.id)?.tick ?? 0
-      const bTick = (venueTrack[b.lane] as VenueEvent[]).find((event) => event.id === b.id)?.tick ?? 0
-      return aTick - bTick
-    })
+      hits.sort((a, b) => {
+        const aTick =
+          (venueTrack[a.lane] as VenueEvent[]).find((event) => event.id === a.id)?.tick ?? 0
+        const bTick =
+          (venueTrack[b.lane] as VenueEvent[]).find((event) => event.id === b.id)?.tick ?? 0
+        return aTick - bTick
+      })
 
-    setSelectedVenueEvent(hits[0])
-    setSelectedClipId(null)
-    setSelectedAudioClipId(null)
-  }, [setSelectedVenueEvent, venueTrack])
+      setSelectedVenueEvent(hits[0])
+      setSelectedClipId(null)
+      setSelectedAudioClipId(null)
+    },
+    [setSelectedVenueEvent, venueTrack]
+  )
 
-  const handleMoveVenueEvent = useCallback((lane: VenueLaneKey, eventId: string, newTick: number) => {
-    updateVenueLane(lane, (events) => sortByTick(events.map((event) => (
-      event.id === eventId ? { ...event, tick: Math.max(0, newTick) } : event
-    ))))
-  }, [updateVenueLane])
+  const handleMoveVenueEvent = useCallback(
+    (lane: VenueLaneKey, eventId: string, newTick: number) => {
+      updateVenueLane(lane, (events) =>
+        sortByTick(
+          events.map((event) =>
+            event.id === eventId ? { ...event, tick: Math.max(0, newTick) } : event
+          )
+        )
+      )
+    },
+    [updateVenueLane]
+  )
 
-  const handleResizeVenueEvent = useCallback((lane: 'stage' | 'performer', eventId: string, newDuration: number) => {
-    updateVenueLane(lane, (events) => sortByTick(events.map((event) => (
-      event.id === eventId ? { ...event, duration: Math.max(VENUE_MIN_DURATION_TICKS, newDuration) } : event
-    ))))
-  }, [updateVenueLane])
+  const handleResizeVenueEvent = useCallback(
+    (lane: 'stage' | 'performer', eventId: string, newDuration: number) => {
+      updateVenueLane(lane, (events) =>
+        sortByTick(
+          events.map((event) =>
+            event.id === eventId
+              ? { ...event, duration: Math.max(VENUE_MIN_DURATION_TICKS, newDuration) }
+              : event
+          )
+        )
+      )
+    },
+    [updateVenueLane]
+  )
 
   const addLightingEvent = useCallback(() => {
-    const event: VenueLightingEvent = { id: createVenueId('lighting'), tick: currentTick, type: 'verse' }
+    const event: VenueLightingEvent = {
+      id: createVenueId('lighting'),
+      tick: currentTick,
+      type: 'verse'
+    }
     updateVenueLane('lighting', (events) => sortByTick([...events, event]))
     setSelectedVenueEvent({ lane: 'lighting', id: event.id })
   }, [currentTick, updateVenueLane])
 
   const addPostProcessingEvent = useCallback(() => {
-    const event: VenuePostProcessingEvent = { id: createVenueId('post'), tick: currentTick, type: 'bloom.pp' }
+    const event: VenuePostProcessingEvent = {
+      id: createVenueId('post'),
+      tick: currentTick,
+      type: 'bloom.pp'
+    }
     updateVenueLane('postProcessing', (events) => sortByTick([...events, event]))
     setSelectedVenueEvent({ lane: 'postProcessing', id: event.id })
   }, [currentTick, updateVenueLane])
 
   const addStageEvent = useCallback(() => {
-    const event: VenueStageEvent = { id: createVenueId('stage'), tick: currentTick, effect: 'FogOn' }
+    const event: VenueStageEvent = {
+      id: createVenueId('stage'),
+      tick: currentTick,
+      effect: 'FogOn'
+    }
     updateVenueLane('stage', (events) => sortByTick([...events, event]))
     setSelectedVenueEvent({ lane: 'stage', id: event.id })
   }, [currentTick, updateVenueLane])
 
   const addCameraCutEvent = useCallback(() => {
-    const event: VenueCameraCutEvent = { id: createVenueId('camera'), tick: currentTick, subject: 'coop_all_near' }
+    const event: VenueCameraCutEvent = {
+      id: createVenueId('camera'),
+      tick: currentTick,
+      subject: 'coop_all_near'
+    }
     updateVenueLane('cameraCuts', (events) => sortByTick([...events, event]))
     setSelectedVenueEvent({ lane: 'cameraCuts', id: event.id })
   }, [currentTick, updateVenueLane])
 
   const addPerformerEvent = useCallback(() => {
-    const event: VenuePerformerEvent = { id: createVenueId('performer'), tick: currentTick, duration: 480, type: 'spotlight', performer: 'vocals' }
+    const event: VenuePerformerEvent = {
+      id: createVenueId('performer'),
+      tick: currentTick,
+      duration: 480,
+      type: 'spotlight',
+      performer: 'vocals'
+    }
     updateVenueLane('performer', (events) => sortByTick([...events, event]))
     setSelectedVenueEvent({ lane: 'performer', id: event.id })
   }, [currentTick, updateVenueLane])
@@ -1253,21 +1629,26 @@ export function VideoEditor(): React.JSX.Element {
     }
   }, [selectedVenueEvent, venueTrack])
 
-  const selectedLightingEvent = selectedVenueEvent?.lane === 'lighting'
-    ? venueTrack.lighting.find((event) => event.id === selectedVenueEvent.id) ?? null
-    : null
-  const selectedPostProcessingEvent = selectedVenueEvent?.lane === 'postProcessing'
-    ? venueTrack.postProcessing.find((event) => event.id === selectedVenueEvent.id) ?? null
-    : null
-  const selectedStageEvent = selectedVenueEvent?.lane === 'stage'
-    ? venueTrack.stage.find((event) => event.id === selectedVenueEvent.id) ?? null
-    : null
-  const selectedCameraCutEvent = selectedVenueEvent?.lane === 'cameraCuts'
-    ? venueTrack.cameraCuts.find((event) => event.id === selectedVenueEvent.id) ?? null
-    : null
-  const selectedPerformerEvent = selectedVenueEvent?.lane === 'performer'
-    ? venueTrack.performer.find((event) => event.id === selectedVenueEvent.id) ?? null
-    : null
+  const selectedLightingEvent =
+    selectedVenueEvent?.lane === 'lighting'
+      ? (venueTrack.lighting.find((event) => event.id === selectedVenueEvent.id) ?? null)
+      : null
+  const selectedPostProcessingEvent =
+    selectedVenueEvent?.lane === 'postProcessing'
+      ? (venueTrack.postProcessing.find((event) => event.id === selectedVenueEvent.id) ?? null)
+      : null
+  const selectedStageEvent =
+    selectedVenueEvent?.lane === 'stage'
+      ? (venueTrack.stage.find((event) => event.id === selectedVenueEvent.id) ?? null)
+      : null
+  const selectedCameraCutEvent =
+    selectedVenueEvent?.lane === 'cameraCuts'
+      ? (venueTrack.cameraCuts.find((event) => event.id === selectedVenueEvent.id) ?? null)
+      : null
+  const selectedPerformerEvent =
+    selectedVenueEvent?.lane === 'performer'
+      ? (venueTrack.performer.find((event) => event.id === selectedVenueEvent.id) ?? null)
+      : null
 
   const selectedVenueHelpText = useMemo(() => {
     if (!selectedVenueEvent || !selectedVenueEventData) {
@@ -1311,32 +1692,55 @@ export function VideoEditor(): React.JSX.Element {
       return `${formatVenueLabel(selectedPerformerEvent.type)} ${formatVenueLabel(selectedPerformerEvent.performer ?? '')}`.trim()
     }
     return 'Event'
-  }, [selectedLightingEvent, selectedPostProcessingEvent, selectedStageEvent, selectedCameraCutEvent, selectedPerformerEvent])
+  }, [
+    selectedLightingEvent,
+    selectedPostProcessingEvent,
+    selectedStageEvent,
+    selectedCameraCutEvent,
+    selectedPerformerEvent
+  ])
 
-  const updateSelectedVenueEvent = useCallback((updates: Partial<VenueEvent>) => {
-    if (!selectedVenueEvent) return
-    updateVenueLane(selectedVenueEvent.lane, (events) => sortByTick(events.map((event) => (
-      event.id === selectedVenueEvent.id ? { ...event, ...updates } : event
-    ))))
-  }, [selectedVenueEvent, updateVenueLane])
+  const updateSelectedVenueEvent = useCallback(
+    (updates: Partial<VenueEvent>) => {
+      if (!selectedVenueEvent) return
+      updateVenueLane(selectedVenueEvent.lane, (events) =>
+        sortByTick(
+          events.map((event) =>
+            event.id === selectedVenueEvent.id ? { ...event, ...updates } : event
+          )
+        )
+      )
+    },
+    [selectedVenueEvent, updateVenueLane]
+  )
 
   const handleDeleteVenueEvent = useCallback(() => {
     if (!selectedVenueEvent) return
     switch (selectedVenueEvent.lane) {
       case 'lighting':
-        updateVenueLane('lighting', (events) => events.filter((event) => event.id !== selectedVenueEvent.id))
+        updateVenueLane('lighting', (events) =>
+          events.filter((event) => event.id !== selectedVenueEvent.id)
+        )
         break
       case 'postProcessing':
-        updateVenueLane('postProcessing', (events) => events.filter((event) => event.id !== selectedVenueEvent.id))
+        updateVenueLane('postProcessing', (events) =>
+          events.filter((event) => event.id !== selectedVenueEvent.id)
+        )
         break
       case 'stage':
-        updateVenueLane('stage', (events) => events.filter((event) => event.id !== selectedVenueEvent.id))
+        updateVenueLane('stage', (events) =>
+          events.filter((event) => event.id !== selectedVenueEvent.id)
+        )
         break
       case 'cameraCuts':
-        updateVenueLane('cameraCuts', (events) => events.filter((event) => event.id !== selectedVenueEvent.id))
+        updateVenueLane('cameraCuts', (events) =>
+          events.filter((event) => event.id !== selectedVenueEvent.id)
+        )
         break
       case 'performer':
-        updateVenueLane('performer', (events) => events.filter((event) => event.id !== selectedVenueEvent.id))
+        updateVenueLane('performer', (events) =>
+          events.filter((event) => event.id !== selectedVenueEvent.id)
+        )
         break
       default:
         break
@@ -1344,12 +1748,18 @@ export function VideoEditor(): React.JSX.Element {
     setSelectedVenueEvent(null)
   }, [selectedVenueEvent, updateVenueLane])
 
-  const handleDeleteVenueEventById = useCallback((lane: VenueLaneKey, id: string) => {
-    updateVenueLane(lane, (events) => (events as VenueEvent[]).filter((event) => event.id !== id) as typeof events)
-    if (selectedVenueEvent?.id === id) {
-      setSelectedVenueEvent(null)
-    }
-  }, [selectedVenueEvent, setSelectedVenueEvent, updateVenueLane])
+  const handleDeleteVenueEventById = useCallback(
+    (lane: VenueLaneKey, id: string) => {
+      updateVenueLane(
+        lane,
+        (events) => (events as VenueEvent[]).filter((event) => event.id !== id) as typeof events
+      )
+      if (selectedVenueEvent?.id === id) {
+        setSelectedVenueEvent(null)
+      }
+    },
+    [selectedVenueEvent, setSelectedVenueEvent, updateVenueLane]
+  )
 
   const handleExport = useCallback(async () => {
     if (!activeSongId || !videoSync.videoPath) return
@@ -1383,36 +1793,54 @@ export function VideoEditor(): React.JSX.Element {
     }
   }, [activeSongId, videoSync])
 
-  const handleSeek = useCallback((seconds: number) => {
-    if (!activeSongId) return
-    const store = getSongStore(activeSongId)
-    const state = store.getState()
-    const newTick = secondsToTick(Math.max(0, seconds), state.song.tempoEvents)
-    store.getState().setCurrentTick(newTick)
-    if (state.isPlaying) {
-      audioService.seek(activeSongId, newTick, state.song.tempoEvents, state.song.audioSync)
-    }
-  }, [activeSongId])
+  const handleSeek = useCallback(
+    (seconds: number) => {
+      if (!activeSongId) return
+      const store = getSongStore(activeSongId)
+      const state = store.getState()
+      const newTick = secondsToTick(Math.max(0, seconds), state.song.tempoEvents)
+      store.getState().setCurrentTick(newTick)
+      if (state.isPlaying) {
+        audioService.seek(activeSongId, newTick, state.song.tempoEvents, state.song.audioSync)
+      }
+    },
+    [activeSongId]
+  )
 
-  const handleTimelineClick = useCallback((e: React.MouseEvent) => {
-    const target = e.target as HTMLElement
-    if (target.closest('.video-clip') || target.closest('.audio-clip') || target.closest('.venue-event') || target.closest('.video-playhead')) return
-    const timeline = target.closest('.audio-track-timeline, .video-track-timeline, .venue-track-timeline') as HTMLElement | null
-    if (!timeline) return
-    const rect = timeline.getBoundingClientRect()
-    const clickX = e.clientX - rect.left
-    const pps = VIDEO_EDITOR_CONFIG.pixelsPerSecond * zoom
-    const seconds = (clickX + scrollX) / pps
-    setSelectedClipId(null)
-    setSelectedAudioClipId(null)
-    handleSeek(seconds)
-  }, [handleSeek, scrollX, zoom])
+  const handleTimelineClick = useCallback(
+    (e: React.MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (
+        target.closest('.video-clip') ||
+        target.closest('.audio-clip') ||
+        target.closest('.venue-event') ||
+        target.closest('.video-playhead')
+      )
+        return
+      const timeline = target.closest(
+        '.audio-track-timeline, .video-track-timeline, .venue-track-timeline'
+      ) as HTMLElement | null
+      if (!timeline) return
+      const rect = timeline.getBoundingClientRect()
+      const clickX = e.clientX - rect.left
+      const pps = VIDEO_EDITOR_CONFIG.pixelsPerSecond * zoom
+      const seconds = (clickX + scrollX) / pps
+      setSelectedClipId(null)
+      setSelectedAudioClipId(null)
+      handleSeek(seconds)
+    },
+    [handleSeek, scrollX, zoom]
+  )
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       const target = e.target as HTMLElement | null
       const tagName = target?.tagName.toLowerCase()
-      const isTextField = tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target?.isContentEditable
+      const isTextField =
+        tagName === 'input' ||
+        tagName === 'textarea' ||
+        tagName === 'select' ||
+        target?.isContentEditable
       if (isTextField) return
 
       if (e.key === 'Delete') {
@@ -1442,7 +1870,9 @@ export function VideoEditor(): React.JSX.Element {
         if (selectedVenueEvent.lane !== 'stage' && selectedVenueEvent.lane !== 'performer') return
         e.preventDefault()
         const direction = e.key === 'ArrowDown' ? -1 : 1
-        const currentDuration = (selectedVenueEventData as VenueStageEvent | VenuePerformerEvent | null)?.duration ?? VENUE_MIN_DURATION_TICKS
+        const currentDuration =
+          (selectedVenueEventData as VenueStageEvent | VenuePerformerEvent | null)?.duration ??
+          VENUE_MIN_DURATION_TICKS
         const nextDuration = Math.max(VENUE_MIN_DURATION_TICKS, currentDuration + direction * step)
         handleResizeVenueEvent(selectedVenueEvent.lane, selectedVenueEvent.id, nextDuration)
       }
@@ -1467,7 +1897,9 @@ export function VideoEditor(): React.JSX.Element {
         <div className="empty-state">
           <div className="empty-state-icon">🎬</div>
           <div className="empty-state-title">No Song Selected</div>
-          <div className="empty-state-description">Select a song to edit media sync and venue events.</div>
+          <div className="empty-state-description">
+            Select a song to edit media sync and venue events.
+          </div>
         </div>
       </div>
     )
@@ -1476,23 +1908,99 @@ export function VideoEditor(): React.JSX.Element {
   return (
     <div className="video-editor" ref={containerRef}>
       <div className="video-toolbar">
-        <button className="video-toolbar-button" onClick={handleImportFile} title="Import video from file">Import File</button>
-        <button className="video-toolbar-button" onClick={handleImportAudio} title="Import an additional audio source onto the timeline">Add Audio</button>
-        <button className="video-toolbar-button" onClick={() => setShowUrlModal(true)} title="Import video from URL (YouTube, etc.)">Import URL</button>
-        <button className="video-toolbar-button" onClick={addLightingEvent} title="Add a lighting cue at the playhead">💡 Lighting</button>
-        <button className="video-toolbar-button" onClick={addPostProcessingEvent} title="Add a post-processing effect at the playhead">✨ Post FX</button>
-        <button className="video-toolbar-button" onClick={addStageEvent} title="Add a stage effect at the playhead">🎭 Stage FX</button>
-        <button className="video-toolbar-button" onClick={addCameraCutEvent} title="Add a venue camera cut at the playhead">🎥 Camera Cut</button>
-        <button className="video-toolbar-button" onClick={addPerformerEvent} title="Add a performer spotlight/singalong event at the playhead">🎤 Performer</button>
+        <button
+          className="video-toolbar-button"
+          onClick={handleImportFile}
+          title="Import video from file"
+        >
+          Import File
+        </button>
+        <button
+          className="video-toolbar-button"
+          onClick={handleImportAudio}
+          title="Import an additional audio source onto the timeline"
+        >
+          Add Audio
+        </button>
+        <button
+          className="video-toolbar-button"
+          onClick={() => setShowUrlModal(true)}
+          title="Import video from URL (YouTube, etc.)"
+        >
+          Import URL
+        </button>
+        <button
+          className="video-toolbar-button"
+          onClick={addLightingEvent}
+          title="Add a lighting cue at the playhead"
+        >
+          💡 Lighting
+        </button>
+        <button
+          className="video-toolbar-button"
+          onClick={addPostProcessingEvent}
+          title="Add a post-processing effect at the playhead"
+        >
+          ✨ Post FX
+        </button>
+        <button
+          className="video-toolbar-button"
+          onClick={addStageEvent}
+          title="Add a stage effect at the playhead"
+        >
+          🎭 Stage FX
+        </button>
+        <button
+          className="video-toolbar-button"
+          onClick={addCameraCutEvent}
+          title="Add a venue camera cut at the playhead"
+        >
+          🎥 Camera Cut
+        </button>
+        <button
+          className="video-toolbar-button"
+          onClick={addPerformerEvent}
+          title="Add a performer spotlight/singalong event at the playhead"
+        >
+          🎤 Performer
+        </button>
         {videoSync.videoPath && (
           <>
-            <button className="video-toolbar-button video-toolbar-button-danger" onClick={handleRemoveVideo} title="Remove the imported video">Remove Video</button>
+            <button
+              className="video-toolbar-button video-toolbar-button-danger"
+              onClick={handleRemoveVideo}
+              title="Remove the imported video"
+            >
+              Remove Video
+            </button>
             <div className="video-toolbar-divider" />
-            <button className="video-toolbar-button" onClick={handleSplitAtPlayhead} title="Split the selected video clip at the playhead">Split</button>
+            <button
+              className="video-toolbar-button"
+              onClick={handleSplitAtPlayhead}
+              title="Split the selected video clip at the playhead"
+            >
+              Split
+            </button>
           </>
         )}
-        {selectedAudioClipId && <button className="video-toolbar-button video-toolbar-button-danger" onClick={handleDeleteAudioClip} title="Delete selected audio clip">Delete Audio</button>}
-        {selectedClipId && <button className="video-toolbar-button video-toolbar-button-danger" onClick={handleDeleteClip} title="Delete selected video clip">Delete Clip</button>}
+        {selectedAudioClipId && (
+          <button
+            className="video-toolbar-button video-toolbar-button-danger"
+            onClick={handleDeleteAudioClip}
+            title="Delete selected audio clip"
+          >
+            Delete Audio
+          </button>
+        )}
+        {selectedClipId && (
+          <button
+            className="video-toolbar-button video-toolbar-button-danger"
+            onClick={handleDeleteClip}
+            title="Delete selected video clip"
+          >
+            Delete Clip
+          </button>
+        )}
         {selectedVenueEvent && (
           <button
             className="video-toolbar-button video-toolbar-button-danger"
@@ -1504,7 +2012,12 @@ export function VideoEditor(): React.JSX.Element {
         )}
         <div className="video-toolbar-spacer" />
         {videoSync.videoPath && (
-          <button className="video-toolbar-button" onClick={handleExport} disabled={exportProgress !== null} title="Export video with chart audio">
+          <button
+            className="video-toolbar-button"
+            onClick={handleExport}
+            disabled={exportProgress !== null}
+            title="Export video with chart audio"
+          >
             {exportProgress !== null ? `Exporting ${exportProgress}%` : 'Export'}
           </button>
         )}
@@ -1538,7 +2051,9 @@ export function VideoEditor(): React.JSX.Element {
               type="number"
               min={0}
               value={selectedVenueEventData.tick}
-              onChange={(e) => updateSelectedVenueEvent({ tick: Math.max(0, Number(e.target.value) || 0) })}
+              onChange={(e) =>
+                updateSelectedVenueEvent({ tick: Math.max(0, Number(e.target.value) || 0) })
+              }
             />
           </div>
           {selectedLightingEvent && (
@@ -1550,7 +2065,9 @@ export function VideoEditor(): React.JSX.Element {
                 onChange={(e) => updateSelectedVenueEvent({ type: e.target.value })}
               >
                 {uniqueOptions(LIGHTING_PRESETS, selectedLightingEvent.type).map((option) => (
-                  <option key={option} value={option}>{option}</option>
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1563,9 +2080,13 @@ export function VideoEditor(): React.JSX.Element {
                 value={selectedPostProcessingEvent.type}
                 onChange={(e) => updateSelectedVenueEvent({ type: e.target.value })}
               >
-                {uniqueOptions(POST_PROCESSING_PRESETS, selectedPostProcessingEvent.type).map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
+                {uniqueOptions(POST_PROCESSING_PRESETS, selectedPostProcessingEvent.type).map(
+                  (option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  )
+                )}
               </select>
             </div>
           )}
@@ -1578,7 +2099,9 @@ export function VideoEditor(): React.JSX.Element {
                 onChange={(e) => updateSelectedVenueEvent({ effect: e.target.value })}
               >
                 {uniqueOptions(STAGE_PRESETS, selectedStageEvent.effect).map((option) => (
-                  <option key={option} value={option}>{option}</option>
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1592,7 +2115,9 @@ export function VideoEditor(): React.JSX.Element {
                 onChange={(e) => updateSelectedVenueEvent({ subject: e.target.value })}
               >
                 {uniqueOptions(CAMERA_CUT_PRESETS, selectedCameraCutEvent.subject).map((option) => (
-                  <option key={option} value={option}>{option}</option>
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1606,9 +2131,13 @@ export function VideoEditor(): React.JSX.Element {
                   value={selectedPerformerEvent.type}
                   onChange={(e) => updateSelectedVenueEvent({ type: e.target.value })}
                 >
-                  {uniqueOptions(PERFORMER_TYPE_PRESETS, selectedPerformerEvent.type).map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
+                  {uniqueOptions(PERFORMER_TYPE_PRESETS, selectedPerformerEvent.type).map(
+                    (option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
               <div className="video-toolbar-info video-toolbar-field-wide">
@@ -1618,9 +2147,13 @@ export function VideoEditor(): React.JSX.Element {
                   value={selectedPerformerEvent.performer ?? 'vocals'}
                   onChange={(e) => updateSelectedVenueEvent({ performer: e.target.value })}
                 >
-                  {uniqueOptions(PERFORMER_TARGET_PRESETS, selectedPerformerEvent.performer).map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
+                  {uniqueOptions(PERFORMER_TARGET_PRESETS, selectedPerformerEvent.performer).map(
+                    (option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
               <div className="video-toolbar-info">
@@ -1630,7 +2163,9 @@ export function VideoEditor(): React.JSX.Element {
                   type="number"
                   min={0}
                   value={selectedPerformerEvent.duration}
-                  onChange={(e) => updateSelectedVenueEvent({ duration: Math.max(0, Number(e.target.value) || 0) })}
+                  onChange={(e) =>
+                    updateSelectedVenueEvent({ duration: Math.max(0, Number(e.target.value) || 0) })
+                  }
                 />
               </div>
             </>
@@ -1641,7 +2176,12 @@ export function VideoEditor(): React.JSX.Element {
       <div className="video-timeline-area" ref={timelineAreaRef} onWheel={handleScroll}>
         <div className="video-ruler-row">
           <div className="video-track-label-spacer" />
-          <TimelineRuler duration={songDuration} scrollX={scrollX} zoom={zoom} width={dimensions.width} />
+          <TimelineRuler
+            duration={songDuration}
+            scrollX={scrollX}
+            zoom={zoom}
+            width={dimensions.width}
+          />
         </div>
 
         <div className="video-tracks" onClick={handleTimelineClick}>
@@ -1694,7 +2234,9 @@ export function VideoEditor(): React.JSX.Element {
             scrollX={scrollX}
             zoom={zoom}
             width={dimensions.width}
-            selectedEventId={selectedVenueEvent?.lane === 'postProcessing' ? selectedVenueEvent.id : null}
+            selectedEventId={
+              selectedVenueEvent?.lane === 'postProcessing' ? selectedVenueEvent.id : null
+            }
             onSelectEvent={(id) => handleSelectVenue('postProcessing', id)}
             onSelectRange={handleSelectVenueRange}
             sharedSelectionBox={venueSelectionBox}
@@ -1734,7 +2276,9 @@ export function VideoEditor(): React.JSX.Element {
             scrollX={scrollX}
             zoom={zoom}
             width={dimensions.width}
-            selectedEventId={selectedVenueEvent?.lane === 'cameraCuts' ? selectedVenueEvent.id : null}
+            selectedEventId={
+              selectedVenueEvent?.lane === 'cameraCuts' ? selectedVenueEvent.id : null
+            }
             onSelectEvent={(id) => handleSelectVenue('cameraCuts', id)}
             onSelectRange={handleSelectVenueRange}
             sharedSelectionBox={venueSelectionBox}
@@ -1753,7 +2297,9 @@ export function VideoEditor(): React.JSX.Element {
             scrollX={scrollX}
             zoom={zoom}
             width={dimensions.width}
-            selectedEventId={selectedVenueEvent?.lane === 'performer' ? selectedVenueEvent.id : null}
+            selectedEventId={
+              selectedVenueEvent?.lane === 'performer' ? selectedVenueEvent.id : null
+            }
             onSelectEvent={(id) => handleSelectVenue('performer', id)}
             onSelectRange={handleSelectVenueRange}
             sharedSelectionBox={venueSelectionBox}
@@ -1768,7 +2314,13 @@ export function VideoEditor(): React.JSX.Element {
             getEventDuration={(event) => (event as VenuePerformerEvent).duration}
           />
 
-          <Playhead currentTime={currentTime} scrollX={scrollX} zoom={zoom} height={VIDEO_EDITOR_CONFIG.playheadHeight} onSeek={handleSeek} />
+          <Playhead
+            currentTime={currentTime}
+            scrollX={scrollX}
+            zoom={zoom}
+            height={VIDEO_EDITOR_CONFIG.playheadHeight}
+            onSeek={handleSeek}
+          />
         </div>
       </div>
 

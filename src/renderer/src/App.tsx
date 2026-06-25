@@ -28,9 +28,7 @@ class ErrorBoundary extends Component<
       return (
         <div style={{ padding: 32, color: '#fff', background: '#1e1e1e', height: '100vh' }}>
           <h2>Something went wrong</h2>
-          <pre style={{ whiteSpace: 'pre-wrap', color: '#f88' }}>
-            {this.state.error?.message}
-          </pre>
+          <pre style={{ whiteSpace: 'pre-wrap', color: '#f88' }}>{this.state.error?.message}</pre>
           <button
             style={{ marginTop: 16, padding: '8px 16px', cursor: 'pointer' }}
             onClick={() => this.setState({ hasError: false, error: null })}

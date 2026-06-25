@@ -33,16 +33,16 @@ npm run dev
 
 ## Project Structure
 
-| Directory | Purpose |
-|-----------|---------|
-| `src/main/` | Electron main process (IPC handlers, file I/O) |
-| `src/preload/` | IPC bridge between main and renderer |
-| `src/renderer/src/components/` | React UI components |
-| `src/renderer/src/components/chartPreviewModules/` | 3D highway scene (Three.js) |
-| `src/renderer/src/stores/` | Zustand state stores |
-| `src/renderer/src/services/` | Audio playback, tick/time conversion |
-| `src/renderer/src/utils/` | MIDI/chart parsers |
-| `src/renderer/src/types/` | Shared TypeScript types and constants |
+| Directory                                          | Purpose                                        |
+| -------------------------------------------------- | ---------------------------------------------- |
+| `src/main/`                                        | Electron main process (IPC handlers, file I/O) |
+| `src/preload/`                                     | IPC bridge between main and renderer           |
+| `src/renderer/src/components/`                     | React UI components                            |
+| `src/renderer/src/components/chartPreviewModules/` | 3D highway scene (Three.js)                    |
+| `src/renderer/src/stores/`                         | Zustand state stores                           |
+| `src/renderer/src/services/`                       | Audio playback, tick/time conversion           |
+| `src/renderer/src/utils/`                          | MIDI/chart parsers                             |
+| `src/renderer/src/types/`                          | Shared TypeScript types and constants          |
 
 ## Reporting Bugs
 
@@ -61,17 +61,17 @@ OCTAVE ships through two automated channels. Both build Windows, macOS, and
 Linux installers and publish a GitHub Release; users auto-update via
 electron-updater.
 
-| Channel | Branch | Workflow | Release type | Who receives it |
-|---------|--------|----------|--------------|-----------------|
-| Stable | `master` | [`release.yml`](.github/workflows/release.yml) | normal release (`vX.Y.Z`) | everyone |
-| Beta | `beta` | [`release-beta.yml`](.github/workflows/release-beta.yml) | pre-release (`vX.Y.Z-beta.N`) | only users who opt in |
+| Channel | Branch   | Workflow                                                 | Release type                  | Who receives it       |
+| ------- | -------- | -------------------------------------------------------- | ----------------------------- | --------------------- |
+| Stable  | `master` | [`release.yml`](.github/workflows/release.yml)           | normal release (`vX.Y.Z`)     | everyone              |
+| Beta    | `beta`   | [`release-beta.yml`](.github/workflows/release-beta.yml) | pre-release (`vX.Y.Z-beta.N`) | only users who opt in |
 
 ### How users opt into beta
 
 In the app: **Settings → Updates → "Receive beta (pre-release) updates"**.
 This flips `autoUpdater.allowPrerelease`, so the user's app starts picking up
 pre-release builds and auto-updating to them. Turning it back off returns them
-to the stable channel. Because `1.2.3-beta.2` sorts *below* `1.2.3` in semver,
+to the stable channel. Because `1.2.3-beta.2` sorts _below_ `1.2.3` in semver,
 beta testers automatically roll forward onto the matching stable release once
 it ships — no manual reinstall.
 
@@ -96,6 +96,5 @@ Both workflows version automatically from conventional-commit messages
 major), so no manual version edits are needed.
 
 ## License
-
 
 By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).

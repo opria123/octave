@@ -1,9 +1,23 @@
 // UI Overlays - Instrument toggles, difficulty selector, timeline scrubber, vocal overlay
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useProjectStore, getSongStore, useUIStore, useSettingsStore } from '../../stores'
-import type { Instrument, Difficulty, NoteModifiers, VocalNote, VocalPhrase, HarmonyPart, VenueTrackData } from '../../types'
+import type {
+  Instrument,
+  Difficulty,
+  NoteModifiers,
+  VocalNote,
+  VocalPhrase,
+  HarmonyPart,
+  VenueTrackData
+} from '../../types'
 import type { EditingTool } from './types'
-import { getAudioSources, onAudioLoaded, playPitchPreview, stopPitchPreview, seek as seekAudio } from '../../services/audioService'
+import {
+  getAudioSources,
+  onAudioLoaded,
+  playPitchPreview,
+  stopPitchPreview,
+  seek as seekAudio
+} from '../../services/audioService'
 import { resolveVenuePlaybackState } from './venuePlayback'
 
 function formatVenueLabel(value: string): string {
@@ -37,17 +51,60 @@ export function VenueStateOverlay({ songId }: { songId: string }): React.JSX.Ele
     return store.subscribe(sync)
   }, [songId])
 
-  const playbackState = useMemo(() => resolveVenuePlaybackState(venueTrack, currentTick), [venueTrack, currentTick])
+  const playbackState = useMemo(
+    () => resolveVenuePlaybackState(venueTrack, currentTick),
+    [venueTrack, currentTick]
+  )
 
   return (
     <div className="venue-state-overlay">
       <div className="venue-state-title">Venue Preview</div>
-      <div className="venue-state-row"><span>Lighting</span><strong>{playbackState.lighting ? formatVenueLabel(playbackState.lighting.type) : 'None'}</strong></div>
-      <div className="venue-state-row"><span>Post FX</span><strong>{playbackState.postProcessing ? formatVenueLabel(playbackState.postProcessing.type) : 'None'}</strong></div>
-      <div className="venue-state-row"><span>Camera</span><strong>{playbackState.cameraCut ? formatVenueLabel(playbackState.cameraCut.subject) : 'None'}</strong></div>
-      <div className="venue-state-row"><span>Stage</span><strong>{playbackState.activeStage.length > 0 ? playbackState.activeStage.map((event) => formatVenueLabel(event.effect)).join(', ') : 'None'}</strong></div>
-      <div className="venue-state-row"><span>Performer</span><strong>{playbackState.activePerformer.length > 0 ? playbackState.activePerformer.map((event) => `${formatVenueLabel(event.type)} ${formatVenueLabel(event.performer ?? '')}`.trim()).join(', ') : 'None'}</strong></div>
-      <div className="venue-state-row"><span>Next Event</span><strong>{playbackState.nextEventTick !== null ? `t${playbackState.nextEventTick}` : 'End'}</strong></div>
+      <div className="venue-state-row">
+        <span>Lighting</span>
+        <strong>
+          {playbackState.lighting ? formatVenueLabel(playbackState.lighting.type) : 'None'}
+        </strong>
+      </div>
+      <div className="venue-state-row">
+        <span>Post FX</span>
+        <strong>
+          {playbackState.postProcessing
+            ? formatVenueLabel(playbackState.postProcessing.type)
+            : 'None'}
+        </strong>
+      </div>
+      <div className="venue-state-row">
+        <span>Camera</span>
+        <strong>
+          {playbackState.cameraCut ? formatVenueLabel(playbackState.cameraCut.subject) : 'None'}
+        </strong>
+      </div>
+      <div className="venue-state-row">
+        <span>Stage</span>
+        <strong>
+          {playbackState.activeStage.length > 0
+            ? playbackState.activeStage.map((event) => formatVenueLabel(event.effect)).join(', ')
+            : 'None'}
+        </strong>
+      </div>
+      <div className="venue-state-row">
+        <span>Performer</span>
+        <strong>
+          {playbackState.activePerformer.length > 0
+            ? playbackState.activePerformer
+                .map((event) =>
+                  `${formatVenueLabel(event.type)} ${formatVenueLabel(event.performer ?? '')}`.trim()
+                )
+                .join(', ')
+            : 'None'}
+        </strong>
+      </div>
+      <div className="venue-state-row">
+        <span>Next Event</span>
+        <strong>
+          {playbackState.nextEventTick !== null ? `t${playbackState.nextEventTick}` : 'End'}
+        </strong>
+      </div>
     </div>
   )
 }
@@ -61,7 +118,9 @@ export function InstrumentToggles(): React.JSX.Element {
   const [visibleInstruments, setVisibleInstruments] = useState<Set<Instrument>>(
     new Set(['drums', 'guitar', 'bass', 'vocals', 'keys', 'proKeys', 'proGuitar', 'proBass'])
   )
-  const [waveformSources, setWaveformSources] = useState<Array<{ filePath: string; filename: string }>>([])
+  const [waveformSources, setWaveformSources] = useState<
+    Array<{ filePath: string; filename: string }>
+  >([])
 
   useEffect(() => {
     if (!activeSongId) return
@@ -152,7 +211,8 @@ export function DifficultySelector(): React.JSX.Element {
     const store = getSongStore(activeSongId)
     setActiveDifficulty(store.getState().activeDifficulty)
     return store.subscribe((state, prev) => {
-      if (state.activeDifficulty !== prev.activeDifficulty) setActiveDifficulty(state.activeDifficulty)
+      if (state.activeDifficulty !== prev.activeDifficulty)
+        setActiveDifficulty(state.activeDifficulty)
     })
   }, [activeSongId])
 
@@ -309,7 +369,12 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
   const contentRef = useRef<HTMLDivElement>(null)
   const [editingLyric, setEditingLyric] = useState<{ noteId: string; value: string } | null>(null)
   const [hoveredNoteId, setHoveredNoteId] = useState<string | null>(null)
-  const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  const [selectionBox, setSelectionBox] = useState<{
+    x: number
+    y: number
+    w: number
+    h: number
+  } | null>(null)
   const dragRef = useRef<{
     mode: 'select' | 'move'
     startX: number
@@ -336,8 +401,10 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
     return store.subscribe((state, prev) => {
       if (state.currentTick !== prev.currentTick) setCurrentTick(state.currentTick)
       if (state.song.vocalNotes !== prev.song.vocalNotes) setVocalNotes(state.song.vocalNotes || [])
-      if (state.song.vocalPhrases !== prev.song.vocalPhrases) setVocalPhrases(state.song.vocalPhrases || [])
-      if (state.activeHarmonyPart !== prev.activeHarmonyPart) setActiveHarmonyPart(state.activeHarmonyPart)
+      if (state.song.vocalPhrases !== prev.song.vocalPhrases)
+        setVocalPhrases(state.song.vocalPhrases || [])
+      if (state.activeHarmonyPart !== prev.activeHarmonyPart)
+        setActiveHarmonyPart(state.activeHarmonyPart)
       if (state.visibleInstruments !== prev.visibleInstruments)
         setVisibleInstruments(new Set(state.visibleInstruments))
       if (state.selectedVocalNoteIds !== prev.selectedVocalNoteIds)
@@ -352,24 +419,31 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
   const pitchRange = pitchMax - pitchMin
 
   // Filter notes for visible window (show ALL harmony parts simultaneously with different colors)
-  const filteredNotes = useMemo(() => vocalNotes.filter(
-    (n) =>
-      n.tick + n.duration >= currentTick - 480 &&
-      n.tick <= currentTick + tickWindow
-  ), [vocalNotes, currentTick, tickWindow])
+  const filteredNotes = useMemo(
+    () =>
+      vocalNotes.filter(
+        (n) => n.tick + n.duration >= currentTick - 480 && n.tick <= currentTick + tickWindow
+      ),
+    [vocalNotes, currentTick, tickWindow]
+  )
 
   // Filter phrases for active harmony part
-  const filteredPhrases = useMemo(() => vocalPhrases.filter(
-    (p) =>
-      p.harmonyPart === activeHarmonyPart &&
-      p.tick + p.duration >= currentTick - 480 &&
-      p.tick <= currentTick + tickWindow
-  ), [vocalPhrases, activeHarmonyPart, currentTick, tickWindow])
+  const filteredPhrases = useMemo(
+    () =>
+      vocalPhrases.filter(
+        (p) =>
+          p.harmonyPart === activeHarmonyPart &&
+          p.tick + p.duration >= currentTick - 480 &&
+          p.tick <= currentTick + tickWindow
+      ),
+    [vocalPhrases, activeHarmonyPart, currentTick, tickWindow]
+  )
 
   // Check which harmony parts have notes
-  const availableParts = useMemo(() => [0, 1, 2, 3].filter(
-    (p) => vocalNotes.some((n) => n.harmonyPart === p)
-  ) as HarmonyPart[], [vocalNotes])
+  const availableParts = useMemo(
+    () => [0, 1, 2, 3].filter((p) => vocalNotes.some((n) => n.harmonyPart === p)) as HarmonyPart[],
+    [vocalNotes]
+  )
 
   const partColors = ['#E879F9', '#60A5FA', '#34D399', '#FBBF24']
   const partLabels = ['Main', 'H1', 'H2', 'H3']
@@ -406,7 +480,8 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
       if (editTool === 'place') {
         // Check for duplicate
         const existing = vocalNotes.find(
-          (n) => n.harmonyPart === activeHarmonyPart && Math.abs(n.tick - pos.tick) < ticksPerSnap / 2
+          (n) =>
+            n.harmonyPart === activeHarmonyPart && Math.abs(n.tick - pos.tick) < ticksPerSnap / 2
         )
         if (existing) return
         store.getState().addVocalNote({
@@ -456,8 +531,7 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
         const el = contentRef.current
         if (el) {
           const rect = el.getBoundingClientRect()
-          const ids = selectedVocalNoteIds.includes(noteId)
-            ? selectedVocalNoteIds : [noteId]
+          const ids = selectedVocalNoteIds.includes(noteId) ? selectedVocalNoteIds : [noteId]
           const allNotes = store.getState().song.vocalNotes || []
           const origPositions = ids.map((id) => {
             const n = allNotes.find((v) => v.id === id)
@@ -544,7 +618,8 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
           if (hoveredNoteId) setHoveredNoteId(null)
         }
       } else {
-        e.currentTarget.style.cursor = editTool === 'place' ? 'crosshair' : editTool === 'erase' ? 'pointer' : 'default'
+        e.currentTarget.style.cursor =
+          editTool === 'place' ? 'crosshair' : editTool === 'erase' ? 'pointer' : 'default'
         if (hoveredNoteId) setHoveredNoteId(null)
       }
     },
@@ -604,8 +679,12 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
           .filter((n) => {
             if (n.harmonyPart !== hp) return false
             const p = typeof n.lane === 'number' ? n.lane : 60
-            return n.tick + n.duration >= startTick && n.tick <= endTick &&
-              p >= lowPitch && p <= highPitch
+            return (
+              n.tick + n.duration >= startTick &&
+              n.tick <= endTick &&
+              p >= lowPitch &&
+              p <= highPitch
+            )
           })
           .map((n) => n.id)
         store.getState().selectVocalNotes(ids)
@@ -613,7 +692,7 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
         const dx = e.clientX - drag.startClientX
         const dy = e.clientY - drag.startClientY
         // Convert pixel deltas to tick/pitch deltas
-        const tickDelta = (dx / rect.width) * tickWindow / ((100 - strikelinePos) / 100)
+        const tickDelta = ((dx / rect.width) * tickWindow) / ((100 - strikelinePos) / 100)
         const pitchDelta = -Math.round((dy / rect.height) * pitchRange)
         const snappedTickDelta = Math.round(tickDelta / ticksPerSnap) * ticksPerSnap
 
@@ -621,11 +700,19 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
         for (const orig of drag.origPositions) {
           const newTick = Math.max(0, orig.tick + snappedTickDelta)
           const newPitch = Math.max(pitchMin, Math.min(pitchMax, orig.pitch + pitchDelta))
-          store.getState().updateVocalNote(orig.id, { tick: newTick, lane: newPitch as unknown as VocalNote['lane'] })
+          store
+            .getState()
+            .updateVocalNote(orig.id, {
+              tick: newTick,
+              lane: newPitch as unknown as VocalNote['lane']
+            })
         }
         // Preview pitch of first moved note
         if (drag.origPositions.length > 0) {
-          const newPitch = Math.max(pitchMin, Math.min(pitchMax, drag.origPositions[0].pitch + pitchDelta))
+          const newPitch = Math.max(
+            pitchMin,
+            Math.min(pitchMax, drag.origPositions[0].pitch + pitchDelta)
+          )
           playPitchPreview(newPitch)
         }
       }
@@ -673,7 +760,7 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
       ctx.scale(dpr, dpr)
       ctx.clearRect(0, 0, cw, ch)
 
-      const strikeX = cw * strikelinePos / 100
+      const strikeX = (cw * strikelinePos) / 100
       const rects: Array<{ id: string; x: number; y: number; w: number; h: number }> = []
 
       // 1. Phrase backgrounds (clipped to strikeline)
@@ -684,26 +771,35 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
         const endPct = rawPct + Math.max(1, (phrase.duration / tickWindow) * 85)
         const wPct = endPct - clampPct
         if (wPct <= 0) continue
-        const px = cw * clampPct / 100
-        const pw = cw * wPct / 100
+        const px = (cw * clampPct) / 100
+        const pw = (cw * wPct) / 100
         ctx.fillStyle = 'rgba(232, 121, 249, 0.06)'
         ctx.fillRect(px, 0, pw, ch)
         ctx.strokeStyle = 'rgba(232, 121, 249, 0.3)'
         ctx.lineWidth = 1
         if (rawPct >= strikelinePos) {
-          ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, ch); ctx.stroke()
+          ctx.beginPath()
+          ctx.moveTo(px, 0)
+          ctx.lineTo(px, ch)
+          ctx.stroke()
         }
-        ctx.beginPath(); ctx.moveTo(px + pw, 0); ctx.lineTo(px + pw, ch); ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(px + pw, 0)
+        ctx.lineTo(px + pw, ch)
+        ctx.stroke()
       }
 
       // 2. Pitch grid lines
       for (let p = pitchMin; p <= pitchMax; p++) {
         const pct = ((pitchMax - p) / pitchRange) * 75 + 8
-        const y = ch * pct / 100
+        const y = (ch * pct) / 100
         const isC = p % 12 === 0
         ctx.strokeStyle = isC ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.04)'
         ctx.lineWidth = 1
-        ctx.beginPath(); ctx.moveTo(strikeX, y); ctx.lineTo(cw, y); ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(strikeX, y)
+        ctx.lineTo(cw, y)
+        ctx.stroke()
         if (isC) {
           ctx.fillStyle = 'rgba(255,255,255,0.3)'
           ctx.font = '9px sans-serif'
@@ -720,11 +816,14 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
         const tickOff = t - currentTick
         const pct = strikelinePos + (tickOff / tickWindow) * (100 - strikelinePos)
         if (pct < 0 || pct > 100) continue
-        const x = cw * pct / 100
+        const x = (cw * pct) / 100
         const isMeasure = t % 1920 === 0
         ctx.strokeStyle = isMeasure ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.06)'
         ctx.lineWidth = isMeasure ? 2 : 1
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, ch); ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x, ch)
+        ctx.stroke()
       }
 
       // 4. Strikeline with gradient + glow
@@ -761,28 +860,37 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
         const clampedPitch = Math.min(Math.max(pitch, pitchMin), pitchMax)
         const pitchPct = note.isPercussion ? 88 : ((pitchMax - clampedPitch) / pitchRange) * 75 + 8
 
-        const nx = cw * Math.max(0, offsetPct) / 100
-        const nw = cw * widthPct / 100
+        const nx = (cw * Math.max(0, offsetPct)) / 100
+        const nw = (cw * widthPct) / 100
         const isTalkie = !!note.isPitchless
 
         // Talkie: full-height gray bar
         if (isTalkie) {
           ctx.save()
           ctx.globalAlpha = isPast ? 0.15 : isActivePart ? 0.35 : 0.12
-          ctx.fillStyle = isSelected ? '#BBBBFF' : (editTool === 'erase' && hoveredNoteId === note.id ? '#FF4444' : '#888888')
+          ctx.fillStyle = isSelected
+            ? '#BBBBFF'
+            : editTool === 'erase' && hoveredNoteId === note.id
+              ? '#FF4444'
+              : '#888888'
           ctx.fillRect(nx, 0, nw, ch)
           // Diagonal hatching
           ctx.strokeStyle = 'rgba(200,200,200,0.18)'
           ctx.lineWidth = 1
           ctx.save()
-          ctx.beginPath(); ctx.rect(nx, 0, nw, ch); ctx.clip()
+          ctx.beginPath()
+          ctx.rect(nx, 0, nw, ch)
+          ctx.clip()
           for (let hx = nx - ch; hx < nx + nw + ch; hx += 10) {
-            ctx.beginPath(); ctx.moveTo(hx, 0); ctx.lineTo(hx + ch, ch); ctx.stroke()
+            ctx.beginPath()
+            ctx.moveTo(hx, 0)
+            ctx.lineTo(hx + ch, ch)
+            ctx.stroke()
           }
           ctx.restore()
           // Border
           ctx.globalAlpha = isPast ? 0.2 : isActivePart ? 0.7 : 0.25
-          ctx.strokeStyle = isSelected ? '#fff' : (isCurrent ? '#14b8a6' : '#AAAAAA')
+          ctx.strokeStyle = isSelected ? '#fff' : isCurrent ? '#14b8a6' : '#AAAAAA'
           ctx.lineWidth = isSelected ? 2 : 1
           ctx.strokeRect(nx, 0, nw, ch)
           // Label
@@ -809,7 +917,7 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
           continue
         }
 
-        const ny = ch * pitchPct / 100
+        const ny = (ch * pitchPct) / 100
         const nh = note.isPercussion ? 6 : 10
         const nr = note.isPercussion ? 3 : 4
 
@@ -827,11 +935,13 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
               if (prevPitch !== pitch) {
                 const prevClamped = Math.min(Math.max(prevPitch, pitchMin), pitchMax)
                 const prevPitchPct = ((pitchMax - prevClamped) / pitchRange) * 75 + 8
-                const prevEndPct = strikelinePos + ((prev.tick + prev.duration - currentTick) / tickWindow) * (100 - strikelinePos)
+                const prevEndPct =
+                  strikelinePos +
+                  ((prev.tick + prev.duration - currentTick) / tickWindow) * (100 - strikelinePos)
                 if (offsetPct - prevEndPct > 0) {
-                  const tx1 = cw * prevEndPct / 100
-                  const ty1 = ch * prevPitchPct / 100
-                  const tx2 = cw * offsetPct / 100
+                  const tx1 = (cw * prevEndPct) / 100
+                  const ty1 = (ch * prevPitchPct) / 100
+                  const tx2 = (cw * offsetPct) / 100
                   ctx.save()
                   ctx.strokeStyle = noteColor
                   ctx.lineWidth = 3
@@ -933,7 +1043,17 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
     const ro = new ResizeObserver(draw)
     ro.observe(canvas)
     return () => ro.disconnect()
-  }, [filteredNotes, filteredPhrases, currentTick, activeHarmonyPart, selectedVocalNoteIds, editTool, hoveredNoteId, selectionBox, editingLyric])
+  }, [
+    filteredNotes,
+    filteredPhrases,
+    currentTick,
+    activeHarmonyPart,
+    selectedVocalNoteIds,
+    editTool,
+    hoveredNoteId,
+    selectionBox,
+    editingLyric
+  ])
 
   if (!visibleInstruments.has('vocals')) return <></>
 
@@ -947,9 +1067,14 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
               <button
                 key={part}
                 style={{
-                  fontSize: 10, padding: '2px 6px', border: 'none', borderRadius: 3, cursor: 'pointer',
+                  fontSize: 10,
+                  padding: '2px 6px',
+                  border: 'none',
+                  borderRadius: 3,
+                  cursor: 'pointer',
                   fontWeight: activeHarmonyPart === part ? 700 : 500,
-                  backgroundColor: activeHarmonyPart === part ? partColors[part] : 'rgba(255,255,255,0.15)',
+                  backgroundColor:
+                    activeHarmonyPart === part ? partColors[part] : 'rgba(255,255,255,0.15)',
                   color: activeHarmonyPart === part ? '#000' : '#ccc',
                   boxShadow: activeHarmonyPart === part ? `0 0 6px ${partColors[part]}80` : 'none',
                   lineHeight: '16px'
@@ -973,40 +1098,49 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
         />
         <div
           style={{
-            position: 'absolute', inset: 0,
-            cursor: editTool === 'place' ? 'crosshair' : editTool === 'erase' ? 'pointer' : 'default'
+            position: 'absolute',
+            inset: 0,
+            cursor:
+              editTool === 'place' ? 'crosshair' : editTool === 'erase' ? 'pointer' : 'default'
           }}
           onMouseDown={handleCanvasMouseDown}
           onMouseMove={handleCanvasMouseMove}
           onDoubleClick={handleCanvasDoubleClick}
         />
-        {editingLyric && (() => {
-          const nr = noteRectsRef.current.find((r) => r.id === editingLyric.noteId)
-          if (!nr) return null
-          return (
-            <input
-              autoFocus
-              value={editingLyric.value}
-              onChange={(ev) => setEditingLyric({ ...editingLyric, value: ev.target.value })}
-              onBlur={commitLyric}
-              onKeyDown={(ev) => {
-                if (ev.key === 'Enter') commitLyric()
-                if (ev.key === 'Escape') setEditingLyric(null)
-                ev.stopPropagation()
-              }}
-              style={{
-                position: 'absolute',
-                left: nr.x,
-                top: nr.y - 22,
-                width: 60, fontSize: 12, fontWeight: 700, padding: '1px 4px',
-                background: 'rgba(0,0,0,0.85)', color: '#fff',
-                border: '1px solid #E879F9', borderRadius: 3, outline: 'none',
-                zIndex: 20
-              }}
-              onClick={(ev) => ev.stopPropagation()}
-            />
-          )
-        })()}
+        {editingLyric &&
+          (() => {
+            const nr = noteRectsRef.current.find((r) => r.id === editingLyric.noteId)
+            if (!nr) return null
+            return (
+              <input
+                autoFocus
+                value={editingLyric.value}
+                onChange={(ev) => setEditingLyric({ ...editingLyric, value: ev.target.value })}
+                onBlur={commitLyric}
+                onKeyDown={(ev) => {
+                  if (ev.key === 'Enter') commitLyric()
+                  if (ev.key === 'Escape') setEditingLyric(null)
+                  ev.stopPropagation()
+                }}
+                style={{
+                  position: 'absolute',
+                  left: nr.x,
+                  top: nr.y - 22,
+                  width: 60,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: '1px 4px',
+                  background: 'rgba(0,0,0,0.85)',
+                  color: '#fff',
+                  border: '1px solid #E879F9',
+                  borderRadius: 3,
+                  outline: 'none',
+                  zIndex: 20
+                }}
+                onClick={(ev) => ev.stopPropagation()}
+              />
+            )
+          })()}
       </div>
     </div>
   )
@@ -1049,12 +1183,37 @@ export function NoteModifierToggles(): React.JSX.Element {
   const toggle = useUIStore((s) => s.toggleModifier)
   const hotkeys = useSettingsStore((s) => s.hotkeys)
 
-  const buttons: { key: keyof NoteModifiers; label: string; shortcut: string; activeColor: string }[] = [
-    { key: 'cymbalOrTap', label: 'Cymbal/Tap', shortcut: hotkeys.toggleCymbalOrTap, activeColor: '#FFD700' },
-    { key: 'ghostOrHopo', label: 'Ghost/HOPO', shortcut: hotkeys.toggleGhostOrHopo, activeColor: '#88BBFF' },
+  const buttons: {
+    key: keyof NoteModifiers
+    label: string
+    shortcut: string
+    activeColor: string
+  }[] = [
+    {
+      key: 'cymbalOrTap',
+      label: 'Cymbal/Tap',
+      shortcut: hotkeys.toggleCymbalOrTap,
+      activeColor: '#FFD700'
+    },
+    {
+      key: 'ghostOrHopo',
+      label: 'Ghost/HOPO',
+      shortcut: hotkeys.toggleGhostOrHopo,
+      activeColor: '#88BBFF'
+    },
     { key: 'accent', label: 'Accent', shortcut: hotkeys.toggleAccent, activeColor: '#FF6666' },
-    { key: 'openOrKick', label: 'Open/Kick', shortcut: hotkeys.toggleOpenOrKick, activeColor: '#CC44FF' },
-    { key: 'starPower', label: 'Star Power', shortcut: hotkeys.toggleStarPower, activeColor: '#00CED1' },
+    {
+      key: 'openOrKick',
+      label: 'Open/Kick',
+      shortcut: hotkeys.toggleOpenOrKick,
+      activeColor: '#CC44FF'
+    },
+    {
+      key: 'starPower',
+      label: 'Star Power',
+      shortcut: hotkeys.toggleStarPower,
+      activeColor: '#00CED1'
+    },
     { key: 'solo', label: 'Solo', shortcut: hotkeys.toggleSolo, activeColor: '#FFD700' }
   ]
 
@@ -1081,7 +1240,11 @@ export function ShortcutHelpButton(): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const [panelStyle, setPanelStyle] = useState<{ top: number; left: number; maxHeight: number } | null>(null)
+  const [panelStyle, setPanelStyle] = useState<{
+    top: number
+    left: number
+    maxHeight: number
+  } | null>(null)
   const hotkeys = useSettingsStore((s) => s.hotkeys)
 
   useEffect(() => {
@@ -1171,7 +1334,10 @@ export function ShortcutHelpButton(): React.JSX.Element {
             <ShortcutRow keys={hotkeys.toggleCymbalOrTap} desc="Cymbal (drums) / Tap (guitar)" />
             <ShortcutRow keys={hotkeys.toggleGhostOrHopo} desc="Ghost (drums) / HOPO (guitar)" />
             <ShortcutRow keys={hotkeys.toggleAccent} desc="Accent" />
-            <ShortcutRow keys={hotkeys.toggleOpenOrKick} desc="Open strum (guitar) / Kick (drums)" />
+            <ShortcutRow
+              keys={hotkeys.toggleOpenOrKick}
+              desc="Open strum (guitar) / Kick (drums)"
+            />
             <ShortcutRow keys={hotkeys.toggleStarPower} desc="Star Power mode" />
             <ShortcutRow keys={hotkeys.toggleSolo} desc="Solo section mode" />
           </div>

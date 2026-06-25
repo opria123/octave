@@ -24,7 +24,7 @@ The list of songs in the currently-open project folder.
 
 - Each song shows its **album art thumbnail**, title, and artist.
 - A **dot** next to a song indicates unsaved changes.
-- Click a song to load it; switching songs auto-saves the current one if you have *Autosave* enabled.
+- Click a song to load it; switching songs auto-saves the current one if you have _Autosave_ enabled.
 - Right-click for per-song actions (rename, reveal in folder, remove from project).
 
 ## MIDI Editor (center)
@@ -42,6 +42,7 @@ The 3D YARG-style highway. Plays in lockstep with the MIDI editor. See the [Char
 ## Property Panel
 
 Context-sensitive inspector:
+
 - With nothing selected: song metadata (artist / title / album / charter / etc.) and tempo events list.
 - With a note selected: pitch, velocity, length, modifiers.
 - With multiple notes selected: bulk-edit common modifiers.
@@ -49,10 +50,11 @@ Context-sensitive inspector:
 ## Bottom Panel
 
 Tabbed area at the bottom of the window:
+
 - **Audio** — multi-stem waveform with playhead
 - **Video** — chart video sync editor
 - **Lyrics** — text editor for vocals lyrics with bulk paste
 
 ## Resizing & layout reset
 
-Drag any panel divider. To restore defaults: *Settings → Layout → Reset Panels*.
+Drag any panel divider. To restore defaults: _Settings → Layout → Reset Panels_.

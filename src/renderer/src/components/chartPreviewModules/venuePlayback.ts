@@ -64,7 +64,10 @@ function latestAtOrBefore<T extends { tick: number }>(events: T[], currentTick: 
   return latest
 }
 
-export function resolveVenuePlaybackState(venueTrack: VenueTrackData, currentTick: number): VenuePlaybackState {
+export function resolveVenuePlaybackState(
+  venueTrack: VenueTrackData,
+  currentTick: number
+): VenuePlaybackState {
   const lighting = latestAtOrBefore(venueTrack.lighting, currentTick)
   const postProcessing = latestAtOrBefore(venueTrack.postProcessing, currentTick)
   const cameraCut = latestAtOrBefore(venueTrack.cameraCuts, currentTick)
@@ -87,7 +90,8 @@ export function resolveVenuePlaybackState(venueTrack: VenueTrackData, currentTic
     ...venueTrack.performer.map((event) => event.tick)
   ]
 
-  const nextEventTick = allTicks.filter((tick) => tick > currentTick).sort((a, b) => a - b)[0] ?? null
+  const nextEventTick =
+    allTicks.filter((tick) => tick > currentTick).sort((a, b) => a - b)[0] ?? null
 
   return {
     lighting,

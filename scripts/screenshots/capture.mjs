@@ -132,7 +132,8 @@ async function main() {
   // Match the renderer viewport to the actual window so screenshots fill the frame.
   await page.setViewportSize({ width: bounds.width, height: bounds.height }).catch(() => {})
 
-  const haveSong = needsSong && fixture.projectDir && (await fsp.readdir(fixture.projectDir)).length > 0
+  const haveSong =
+    needsSong && fixture.projectDir && (await fsp.readdir(fixture.projectDir)).length > 0
   if (haveSong) {
     await seedAndReload(page, { projectDir: fixture.projectDir })
   }
@@ -155,7 +156,9 @@ async function main() {
       failed++
       const msg = err instanceof Error ? err.message : String(err)
       console.error(`[screenshots] x ${step.name} failed: ${msg}`)
-      await page.screenshot({ path: target.replace('.png', '-error.png'), fullPage: false }).catch(() => {})
+      await page
+        .screenshot({ path: target.replace('.png', '-error.png'), fullPage: false })
+        .catch(() => {})
     }
   }
 

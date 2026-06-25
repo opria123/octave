@@ -26,7 +26,9 @@ export function SettingsModal(): React.JSX.Element | null {
   const [draftEnableAutoChart, setDraftEnableAutoChart] = useState(enableAutoChart)
   const [draftAutoChartOutputDir, setDraftAutoChartOutputDir] = useState(autoChartOutputDir ?? '')
   const [draftBetaUpdates, setDraftBetaUpdates] = useState(betaUpdates)
-  const [draftInvertPianoRollVerticalScroll, setDraftInvertPianoRollVerticalScroll] = useState(invertPianoRollVerticalScroll)
+  const [draftInvertPianoRollVerticalScroll, setDraftInvertPianoRollVerticalScroll] = useState(
+    invertPianoRollVerticalScroll
+  )
 
   useEffect(() => {
     if (isOpen) {
@@ -37,7 +39,14 @@ export function SettingsModal(): React.JSX.Element | null {
       setDraftInvertPianoRollVerticalScroll(invertPianoRollVerticalScroll)
       setRecordingAction(null)
     }
-  }, [autoChartOutputDir, enableAutoChart, betaUpdates, hotkeys, invertPianoRollVerticalScroll, isOpen])
+  }, [
+    autoChartOutputDir,
+    enableAutoChart,
+    betaUpdates,
+    hotkeys,
+    invertPianoRollVerticalScroll,
+    isOpen
+  ])
 
   useEffect(() => {
     if (!isOpen || draftAutoChartOutputDir.trim()) return
@@ -112,9 +121,15 @@ export function SettingsModal(): React.JSX.Element | null {
         <div className="settings-modal-header">
           <div>
             <h2 className="settings-modal-title">Settings</h2>
-            <p className="settings-modal-subtitle">Change editor hotkeys. Click a binding, then press the new key combination.</p>
+            <p className="settings-modal-subtitle">
+              Change editor hotkeys. Click a binding, then press the new key combination.
+            </p>
           </div>
-          <button className="settings-modal-close" onClick={() => setSettingsModalOpen(false)} aria-label="Close settings">
+          <button
+            className="settings-modal-close"
+            onClick={() => setSettingsModalOpen(false)}
+            aria-label="Close settings"
+          >
             X
           </button>
         </div>
@@ -132,7 +147,9 @@ export function SettingsModal(): React.JSX.Element | null {
                 <span>Enable STRUM auto-charting</span>
               </label>
               <div className="settings-field-stack">
-                <label className="settings-field-label" htmlFor="auto-chart-output-dir">Default output folder</label>
+                <label className="settings-field-label" htmlFor="auto-chart-output-dir">
+                  Default output folder
+                </label>
                 <div className="settings-folder-picker">
                   <input
                     id="auto-chart-output-dir"
@@ -167,8 +184,8 @@ export function SettingsModal(): React.JSX.Element | null {
                 <span>Receive beta (pre-release) updates</span>
               </label>
               <p className="settings-field-hint">
-                Beta builds include fixes still being tested. They may be less stable than
-                regular releases. Turn this off to return to the stable channel.
+                Beta builds include fixes still being tested. They may be less stable than regular
+                releases. Turn this off to return to the stable channel.
               </p>
             </div>
           </section>
@@ -200,9 +217,14 @@ export function SettingsModal(): React.JSX.Element | null {
                   const defaultHotkey = cloneDefaultHotkeys()[action]
                   const hasConflict = conflictMap.has(action)
                   return (
-                    <div key={action} className={`settings-hotkey-row${hasConflict ? ' has-conflict' : ''}`}>
+                    <div
+                      key={action}
+                      className={`settings-hotkey-row${hasConflict ? ' has-conflict' : ''}`}
+                    >
                       <div className="settings-hotkey-meta">
-                        <span className="settings-hotkey-label">{HOTKEY_ACTION_LABELS[action]}</span>
+                        <span className="settings-hotkey-label">
+                          {HOTKEY_ACTION_LABELS[action]}
+                        </span>
                         {hasConflict && (
                           <span className="settings-hotkey-conflict-text">
                             Conflicts with another action on {conflictMap.get(action)}
@@ -218,7 +240,9 @@ export function SettingsModal(): React.JSX.Element | null {
                       <div className="settings-hotkey-actions">
                         <button
                           className="settings-hotkey-clear"
-                          onClick={() => setDraftHotkeys((prev) => ({ ...prev, [action]: defaultHotkey }))}
+                          onClick={() =>
+                            setDraftHotkeys((prev) => ({ ...prev, [action]: defaultHotkey }))
+                          }
                           title={`Reset ${HOTKEY_ACTION_LABELS[action]} to default (${defaultHotkey})`}
                         >
                           Reset

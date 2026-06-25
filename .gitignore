@@ -27,6 +27,7 @@ Desktop.ini
 __pycache__/
 *.pyc
 .venv/
+venv/
 
 # TypeScript
 *.tsbuildinfo

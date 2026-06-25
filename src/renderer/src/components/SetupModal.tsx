@@ -113,23 +113,27 @@ export function SetupModal(): React.JSX.Element | null {
   const percent = Math.max(0, Math.min(100, Math.round(progress?.percent ?? 0)))
 
   return (
-    <div className="setup-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="setup-modal-title">
+    <div
+      className="setup-modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="setup-modal-title"
+    >
       <div className="setup-modal">
         <h2 id="setup-modal-title">{isUpgrade ? 'Update AI runtime' : 'Set up AI features'}</h2>
         <p className="setup-modal-body">
           {isUpgrade ? (
             <>
-              OCTAVE was updated and the bundled AI runtime needs to be refreshed
-              to match (new dependency versions, GPU support, or a Python upgrade).
-              Your existing runtime will be replaced. This may take several minutes
-              on first launch; future updates only re-run when something changes.
+              OCTAVE was updated and the bundled AI runtime needs to be refreshed to match (new
+              dependency versions, GPU support, or a Python upgrade). Your existing runtime will be
+              replaced. This may take several minutes on first launch; future updates only re-run
+              when something changes.
             </>
           ) : (
             <>
-              OCTAVE uses a self-contained Python runtime to power Auto-Chart, stem
-              separation, and lyric transcription. This is a one-time download
-              (~1.5 GB) installed in your user data folder. Updates to OCTAVE will
-              not need to re-download it.
+              OCTAVE uses a self-contained Python runtime to power Auto-Chart, stem separation, and
+              lyric transcription. This is a one-time download (~1.5 GB) installed in your user data
+              folder. Updates to OCTAVE will not need to re-download it.
             </>
           )}
         </p>
@@ -140,7 +144,9 @@ export function SetupModal(): React.JSX.Element | null {
               <div className="setup-modal-progress-bar" style={{ width: `${percent}%` }} />
             </div>
             <div className="setup-modal-progress-meta">
-              <span className="setup-modal-progress-stage">{progress?.message ?? 'Working\u2026'}</span>
+              <span className="setup-modal-progress-stage">
+                {progress?.message ?? 'Working\u2026'}
+              </span>
               <span className="setup-modal-progress-percent">{percent}%</span>
             </div>
           </>

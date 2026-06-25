@@ -4,7 +4,8 @@ const REPO = 'opria123/octave'
 
 export default defineConfig({
   title: 'OCTAVE',
-  description: 'Orchestrated Chart & Track Authoring Visual Editor — a desktop chart editor for rhythm games like YARG and Clone Hero.',
+  description:
+    'Orchestrated Chart & Track Authoring Visual Editor — a desktop chart editor for rhythm games like YARG and Clone Hero.',
   lang: 'en-US',
   base: '/',
   cleanUrls: true,
@@ -16,8 +17,20 @@ export default defineConfig({
     ['meta', { name: 'theme-color', content: '#f2a65a' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'OCTAVE — Chart Editor' }],
-    ['meta', { property: 'og:description', content: 'A desktop chart editor for rhythm games like YARG and Clone Hero.' }],
-    ['meta', { property: 'og:image', content: 'https://octavestudio.tools/screenshots/editor-overview.png' }],
+    [
+      'meta',
+      {
+        property: 'og:description',
+        content: 'A desktop chart editor for rhythm games like YARG and Clone Hero.'
+      }
+    ],
+    [
+      'meta',
+      {
+        property: 'og:image',
+        content: 'https://octavestudio.tools/screenshots/editor-overview.png'
+      }
+    ],
     ['meta', { property: 'og:url', content: 'https://octavestudio.tools/' }]
   ],
 
@@ -28,7 +41,11 @@ export default defineConfig({
     nav: [
       { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },
       { text: 'Reference', link: '/reference/keyboard-shortcuts', activeMatch: '/reference/' },
-      { text: 'Troubleshooting', link: '/troubleshooting/auto-chart-issues', activeMatch: '/troubleshooting/' },
+      {
+        text: 'Troubleshooting',
+        link: '/troubleshooting/auto-chart-issues',
+        activeMatch: '/troubleshooting/'
+      },
       { text: 'Download', link: `https://github.com/${REPO}/releases/latest` },
       { text: 'GitHub', link: `https://github.com/${REPO}` }
     ],
@@ -54,9 +71,7 @@ export default defineConfig({
         },
         {
           text: 'Audio',
-          items: [
-            { text: 'Stems Mixer', link: '/guide/stems-mixer' }
-          ]
+          items: [{ text: 'Stems Mixer', link: '/guide/stems-mixer' }]
         },
         {
           text: 'Auto-Chart',
@@ -67,9 +82,7 @@ export default defineConfig({
         },
         {
           text: 'Output',
-          items: [
-            { text: 'Saving & Exporting', link: '/guide/exporting' }
-          ]
+          items: [{ text: 'Saving & Exporting', link: '/guide/exporting' }]
         }
       ],
       '/reference/': [
@@ -94,9 +107,7 @@ export default defineConfig({
       ]
     },
 
-    socialLinks: [
-      { icon: 'github', link: `https://github.com/${REPO}` }
-    ],
+    socialLinks: [{ icon: 'github', link: `https://github.com/${REPO}` }],
 
     editLink: {
       pattern: `https://github.com/${REPO}/edit/master/docs/:path`,

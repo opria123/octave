@@ -12,6 +12,7 @@ A "song folder" is any directory with a `notes.mid` or `notes.chart` plus audio.
 ## Song entries
 
 Each entry shows:
+
 - **Album art thumbnail** (from `album.png` / `album.jpg` in the folder, falling back to a placeholder)
 - **Title** and **artist** (from `song.ini` or chart metadata)
 - **Charter** initials (small badge)
@@ -29,14 +30,16 @@ Click a song to load it. If the previously-loaded song has unsaved changes, you'
 ## Multi-project workflow
 
 OCTAVE remembers the last opened folder. To switch:
-- *File → Open Recent* lists your recent project folders
-- *File → Open Folder* picks a new one (replaces the current view)
+
+- _File → Open Recent_ lists your recent project folders
+- _File → Open Folder_ picks a new one (replaces the current view)
 
 > Tip: Keep your in-progress charts in a single "WIP" folder so the Project Explorer becomes your daily song browser.
 
 ## Autosave
 
-If *Settings → Autosave* is enabled (default: on), OCTAVE writes changes automatically:
+If _Settings → Autosave_ is enabled (default: on), OCTAVE writes changes automatically:
+
 - After 10 seconds of editor inactivity
 - Before switching songs
 - Before closing the app

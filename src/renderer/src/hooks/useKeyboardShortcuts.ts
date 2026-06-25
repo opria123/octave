@@ -110,7 +110,7 @@ export function useKeyboardShortcuts(): void {
         e.preventDefault()
         if (activeSongId && !kbPlayPauseBusy) {
           kbPlayPauseBusy = true
-          
+
           playbackController.togglePlayback(activeSongId).finally(() => {
             kbPlayPauseBusy = false
           })
@@ -119,7 +119,10 @@ export function useKeyboardShortcuts(): void {
       }
 
       // Delete selected notes or SP phrase (Delete or Backspace)
-      if ((matchesHotkey(e, hotkeys.deleteSelection) || e.key === 'Backspace') && !isInputElement(target)) {
+      if (
+        (matchesHotkey(e, hotkeys.deleteSelection) || e.key === 'Backspace') &&
+        !isInputElement(target)
+      ) {
         e.preventDefault()
         if (songStore) {
           const state = songStore.getState()
@@ -190,27 +193,33 @@ export function useKeyboardShortcuts(): void {
           const delta = matchesHotkey(e, hotkeys.nudgeLeft) ? -snapTicks : snapTicks
           if (state.selectedNoteIds.length > 0) {
             e.preventDefault()
-            const minTick = Math.min(...state.selectedNoteIds.map((id) => {
-              const n = state.song.notes.find((nn) => nn.id === id)
-              return n ? n.tick : 0
-            }))
+            const minTick = Math.min(
+              ...state.selectedNoteIds.map((id) => {
+                const n = state.song.notes.find((nn) => nn.id === id)
+                return n ? n.tick : 0
+              })
+            )
             if (minTick + delta < 0) return // don't nudge before tick 0
             for (const id of state.selectedNoteIds) {
               const note = state.song.notes.find((n) => n.id === id)
-              if (note) songStore.getState().updateNote(id, { tick: Math.max(0, note.tick + delta) })
+              if (note)
+                songStore.getState().updateNote(id, { tick: Math.max(0, note.tick + delta) })
             }
             return
           }
           if (state.selectedVocalNoteIds.length > 0) {
             e.preventDefault()
-            const minTick = Math.min(...state.selectedVocalNoteIds.map((id) => {
-              const n = state.song.vocalNotes.find((nn) => nn.id === id)
-              return n ? n.tick : 0
-            }))
+            const minTick = Math.min(
+              ...state.selectedVocalNoteIds.map((id) => {
+                const n = state.song.vocalNotes.find((nn) => nn.id === id)
+                return n ? n.tick : 0
+              })
+            )
             if (minTick + delta < 0) return
             for (const id of state.selectedVocalNoteIds) {
               const note = state.song.vocalNotes.find((n) => n.id === id)
-              if (note) songStore.getState().updateVocalNote(id, { tick: Math.max(0, note.tick + delta) })
+              if (note)
+                songStore.getState().updateVocalNote(id, { tick: Math.max(0, note.tick + delta) })
             }
             return
           }
@@ -246,16 +255,46 @@ export function useKeyboardShortcuts(): void {
 
       // Tool switching (1/2/3) and modifier toggles
       if (!isCtrlOrCmd && !isInputElement(target)) {
-        if (matchesHotkey(e, hotkeys.toolSelect)) { useUIStore.getState().setEditTool('select'); return }
-        if (matchesHotkey(e, hotkeys.toolPlace)) { useUIStore.getState().setEditTool('place'); return }
-        if (matchesHotkey(e, hotkeys.toolErase)) { useUIStore.getState().setEditTool('erase'); return }
-        if (matchesHotkey(e, hotkeys.toggleCymbalOrTap)) { useUIStore.getState().toggleModifier('cymbalOrTap'); return }
-        if (matchesHotkey(e, hotkeys.toggleGhostOrHopo)) { useUIStore.getState().toggleModifier('ghostOrHopo'); return }
-        if (matchesHotkey(e, hotkeys.toggleAccent)) { useUIStore.getState().toggleModifier('accent'); return }
-        if (matchesHotkey(e, hotkeys.toggleOpenOrKick)) { useUIStore.getState().toggleModifier('openOrKick'); return }
-        if (matchesHotkey(e, hotkeys.toggleStarPower)) { useUIStore.getState().toggleModifier('starPower'); return }
-        if (matchesHotkey(e, hotkeys.toggleSolo)) { useUIStore.getState().toggleModifier('solo'); return }
-        if (matchesHotkey(e, hotkeys.toggleTalkie)) { useUIStore.getState().toggleModifier('talkie'); return }
+        if (matchesHotkey(e, hotkeys.toolSelect)) {
+          useUIStore.getState().setEditTool('select')
+          return
+        }
+        if (matchesHotkey(e, hotkeys.toolPlace)) {
+          useUIStore.getState().setEditTool('place')
+          return
+        }
+        if (matchesHotkey(e, hotkeys.toolErase)) {
+          useUIStore.getState().setEditTool('erase')
+          return
+        }
+        if (matchesHotkey(e, hotkeys.toggleCymbalOrTap)) {
+          useUIStore.getState().toggleModifier('cymbalOrTap')
+          return
+        }
+        if (matchesHotkey(e, hotkeys.toggleGhostOrHopo)) {
+          useUIStore.getState().toggleModifier('ghostOrHopo')
+          return
+        }
+        if (matchesHotkey(e, hotkeys.toggleAccent)) {
+          useUIStore.getState().toggleModifier('accent')
+          return
+        }
+        if (matchesHotkey(e, hotkeys.toggleOpenOrKick)) {
+          useUIStore.getState().toggleModifier('openOrKick')
+          return
+        }
+        if (matchesHotkey(e, hotkeys.toggleStarPower)) {
+          useUIStore.getState().toggleModifier('starPower')
+          return
+        }
+        if (matchesHotkey(e, hotkeys.toggleSolo)) {
+          useUIStore.getState().toggleModifier('solo')
+          return
+        }
+        if (matchesHotkey(e, hotkeys.toggleTalkie)) {
+          useUIStore.getState().toggleModifier('talkie')
+          return
+        }
       }
 
       // Reset zoom (Ctrl+0)
@@ -279,5 +318,10 @@ export function useKeyboardShortcuts(): void {
 // Helper to check if the event target is an input element
 function isInputElement(element: HTMLElement): boolean {
   const tagName = element.tagName.toLowerCase()
-  return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || element.isContentEditable
+  return (
+    tagName === 'input' ||
+    tagName === 'textarea' ||
+    tagName === 'select' ||
+    element.isContentEditable
+  )
 }

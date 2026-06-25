@@ -36,7 +36,7 @@ export async function packSng(
   for (const entry of allEntries) {
     const entryPath = join(songDir, entry)
     const lowerEntry = entry.toLowerCase()
-    
+
     // Ignore song.ini (metadata section contains its info), system files, backups/temp files,
     // and directories.
     if (
@@ -220,7 +220,7 @@ export async function packSng(
       if (rawData.length !== entry.size) {
         throw new Error(`File changed size during export: ${entry.name}`)
       }
-      
+
       // Encrypt rawData with keystream relative to each file's start (0-indexed)
       const encrypted = Buffer.from(rawData)
       for (let i = 0; i < rawData.length; i++) {

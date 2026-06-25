@@ -107,9 +107,7 @@ export function NoteGem({
 
   // Sustain bar: when head is visible, trail behind the head.
   // When head is hit (burning), the group is at strike line — trail extends forward into highway.
-  const sustainZ = isHeadVisible
-    ? -sustainLength / 2 - 0.12
-    : -sustainLength / 2
+  const sustainZ = isHeadVisible ? -sustainLength / 2 - 0.12 : -sustainLength / 2
 
   // Burn edge: bright glow at the strike-line end of an active sustain
   const isBurning = !isHeadVisible && sustainLength > 0
@@ -137,14 +135,25 @@ export function NoteGem({
       {isHeadVisible && isSelected && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
           <ringGeometry args={[0.2, 0.26, 16]} />
-          <meshBasicMaterial color="#FFFFFF" transparent opacity={0.7} side={THREE.DoubleSide} toneMapped={false} />
+          <meshBasicMaterial
+            color="#FFFFFF"
+            transparent
+            opacity={0.7}
+            side={THREE.DoubleSide}
+            toneMapped={false}
+          />
         </mesh>
       )}
 
       {/* Fret number for pro guitar/bass */}
       {isHeadVisible && fretNumber !== undefined && (
         <sprite position={[0, 0.22, 0.05]} scale={[0.42, 0.42, 1]}>
-          <spriteMaterial map={getFretTexture(fretNumber)} transparent depthWrite={false} sizeAttenuation />
+          <spriteMaterial
+            map={getFretTexture(fretNumber)}
+            transparent
+            depthWrite={false}
+            sizeAttenuation
+          />
         </sprite>
       )}
 
@@ -166,12 +175,7 @@ export function NoteGem({
       {isBurning && (
         <mesh position={[0, 0.04, 0]}>
           <boxGeometry args={[0.18, 0.08, 0.06]} />
-          <meshBasicMaterial
-            color={color}
-            transparent
-            opacity={0.45}
-            toneMapped={false}
-          />
+          <meshBasicMaterial color={color} transparent opacity={0.45} toneMapped={false} />
         </mesh>
       )}
     </group>
@@ -234,7 +238,12 @@ export function KickNoteBar({
       )}
       {showDoubleKickBadge && (
         <sprite position={[1.9, 0.26, 0]} scale={[0.72, 0.36, 1]}>
-          <spriteMaterial map={getDoubleKickBadgeTexture()} transparent depthWrite={false} sizeAttenuation />
+          <spriteMaterial
+            map={getDoubleKickBadgeTexture()}
+            transparent
+            depthWrite={false}
+            sizeAttenuation
+          />
         </sprite>
       )}
     </group>
@@ -265,11 +274,28 @@ export function HitFlashEffect({
     <group position={[offsetX + x, 0, STRIKE_LINE_POS]} visible={visible}>
       <mesh position={[0, 0.06, 0]} scale={[flashScale, flashScale, flashScale]}>
         <sphereGeometry args={[0.06, 8, 8]} />
-        <meshBasicMaterial color={color} transparent opacity={flashOpacity} depthWrite={false} toneMapped={false} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={flashOpacity}
+          depthWrite={false}
+          toneMapped={false}
+        />
       </mesh>
-      <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[ringScale, ringScale, 1]}>
-        <ringGeometry args={[0.06, 0.10, 16]} />
-        <meshBasicMaterial color={color} transparent opacity={ringOpacity} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
+      <mesh
+        position={[0, 0.04, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        scale={[ringScale, ringScale, 1]}
+      >
+        <ringGeometry args={[0.06, 0.1, 16]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={ringOpacity}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+          toneMapped={false}
+        />
       </mesh>
       {[0, 1, 2, 3].map((i) => {
         const angle = (i / 4) * Math.PI * 2 + clamped * 2
@@ -281,7 +307,13 @@ export function HitFlashEffect({
             scale={[1 - clamped, 1 - clamped, 1 - clamped]}
           >
             <boxGeometry args={[0.02, 0.02, 0.02]} />
-            <meshBasicMaterial color={color} transparent opacity={flashOpacity * 0.7} depthWrite={false} toneMapped={false} />
+            <meshBasicMaterial
+              color={color}
+              transparent
+              opacity={flashOpacity * 0.7}
+              depthWrite={false}
+              toneMapped={false}
+            />
           </mesh>
         )
       })}

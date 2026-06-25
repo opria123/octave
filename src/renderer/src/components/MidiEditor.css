@@ -17,8 +17,7 @@
   gap: 12px;
   padding: 10px 14px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0)),
-    var(--bg-tertiary);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0)), var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
   overflow-x: auto;
   overflow-y: hidden;
@@ -474,7 +473,9 @@
   border: 2px solid transparent;
   cursor: pointer;
   pointer-events: auto;
-  transition: border-color 0.1s ease, transform 0.1s ease;
+  transition:
+    border-color 0.1s ease,
+    transform 0.1s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
@@ -511,7 +512,6 @@
 .midi-editor-area::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
 }
-
 
 /* Swap Lanes popover (anchored to .edit-tool-button) */
 .midi-swap-popover {

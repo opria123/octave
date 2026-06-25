@@ -20,14 +20,11 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
   activeSongId: null,
 
   // Actions
-  setLoadedFolder: (path) =>
-    set({ loadedFolderPath: path, songIds: [], activeSongId: null }),
+  setLoadedFolder: (path) => set({ loadedFolderPath: path, songIds: [], activeSongId: null }),
 
   addSong: (songId) =>
     set((state) => ({
-      songIds: state.songIds.includes(songId)
-        ? state.songIds
-        : [...state.songIds, songId]
+      songIds: state.songIds.includes(songId) ? state.songIds : [...state.songIds, songId]
     })),
 
   removeSong: (songId) =>
@@ -161,9 +158,11 @@ export const useUIStore = create<UIStore>()((set) => ({
       }
     }),
   clearModifiers: () => set({ noteModifiers: { ...defaultModifiers } }),
-  togglePreviewFullscreen: () => set((state) => ({ isPreviewFullscreen: !state.isPreviewFullscreen })),
+  togglePreviewFullscreen: () =>
+    set((state) => ({ isPreviewFullscreen: !state.isPreviewFullscreen })),
   setSettingsModalOpen: (open) => set({ isSettingsModalOpen: open }),
   setExportModalOpen: (open) => set({ isExportModalOpen: open }),
-  toggleVocalPitchPlayback: () => set((state) => ({ vocalPitchPlayback: !state.vocalPitchPlayback })),
+  toggleVocalPitchPlayback: () =>
+    set((state) => ({ vocalPitchPlayback: !state.vocalPitchPlayback })),
   toggleHighwayWaveform: () => set((state) => ({ showHighwayWaveform: !state.showHighwayWaveform }))
 }))

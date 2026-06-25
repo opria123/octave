@@ -2,20 +2,20 @@
 
 ## App won't launch
 
-- **Windows**: SmartScreen blocked it. Click *More info → Run anyway*. (We're working on signing.)
-- **macOS**: Right-click the app and choose *Open* the first time, then click *Open* in the Gatekeeper prompt.
+- **Windows**: SmartScreen blocked it. Click _More info → Run anyway_. (We're working on signing.)
+- **macOS**: Right-click the app and choose _Open_ the first time, then click _Open_ in the Gatekeeper prompt.
 - **Linux**: AppImage isn't executable. Run `chmod +x octave-*.AppImage`.
 
 ## Audio doesn't play
 
 - Check the [Stems Mixer](/guide/stems-mixer) — is master volume up? Are all stems muted?
-- Check *Settings → Audio → Output device* — pick the right OS device.
+- Check _Settings → Audio → Output device_ — pick the right OS device.
 - Some `.opus` files with unusual containers fail to decode — re-encode to `.ogg` Vorbis as a workaround.
 
 ## Chart Preview is black / stuttery
 
-- Try *Settings → Chart Preview → Static venue* (disables animated background).
-- Lower *Gem quality* to **Low**.
+- Try _Settings → Chart Preview → Static venue_ (disables animated background).
+- Lower _Gem quality_ to **Low**.
 - Update your GPU drivers — OCTAVE uses WebGL 2 via Three.js.
 
 ## Settings or hotkeys won't save
@@ -33,7 +33,7 @@ The folder must contain `notes.mid` **or** `notes.chart`. Folders without either
 
 - Close other Electron / Chromium-based apps (they share GPU memory).
 - Lower the [Chart Preview](/guide/chart-preview) panel size by dragging the divider.
-- In *Settings → Audio*, try increasing the buffer size if you hear crackling.
+- In _Settings → Audio_, try increasing the buffer size if you hear crackling.
 
 ## Reporting a bug
 

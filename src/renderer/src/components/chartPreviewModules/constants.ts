@@ -71,12 +71,20 @@ export const FRET_PRESS_TICKS = 80
 export type InstrumentRenderType = 'drums' | 'guitar' | 'proGuitar' | 'proKeys' | 'vocals'
 
 // Helper functions
-export function getLaneConfig(instrumentType: InstrumentRenderType): { laneCount: number; laneWidth: number } {
-  const laneCount = instrumentType === 'drums' ? DRUM_LANE_COUNT
-    : instrumentType === 'proGuitar' ? PRO_GUITAR_LANE_COUNT
-    : instrumentType === 'proKeys' ? PRO_KEYS_VISIBLE
-    : instrumentType === 'vocals' ? VOCAL_LANE_COUNT
-    : GUITAR_LANE_COUNT
+export function getLaneConfig(instrumentType: InstrumentRenderType): {
+  laneCount: number
+  laneWidth: number
+} {
+  const laneCount =
+    instrumentType === 'drums'
+      ? DRUM_LANE_COUNT
+      : instrumentType === 'proGuitar'
+        ? PRO_GUITAR_LANE_COUNT
+        : instrumentType === 'proKeys'
+          ? PRO_KEYS_VISIBLE
+          : instrumentType === 'vocals'
+            ? VOCAL_LANE_COUNT
+            : GUITAR_LANE_COUNT
   return { laneCount, laneWidth: TRACK_WIDTH / laneCount }
 }
 
@@ -123,7 +131,10 @@ export function computeProKeysViewStart(
   // Center the visible window on the note range
   const center = Math.round((minPitch + maxPitch) / 2)
   const halfVisible = Math.floor(PRO_KEYS_VISIBLE / 2)
-  const viewStart = Math.max(PRO_KEYS_MIN, Math.min(PRO_KEYS_MAX - PRO_KEYS_VISIBLE + 1, center - halfVisible))
+  const viewStart = Math.max(
+    PRO_KEYS_MIN,
+    Math.min(PRO_KEYS_MAX - PRO_KEYS_VISIBLE + 1, center - halfVisible)
+  )
   return viewStart
 }
 

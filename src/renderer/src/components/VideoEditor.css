@@ -48,7 +48,9 @@
   border-radius: 4px;
   color: var(--text-primary);
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .video-toolbar-button:hover {
@@ -378,16 +380,16 @@
   font-style: italic;
 }
 
-  .venue-selection-box {
-    position: absolute;
-    top: 4px;
-    bottom: 4px;
-    border: 1px solid rgba(147, 197, 253, 0.85);
-    background: rgba(59, 130, 246, 0.2);
-    border-radius: 4px;
-    pointer-events: none;
-    z-index: 1;
-  }
+.venue-selection-box {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border: 1px solid rgba(147, 197, 253, 0.85);
+  background: rgba(59, 130, 246, 0.2);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 1;
+}
 
 /* Dense-tick stack picker popover */
 .venue-stack-picker {
@@ -430,11 +432,21 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
-.venue-stack-picker-item-lighting:hover { background: rgba(255, 220, 80, 0.15); }
-.venue-stack-picker-item-post:hover     { background: rgba(180, 100, 255, 0.15); }
-.venue-stack-picker-item-stage:hover    { background: rgba(80, 200, 160, 0.15); }
-.venue-stack-picker-item-camera:hover   { background: rgba(80, 160, 255, 0.15); }
-.venue-stack-picker-item-performer:hover { background: rgba(255, 120, 160, 0.15); }
+.venue-stack-picker-item-lighting:hover {
+  background: rgba(255, 220, 80, 0.15);
+}
+.venue-stack-picker-item-post:hover {
+  background: rgba(180, 100, 255, 0.15);
+}
+.venue-stack-picker-item-stage:hover {
+  background: rgba(80, 200, 160, 0.15);
+}
+.venue-stack-picker-item-camera:hover {
+  background: rgba(80, 160, 255, 0.15);
+}
+.venue-stack-picker-item-performer:hover {
+  background: rgba(255, 120, 160, 0.15);
+}
 
 .venue-stack-picker-tick {
   font-size: 9px;

@@ -3,7 +3,26 @@ import { Midi } from '@tonejs/midi'
 import { parseMidi, writeMidi } from 'midi-file'
 import type { MidiEvent as RawMidiEvent } from 'midi-file'
 import { v4 as uuidv4 } from 'uuid'
-import type { Note, Instrument, Difficulty, DrumLane, GuitarLane, ProGuitarString, TempoEvent, TimeSignature, StarPowerPhrase, SoloSection, LaneMarker, LaneMarkerType, VocalNote, VocalPhrase, HarmonyPart, SongSection, VenueTrackData, VenuePerformerEvent } from '../types'
+import type {
+  Note,
+  Instrument,
+  Difficulty,
+  DrumLane,
+  GuitarLane,
+  ProGuitarString,
+  TempoEvent,
+  TimeSignature,
+  StarPowerPhrase,
+  SoloSection,
+  LaneMarker,
+  LaneMarkerType,
+  VocalNote,
+  VocalPhrase,
+  HarmonyPart,
+  SongSection,
+  VenueTrackData,
+  VenuePerformerEvent
+} from '../types'
 
 // Clone Hero/YARG MIDI track names
 const TRACK_NAMES: Record<string, { instrument: Instrument; type: 'guitar' | 'drums' }> = {
@@ -31,8 +50,8 @@ const PRO_GUITAR_TRACKS: Record<string, Instrument> = {
 }
 
 // Pro Keys MIDI note range
-const PRO_KEYS_NOTE_MIN = 48  // C3
-const PRO_KEYS_NOTE_MAX = 72  // C5
+const PRO_KEYS_NOTE_MIN = 48 // C3
+const PRO_KEYS_NOTE_MAX = 72 // C5
 
 // Pro Guitar/Bass: note offsets per difficulty (6 notes per difficulty = 6 strings)
 const PRO_GUITAR_OFFSETS: Record<Difficulty, number> = {
@@ -45,17 +64,17 @@ const PRO_GUITAR_OFFSETS: Record<Difficulty, number> = {
 // Vocal track names → harmony part
 const VOCAL_TRACK_NAMES: Record<string, HarmonyPart> = {
   'PART VOCALS': 0,
-  'HARM1': 1,
-  'HARM2': 2,
-  'HARM3': 3
+  HARM1: 1,
+  HARM2: 2,
+  HARM3: 3
 }
 
 // Vocal MIDI constants
-const VOCAL_PHRASE_NOTE = 105        // Phrase marker (on/off)
-const VOCAL_PERCUSSION_NOTE = 96     // Non-pitched percussion
-const VOCAL_PERCUSSION_NOTE_2 = 97   // Non-pitched percussion variant
-const VOCAL_PITCH_MIN = 36           // Lowest pitched vocal note
-const VOCAL_PITCH_MAX = 84           // Highest pitched vocal note
+const VOCAL_PHRASE_NOTE = 105 // Phrase marker (on/off)
+const VOCAL_PERCUSSION_NOTE = 96 // Non-pitched percussion
+const VOCAL_PERCUSSION_NOTE_2 = 97 // Non-pitched percussion variant
+const VOCAL_PITCH_MIN = 36 // Lowest pitched vocal note
+const VOCAL_PITCH_MAX = 84 // Highest pitched vocal note
 
 // MIDI note to lane mapping for guitar (5-fret)
 const GUITAR_NOTE_OFFSETS: Record<Difficulty, number> = {
@@ -131,33 +150,33 @@ const VENUE_KEYFRAME_NOTES: Record<number, string> = {
 }
 // RB1/RB2/RBN1 camera cut notes → camera cut subjects (or modifier labels)
 const VENUE_CAMERA_NOTES: Record<number, string> = {
-  60: 'coop_all_near',      // random new shot
-  61: 'coop_b_near',        // focus bassist
-  62: 'coop_d_near',        // focus drummer
-  63: 'coop_g_near',        // focus guitarist
-  64: 'coop_v_near',        // focus vocalist
-  70: 'cam_no_behind',      // no behind cuts (RB1 modifier)
-  71: 'cam_only_far',       // only far cuts (RB1 modifier)
-  72: 'cam_only_closeups',  // only close-ups (RB1 modifier)
-  73: 'cam_no_closeups'     // no close-ups (RB1 modifier)
+  60: 'coop_all_near', // random new shot
+  61: 'coop_b_near', // focus bassist
+  62: 'coop_d_near', // focus drummer
+  63: 'coop_g_near', // focus guitarist
+  64: 'coop_v_near', // focus vocalist
+  70: 'cam_no_behind', // no behind cuts (RB1 modifier)
+  71: 'cam_only_far', // only far cuts (RB1 modifier)
+  72: 'cam_only_closeups', // only close-ups (RB1 modifier)
+  73: 'cam_no_closeups' // no close-ups (RB1 modifier)
 }
 // RB1/RB2/RBN1 post-processing notes (96-110) → nearest RB3 .pp effect name
 const VENUE_POST_PROCESSING_NOTES: Record<number, string> = {
-  96:  'ProFilm_a.pp',         // default / no effect
-  97:  'film_b+w.pp',          // black & white with contrast
-  98:  'film_16mm.pp',         // 16mm film grain
-  99:  'film_sepia_ink.pp',    // sepia
-  100: 'film_silvertone.pp',   // silvertone b&w
-  101: 'photo_negative.pp',    // negative
-  102: 'photocopy.pp',         // photocopy
-  103: 'ProFilm_a.pp',         // bloom A (equivalent to default)
-  104: 'bloom.pp',             // bloom B
-  105: 'ProFilm_mirror_a.pp',  // mirror + psychedelic
-  106: 'film_blue_filter.pp',  // blue tint + scanlines
-  107: 'video_a.pp',           // visible scanlines
-  108: 'video_bw.pp',          // b&w + scanlines
-  109: 'video_security.pp',    // security camera
-  110: 'clean_trails.pp'       // video feed delay (echo)
+  96: 'ProFilm_a.pp', // default / no effect
+  97: 'film_b+w.pp', // black & white with contrast
+  98: 'film_16mm.pp', // 16mm film grain
+  99: 'film_sepia_ink.pp', // sepia
+  100: 'film_silvertone.pp', // silvertone b&w
+  101: 'photo_negative.pp', // negative
+  102: 'photocopy.pp', // photocopy
+  103: 'ProFilm_a.pp', // bloom A (equivalent to default)
+  104: 'bloom.pp', // bloom B
+  105: 'ProFilm_mirror_a.pp', // mirror + psychedelic
+  106: 'film_blue_filter.pp', // blue tint + scanlines
+  107: 'video_a.pp', // visible scanlines
+  108: 'video_bw.pp', // b&w + scanlines
+  109: 'video_security.pp', // security camera
+  110: 'clean_trails.pp' // video feed delay (echo)
 }
 
 function createEmptyVenueTrack(): VenueTrackData {
@@ -193,7 +212,9 @@ function parseVenueTextEvent(venueTrack: VenueTrackData, tick: number, eventText
     return
   }
 
-  const performerMatch = text.match(/^venue_performer\s+(spotlight|singalong)(?:\s+(guitar|bass|drums|vocals|keys))?(?:\s+(\d+))?$/i)
+  const performerMatch = text.match(
+    /^venue_performer\s+(spotlight|singalong)(?:\s+(guitar|bass|drums|vocals|keys))?(?:\s+(\d+))?$/i
+  )
   if (performerMatch) {
     venueTrack.performer.push({
       id: uuidv4(),
@@ -217,10 +238,17 @@ function parseVenueTextEvent(venueTrack: VenueTrackData, tick: number, eventText
   }
 }
 
-function parseVenueNote(venueTrack: VenueTrackData, noteNumber: number, tick: number, duration: number): void {
+function parseVenueNote(
+  venueTrack: VenueTrackData,
+  noteNumber: number,
+  tick: number,
+  duration: number
+): void {
   if (noteNumber in VENUE_SPOTLIGHT_NOTES) {
     venueTrack.performer.push({
-      id: uuidv4(), tick, duration,
+      id: uuidv4(),
+      tick,
+      duration,
       type: 'spotlight',
       performer: VENUE_SPOTLIGHT_NOTES[noteNumber]
     })
@@ -228,7 +256,9 @@ function parseVenueNote(venueTrack: VenueTrackData, noteNumber: number, tick: nu
   }
   if (noteNumber in VENUE_SINGALONG_NOTES) {
     venueTrack.performer.push({
-      id: uuidv4(), tick, duration,
+      id: uuidv4(),
+      tick,
+      duration,
       type: 'singalong',
       performer: VENUE_SINGALONG_NOTES[noteNumber]
     })
@@ -243,17 +273,27 @@ function parseVenueNote(venueTrack: VenueTrackData, noteNumber: number, tick: nu
     return
   }
   if (noteNumber in VENUE_POST_PROCESSING_NOTES) {
-    venueTrack.postProcessing.push({ id: uuidv4(), tick, type: VENUE_POST_PROCESSING_NOTES[noteNumber] })
+    venueTrack.postProcessing.push({
+      id: uuidv4(),
+      tick,
+      type: VENUE_POST_PROCESSING_NOTES[noteNumber]
+    })
   }
 }
 
 function buildVenueTextEvents(venueTrack: VenueTrackData): Array<{ tick: number; text: string }> {
   return [
-    ...venueTrack.lighting.map((event) => ({ tick: event.tick, text: `[lighting (${event.type})]` })),
+    ...venueTrack.lighting.map((event) => ({
+      tick: event.tick,
+      text: `[lighting (${event.type})]`
+    })),
     ...venueTrack.postProcessing.map((event) => ({ tick: event.tick, text: `[${event.type}]` })),
     ...venueTrack.stage.map((event) => ({ tick: event.tick, text: `[${event.effect}]` })),
     ...venueTrack.cameraCuts.map((event) => ({ tick: event.tick, text: `[${event.subject}]` })),
-    ...venueTrack.performer.map((event) => ({ tick: event.tick, text: `venue_performer ${event.type}${event.performer ? ` ${event.performer}` : ''} ${event.duration}`.trim() }))
+    ...venueTrack.performer.map((event) => ({
+      tick: event.tick,
+      text: `venue_performer ${event.type}${event.performer ? ` ${event.performer}` : ''} ${event.duration}`.trim()
+    }))
   ].sort((left, right) => left.tick - right.tick)
 }
 
@@ -329,7 +369,9 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
   const sourcePPQ = midi.header.ppq || 480
   const tickScale = 480 / sourcePPQ
 
-  console.log(`[MIDI Parse] PPQ: ${sourcePPQ}, tickScale: ${tickScale}, tracks: ${midi.tracks.length}`)
+  console.log(
+    `[MIDI Parse] PPQ: ${sourcePPQ}, tickScale: ${tickScale}, tracks: ${midi.tracks.length}`
+  )
   for (const track of midi.tracks) {
     console.log(`[MIDI Parse]   Track "${track.name}" — ${track.notes.length} notes`)
   }
@@ -419,7 +461,15 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
       }
       if (ev.type !== 'sysEx' || !('data' in ev)) continue
       const data = (ev as RawMidiEvent & { data: number[] }).data
-      if (!data || data.length < 7 || data[0] !== 0x50 || data[1] !== 0x53 || data[2] !== 0 || data[3] !== 0) continue
+      if (
+        !data ||
+        data.length < 7 ||
+        data[0] !== 0x50 ||
+        data[1] !== 0x53 ||
+        data[2] !== 0 ||
+        data[3] !== 0
+      )
+        continue
       const diffByte = data[4]
       const code = data[5]
       if (code !== 0x01 && code !== 0x04) continue
@@ -439,7 +489,11 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
     }
   }
   const PS_DIFF_BYTES: Record<Difficulty, number> = { easy: 0, medium: 1, hard: 2, expert: 3 }
-  const psRangeCovers = (byDiff: PsRangeMap | undefined, difficulty: Difficulty, tick: number): boolean => {
+  const psRangeCovers = (
+    byDiff: PsRangeMap | undefined,
+    difficulty: Difficulty,
+    tick: number
+  ): boolean => {
     if (!byDiff) return false
     for (const diffByte of [PS_DIFF_BYTES[difficulty], 0xff]) {
       const ranges = byDiff.get(diffByte)
@@ -485,9 +539,9 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
       let laneMarkerType: LaneMarkerType | null = null
       if (noteNumber === 126) laneMarkerType = 'trill'
       else if (noteNumber === 127) laneMarkerType = 'tremolo'
-      else if (noteNumber === 120 && (instrument === 'drums')) laneMarkerType = 'bre'
-      else if (noteNumber === 103 && (instrument === 'drums')) laneMarkerType = 'discoFlip'
-      else if (noteNumber === 65 && (instrument === 'drums')) laneMarkerType = 'drumRoll'
+      else if (noteNumber === 120 && instrument === 'drums') laneMarkerType = 'bre'
+      else if (noteNumber === 103 && instrument === 'drums') laneMarkerType = 'discoFlip'
+      else if (noteNumber === 65 && instrument === 'drums') laneMarkerType = 'drumRoll'
       if (laneMarkerType) {
         laneMarkers.push({ id: uuidv4(), tick, duration, instrument, type: laneMarkerType })
         continue
@@ -516,7 +570,11 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
           }
         }
         // A PS SysEx open phrase converts the green note inside it to open.
-        if (difficulty && lane === 'green' && psRangeCovers(psOpenByTrack.get(trackName), difficulty, tick)) {
+        if (
+          difficulty &&
+          lane === 'green' &&
+          psRangeCovers(psOpenByTrack.get(trackName), difficulty, tick)
+        ) {
           lane = 'open'
         }
       } else {
@@ -572,7 +630,8 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
       }
 
       if (difficulty && lane) {
-        const isTap = type === 'guitar' && psRangeCovers(psTapByTrack.get(trackName), difficulty, tick)
+        const isTap =
+          type === 'guitar' && psRangeCovers(psTapByTrack.get(trackName), difficulty, tick)
         notes.push({
           id: uuidv4(),
           tick,
@@ -713,7 +772,11 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
       const scaledTick = Math.round(absTick * tickScale)
 
       if (ev.type === 'noteOn' && 'noteNumber' in ev) {
-        const noteEv = ev as RawMidiEvent & { noteNumber: number; velocity: number; channel: number }
+        const noteEv = ev as RawMidiEvent & {
+          noteNumber: number
+          velocity: number
+          channel: number
+        }
         if (noteEv.velocity > 0) {
           const key = `${noteEv.noteNumber}-${noteEv.channel}`
           noteOns.set(key, { tick: scaledTick, velocity: noteEv.velocity, channel: noteEv.channel })
@@ -722,7 +785,16 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
           const key = `${noteEv.noteNumber}-${noteEv.channel}`
           const on = noteOns.get(key)
           if (on) {
-            processProGuitarNote(noteEv.noteNumber, on.tick, scaledTick - on.tick, on.velocity, proInstrument, notes, starPowerPhrases, soloSections)
+            processProGuitarNote(
+              noteEv.noteNumber,
+              on.tick,
+              scaledTick - on.tick,
+              on.velocity,
+              proInstrument,
+              notes,
+              starPowerPhrases,
+              soloSections
+            )
             noteOns.delete(key)
           }
         }
@@ -731,7 +803,16 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
         const key = `${noteEv.noteNumber}-${noteEv.channel}`
         const on = noteOns.get(key)
         if (on) {
-          processProGuitarNote(noteEv.noteNumber, on.tick, scaledTick - on.tick, on.velocity, proInstrument, notes, starPowerPhrases, soloSections)
+          processProGuitarNote(
+            noteEv.noteNumber,
+            on.tick,
+            scaledTick - on.tick,
+            on.velocity,
+            proInstrument,
+            notes,
+            starPowerPhrases,
+            soloSections
+          )
           noteOns.delete(key)
         }
       }
@@ -739,11 +820,13 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
   }
 
   // Log pro instrument parse results
-  const proKeysCount = notes.filter(n => n.instrument === 'proKeys').length
-  const proGuitarCount = notes.filter(n => n.instrument === 'proGuitar').length
-  const proBassCount = notes.filter(n => n.instrument === 'proBass').length
+  const proKeysCount = notes.filter((n) => n.instrument === 'proKeys').length
+  const proGuitarCount = notes.filter((n) => n.instrument === 'proGuitar').length
+  const proBassCount = notes.filter((n) => n.instrument === 'proBass').length
   if (proKeysCount || proGuitarCount || proBassCount) {
-    console.log(`[MIDI Parse] Pro instruments: proKeys=${proKeysCount}, proGuitar=${proGuitarCount}, proBass=${proBassCount}`)
+    console.log(
+      `[MIDI Parse] Pro instruments: proKeys=${proKeysCount}, proGuitar=${proGuitarCount}, proBass=${proBassCount}`
+    )
   } else {
     console.log(`[MIDI Parse] No pro instrument tracks found`)
   }
@@ -781,7 +864,8 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
       } else if (ev.type === 'text' && 'text' in ev) {
         // Some charts use text events for lyrics
         const text = (ev as RawMidiEvent & { text: string }).text
-        if (!text.startsWith('[')) { // Skip section markers like [verse]
+        if (!text.startsWith('[')) {
+          // Skip section markers like [verse]
           lyrics.push({ tick: absTick, text })
         }
       } else if (ev.type === 'noteOn' && 'noteNumber' in ev) {
@@ -808,7 +892,12 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
           } else {
             const on = noteOns.get(noteEv.noteNumber)
             if (on) {
-              parsedNotes.push({ tick: on.tick, duration: absTick - on.tick, midi: noteEv.noteNumber, velocity: on.velocity })
+              parsedNotes.push({
+                tick: on.tick,
+                duration: absTick - on.tick,
+                midi: noteEv.noteNumber,
+                velocity: on.velocity
+              })
               noteOns.delete(noteEv.noteNumber)
             }
           }
@@ -829,7 +918,12 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
         } else {
           const on = noteOns.get(noteEv.noteNumber)
           if (on) {
-            parsedNotes.push({ tick: on.tick, duration: absTick - on.tick, midi: noteEv.noteNumber, velocity: on.velocity })
+            parsedNotes.push({
+              tick: on.tick,
+              duration: absTick - on.tick,
+              midi: noteEv.noteNumber,
+              velocity: on.velocity
+            })
             noteOns.delete(noteEv.noteNumber)
           }
         }
@@ -897,44 +991,68 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
 
   const lastNote = notes.length > 0 ? notes[notes.length - 1] : null
   const lastVocal = vocalNotes.length > 0 ? vocalNotes[vocalNotes.length - 1] : null
-  console.log(`[MIDI Parse] Result: ${notes.length} notes, ${vocalNotes.length} vocals, ${starPowerPhrases.length} SP, ${soloSections.length} solos`)
-  if (lastNote) console.log(`[MIDI Parse] Last instrument note at tick ${lastNote.tick} (${lastNote.instrument}/${lastNote.lane})`)
+  console.log(
+    `[MIDI Parse] Result: ${notes.length} notes, ${vocalNotes.length} vocals, ${starPowerPhrases.length} SP, ${soloSections.length} solos`
+  )
+  if (lastNote)
+    console.log(
+      `[MIDI Parse] Last instrument note at tick ${lastNote.tick} (${lastNote.instrument}/${lastNote.lane})`
+    )
   if (lastVocal) console.log(`[MIDI Parse] Last vocal note at tick ${lastVocal.tick}`)
   console.log(`[MIDI Parse] Tempo events: ${tempoEvents.length}, first BPM: ${tempoEvents[0]?.bpm}`)
 
-  return { notes, vocalNotes, vocalPhrases, starPowerPhrases, soloSections, laneMarkers, songSections, venueTrack, tempoEvents, timeSignatures }
+  return {
+    notes,
+    vocalNotes,
+    vocalPhrases,
+    starPowerPhrases,
+    soloSections,
+    laneMarkers,
+    songSections,
+    venueTrack,
+    tempoEvents,
+    timeSignatures
+  }
 }
 
 // ── .chart File Parser ───────────────────────────────────────────────
 // Parses Clone Hero .chart text format into the same ParsedMidiData structure
 
 // .chart section name → instrument + difficulty + type
-const CHART_SECTIONS: Record<string, { instrument: Instrument; difficulty: Difficulty; type: 'guitar' | 'drums' }> = {
-  'ExpertSingle': { instrument: 'guitar', difficulty: 'expert', type: 'guitar' },
-  'HardSingle': { instrument: 'guitar', difficulty: 'hard', type: 'guitar' },
-  'MediumSingle': { instrument: 'guitar', difficulty: 'medium', type: 'guitar' },
-  'EasySingle': { instrument: 'guitar', difficulty: 'easy', type: 'guitar' },
-  'ExpertDoubleBass': { instrument: 'bass', difficulty: 'expert', type: 'guitar' },
-  'HardDoubleBass': { instrument: 'bass', difficulty: 'hard', type: 'guitar' },
-  'MediumDoubleBass': { instrument: 'bass', difficulty: 'medium', type: 'guitar' },
-  'EasyDoubleBass': { instrument: 'bass', difficulty: 'easy', type: 'guitar' },
-  'ExpertDoubleGuitar': { instrument: 'bass', difficulty: 'expert', type: 'guitar' },
-  'HardDoubleGuitar': { instrument: 'bass', difficulty: 'hard', type: 'guitar' },
-  'MediumDoubleGuitar': { instrument: 'bass', difficulty: 'medium', type: 'guitar' },
-  'EasyDoubleGuitar': { instrument: 'bass', difficulty: 'easy', type: 'guitar' },
-  'ExpertDrums': { instrument: 'drums', difficulty: 'expert', type: 'drums' },
-  'HardDrums': { instrument: 'drums', difficulty: 'hard', type: 'drums' },
-  'MediumDrums': { instrument: 'drums', difficulty: 'medium', type: 'drums' },
-  'EasyDrums': { instrument: 'drums', difficulty: 'easy', type: 'drums' },
-  'ExpertKeyboard': { instrument: 'keys', difficulty: 'expert', type: 'guitar' },
-  'HardKeyboard': { instrument: 'keys', difficulty: 'hard', type: 'guitar' },
-  'MediumKeyboard': { instrument: 'keys', difficulty: 'medium', type: 'guitar' },
-  'EasyKeyboard': { instrument: 'keys', difficulty: 'easy', type: 'guitar' },
+const CHART_SECTIONS: Record<
+  string,
+  { instrument: Instrument; difficulty: Difficulty; type: 'guitar' | 'drums' }
+> = {
+  ExpertSingle: { instrument: 'guitar', difficulty: 'expert', type: 'guitar' },
+  HardSingle: { instrument: 'guitar', difficulty: 'hard', type: 'guitar' },
+  MediumSingle: { instrument: 'guitar', difficulty: 'medium', type: 'guitar' },
+  EasySingle: { instrument: 'guitar', difficulty: 'easy', type: 'guitar' },
+  ExpertDoubleBass: { instrument: 'bass', difficulty: 'expert', type: 'guitar' },
+  HardDoubleBass: { instrument: 'bass', difficulty: 'hard', type: 'guitar' },
+  MediumDoubleBass: { instrument: 'bass', difficulty: 'medium', type: 'guitar' },
+  EasyDoubleBass: { instrument: 'bass', difficulty: 'easy', type: 'guitar' },
+  ExpertDoubleGuitar: { instrument: 'bass', difficulty: 'expert', type: 'guitar' },
+  HardDoubleGuitar: { instrument: 'bass', difficulty: 'hard', type: 'guitar' },
+  MediumDoubleGuitar: { instrument: 'bass', difficulty: 'medium', type: 'guitar' },
+  EasyDoubleGuitar: { instrument: 'bass', difficulty: 'easy', type: 'guitar' },
+  ExpertDrums: { instrument: 'drums', difficulty: 'expert', type: 'drums' },
+  HardDrums: { instrument: 'drums', difficulty: 'hard', type: 'drums' },
+  MediumDrums: { instrument: 'drums', difficulty: 'medium', type: 'drums' },
+  EasyDrums: { instrument: 'drums', difficulty: 'easy', type: 'drums' },
+  ExpertKeyboard: { instrument: 'keys', difficulty: 'expert', type: 'guitar' },
+  HardKeyboard: { instrument: 'keys', difficulty: 'hard', type: 'guitar' },
+  MediumKeyboard: { instrument: 'keys', difficulty: 'medium', type: 'guitar' },
+  EasyKeyboard: { instrument: 'keys', difficulty: 'easy', type: 'guitar' }
 }
 
 // .chart guitar lanes: 0=green, 1=red, 2=yellow, 3=blue, 4=orange, 7=open
 const CHART_GUITAR_LANES: Record<number, GuitarLane> = {
-  0: 'green', 1: 'red', 2: 'yellow', 3: 'blue', 4: 'orange', 7: 'open'
+  0: 'green',
+  1: 'red',
+  2: 'yellow',
+  3: 'blue',
+  4: 'orange',
+  7: 'open'
 }
 
 // .chart drum lanes: 0=kick, 1=snare, 2=yellow(cymbal/tom), 3=blue(cymbal/tom), 4=green(cymbal/tom)
@@ -943,14 +1061,20 @@ const CHART_GUITAR_LANES: Record<number, GuitarLane> = {
 // Note 66 = cymbal modifier flag (present = cymbal, absent = tom for lanes 2-4)
 // In .chart drums, lanes 2/3/4 default to tom unless flagged with 66
 const CHART_DRUM_LANES: Record<number, DrumLane> = {
-  0: 'kick', 1: 'snare', 2: 'yellowTom', 3: 'blueTom', 4: 'greenTom'
+  0: 'kick',
+  1: 'snare',
+  2: 'yellowTom',
+  3: 'blueTom',
+  4: 'greenTom'
 }
 
 const CHART_DRUM_DOUBLE_KICK_LANES = new Set<number>([32, 5])
 
 // Cymbal versions of lanes 2/3/4 (activated by note 66)
 const CHART_DRUM_CYMBAL_LANES: Record<number, DrumLane> = {
-  2: 'yellowCymbal', 3: 'blueCymbal', 4: 'greenCymbal'
+  2: 'yellowCymbal',
+  3: 'blueCymbal',
+  4: 'greenCymbal'
 }
 
 interface ChartSection {
@@ -1007,7 +1131,7 @@ export function parseChartFile(chartText: string): ParsedMidiData {
 
   // Get resolution from [Song] section
   let resolution = 192
-  const songSection = sections.find(s => s.name === 'Song')
+  const songSection = sections.find((s) => s.name === 'Song')
   if (songSection) {
     for (const line of songSection.lines) {
       const m = line.match(/^\s*Resolution\s*=\s*(\d+)/)
@@ -1021,10 +1145,12 @@ export function parseChartFile(chartText: string): ParsedMidiData {
   // Scale factor to normalize to 480 PPQ
   const tickScale = 480 / resolution
 
-  console.log(`[Chart Parse] Resolution: ${resolution}, tickScale: ${tickScale}, sections: ${sections.map(s => s.name).join(', ')}`)
+  console.log(
+    `[Chart Parse] Resolution: ${resolution}, tickScale: ${tickScale}, sections: ${sections.map((s) => s.name).join(', ')}`
+  )
 
   // Parse [SyncTrack]
-  const syncSection = sections.find(s => s.name === 'SyncTrack')
+  const syncSection = sections.find((s) => s.name === 'SyncTrack')
   if (syncSection) {
     for (const line of syncSection.lines) {
       // Tempo: tick = B milliBPM
@@ -1055,7 +1181,7 @@ export function parseChartFile(chartText: string): ParsedMidiData {
   }
 
   // Parse [Events] for vocals (lyrics + phrase markers)
-  const eventsSection = sections.find(s => s.name === 'Events')
+  const eventsSection = sections.find((s) => s.name === 'Events')
   if (eventsSection) {
     let phraseStartTick: number | null = null
     const pendingLyrics: { tick: number; text: string }[] = []
@@ -1227,12 +1353,30 @@ export function parseChartFile(chartText: string): ParsedMidiData {
 
   const lastNote = notes.length > 0 ? notes[notes.length - 1] : null
   const lastVocal = vocalNotes.length > 0 ? vocalNotes[vocalNotes.length - 1] : null
-  console.log(`[Chart Parse] Result: ${notes.length} notes, ${vocalNotes.length} vocals, ${starPowerPhrases.length} SP, ${soloSections.length} solos`)
-  if (lastNote) console.log(`[Chart Parse] Last instrument note at tick ${lastNote.tick} (${lastNote.instrument}/${lastNote.lane})`)
+  console.log(
+    `[Chart Parse] Result: ${notes.length} notes, ${vocalNotes.length} vocals, ${starPowerPhrases.length} SP, ${soloSections.length} solos`
+  )
+  if (lastNote)
+    console.log(
+      `[Chart Parse] Last instrument note at tick ${lastNote.tick} (${lastNote.instrument}/${lastNote.lane})`
+    )
   if (lastVocal) console.log(`[Chart Parse] Last vocal note at tick ${lastVocal.tick}`)
-  console.log(`[Chart Parse] Tempo events: ${tempoEvents.length}, first BPM: ${tempoEvents[0]?.bpm}`)
+  console.log(
+    `[Chart Parse] Tempo events: ${tempoEvents.length}, first BPM: ${tempoEvents[0]?.bpm}`
+  )
 
-  return { notes, vocalNotes, vocalPhrases, starPowerPhrases, soloSections, laneMarkers, songSections, venueTrack, tempoEvents, timeSignatures }
+  return {
+    notes,
+    vocalNotes,
+    vocalPhrases,
+    starPowerPhrases,
+    soloSections,
+    laneMarkers,
+    songSections,
+    venueTrack,
+    tempoEvents,
+    timeSignatures
+  }
 }
 
 // ── .chart Serialization ─────────────────────────────────────────────
@@ -1240,15 +1384,35 @@ export function parseChartFile(chartText: string): ParsedMidiData {
 
 // Reverse mapping: instrument + difficulty → .chart section name
 const CHART_SECTION_NAMES: Record<string, Record<string, string>> = {
-  guitar: { expert: 'ExpertSingle', hard: 'HardSingle', medium: 'MediumSingle', easy: 'EasySingle' },
-  bass: { expert: 'ExpertDoubleBass', hard: 'HardDoubleBass', medium: 'MediumDoubleBass', easy: 'EasyDoubleBass' },
+  guitar: {
+    expert: 'ExpertSingle',
+    hard: 'HardSingle',
+    medium: 'MediumSingle',
+    easy: 'EasySingle'
+  },
+  bass: {
+    expert: 'ExpertDoubleBass',
+    hard: 'HardDoubleBass',
+    medium: 'MediumDoubleBass',
+    easy: 'EasyDoubleBass'
+  },
   drums: { expert: 'ExpertDrums', hard: 'HardDrums', medium: 'MediumDrums', easy: 'EasyDrums' },
-  keys: { expert: 'ExpertKeyboard', hard: 'HardKeyboard', medium: 'MediumKeyboard', easy: 'EasyKeyboard' },
+  keys: {
+    expert: 'ExpertKeyboard',
+    hard: 'HardKeyboard',
+    medium: 'MediumKeyboard',
+    easy: 'EasyKeyboard'
+  }
 }
 
 // Reverse guitar lane → .chart lane number
 const CHART_GUITAR_LANE_NUM: Record<string, number> = {
-  green: 0, red: 1, yellow: 2, blue: 3, orange: 4, open: 7
+  green: 0,
+  red: 1,
+  yellow: 2,
+  blue: 3,
+  orange: 4,
+  open: 7
 }
 
 // Reverse drum lane → .chart lane number + cymbal flag
@@ -1260,7 +1424,7 @@ const CHART_DRUM_LANE_NUM: Record<string, { lane: number; cymbal: boolean }> = {
   blueTom: { lane: 3, cymbal: false },
   blueCymbal: { lane: 3, cymbal: true },
   greenTom: { lane: 4, cymbal: false },
-  greenCymbal: { lane: 4, cymbal: true },
+  greenCymbal: { lane: 4, cymbal: true }
 }
 
 export function serializeChartFile(
@@ -1364,10 +1528,22 @@ export function serializeChartFile(
   // Write instrument sections
   // Order sections consistently
   const sectionOrder = [
-    'ExpertSingle', 'HardSingle', 'MediumSingle', 'EasySingle',
-    'ExpertDoubleBass', 'HardDoubleBass', 'MediumDoubleBass', 'EasyDoubleBass',
-    'ExpertDrums', 'HardDrums', 'MediumDrums', 'EasyDrums',
-    'ExpertKeyboard', 'HardKeyboard', 'MediumKeyboard', 'EasyKeyboard',
+    'ExpertSingle',
+    'HardSingle',
+    'MediumSingle',
+    'EasySingle',
+    'ExpertDoubleBass',
+    'HardDoubleBass',
+    'MediumDoubleBass',
+    'EasyDoubleBass',
+    'ExpertDrums',
+    'HardDrums',
+    'MediumDrums',
+    'EasyDrums',
+    'ExpertKeyboard',
+    'HardKeyboard',
+    'MediumKeyboard',
+    'EasyKeyboard'
   ]
 
   for (const sectionName of sectionOrder) {
@@ -1450,14 +1626,22 @@ const INSTRUMENT_TRACKS: Record<string, string> = {
 
 // Reverse lane → MIDI note offset within a difficulty
 const GUITAR_LANE_INDEX: Record<string, number> = {
-  green: 0, red: 1, yellow: 2, blue: 3, orange: 4
+  green: 0,
+  red: 1,
+  yellow: 2,
+  blue: 3,
+  orange: 4
 }
 
 const DRUM_LANE_TO_BASE: Record<string, number> = {
-  kick: 0, snare: 1,
-  yellowTom: 2, yellowCymbal: 2,
-  blueTom: 3, blueCymbal: 3,
-  greenTom: 4, greenCymbal: 4
+  kick: 0,
+  snare: 1,
+  yellowTom: 2,
+  yellowCymbal: 2,
+  blueTom: 3,
+  blueCymbal: 3,
+  greenTom: 4,
+  greenCymbal: 4
 }
 
 // Tom lanes that need a marker note (110/111/112 mark toms)
@@ -1517,7 +1701,12 @@ export function serializeMidiBase64(
   // and injected into the raw tracks below (@tonejs/midi cannot write SysEx).
   const PS_DIFF_BYTE: Record<Difficulty, number> = { easy: 0, medium: 1, hard: 2, expert: 3 }
   const psPhraseTicks = new Map<string, Map<string, Set<number>>>() // track → "diffByte-code" → ticks
-  const addPsPhraseTick = (trackName: string, difficulty: Difficulty, code: number, tick: number): void => {
+  const addPsPhraseTick = (
+    trackName: string,
+    difficulty: Difficulty,
+    code: number,
+    tick: number
+  ): void => {
     if (!psPhraseTicks.has(trackName)) psPhraseTicks.set(trackName, new Map())
     const byKey = psPhraseTicks.get(trackName)!
     const key = `${PS_DIFF_BYTE[difficulty]}-${code}`
@@ -1571,7 +1760,8 @@ export function serializeMidiBase64(
         }
       }
 
-      const isDoubleKick = isDrums && (note.lane as DrumLane) === 'kick' && !!note.flags?.isDoubleKick
+      const isDoubleKick =
+        isDrums && (note.lane as DrumLane) === 'kick' && !!note.flags?.isDoubleKick
       const midiNoteNumber = diffOffset + laneIndex - (isDoubleKick ? 1 : 0)
       track.addNote({
         midi: midiNoteNumber,
@@ -1582,10 +1772,16 @@ export function serializeMidiBase64(
     }
 
     // Add star power phrases for this instrument
-    const instrumentName = trackName === 'PART DRUMS' ? 'drums'
-      : trackName === 'PART GUITAR' ? 'guitar'
-      : trackName === 'PART BASS' ? 'bass'
-      : trackName === 'PART KEYS' ? 'keys' : null
+    const instrumentName =
+      trackName === 'PART DRUMS'
+        ? 'drums'
+        : trackName === 'PART GUITAR'
+          ? 'guitar'
+          : trackName === 'PART BASS'
+            ? 'bass'
+            : trackName === 'PART KEYS'
+              ? 'keys'
+              : null
     if (instrumentName) {
       for (const sp of starPowerPhrases) {
         if (sp.instrument === instrumentName) {
@@ -1647,12 +1843,22 @@ export function serializeMidiBase64(
     if (diff === 'expert') {
       for (const sp of starPowerPhrases) {
         if (sp.instrument === 'proKeys') {
-          track.addNote({ midi: STAR_POWER_NOTE, ticks: sp.tick, durationTicks: Math.max(sp.duration, 1), velocity: 1.0 })
+          track.addNote({
+            midi: STAR_POWER_NOTE,
+            ticks: sp.tick,
+            durationTicks: Math.max(sp.duration, 1),
+            velocity: 1.0
+          })
         }
       }
       for (const solo of soloSections) {
         if (solo.instrument === 'proKeys') {
-          track.addNote({ midi: SOLO_NOTE, ticks: solo.tick, durationTicks: Math.max(solo.duration, 1), velocity: 1.0 })
+          track.addNote({
+            midi: SOLO_NOTE,
+            ticks: solo.tick,
+            durationTicks: Math.max(solo.duration, 1),
+            velocity: 1.0
+          })
         }
       }
     }
@@ -1668,7 +1874,9 @@ export function serializeMidiBase64(
     const instNotes = notes.filter((n) => n.instrument === inst)
     if (instNotes.length === 0) {
       // Still check if there are SP/solo for this instrument
-      const hasSpOrSolo = starPowerPhrases.some((s) => s.instrument === inst) || soloSections.some((s) => s.instrument === inst)
+      const hasSpOrSolo =
+        starPowerPhrases.some((s) => s.instrument === inst) ||
+        soloSections.some((s) => s.instrument === inst)
       if (!hasSpOrSolo) continue
     }
 
@@ -1693,12 +1901,22 @@ export function serializeMidiBase64(
     // SP and solo
     for (const sp of starPowerPhrases) {
       if (sp.instrument === inst) {
-        track.addNote({ midi: STAR_POWER_NOTE, ticks: sp.tick, durationTicks: Math.max(sp.duration, 1), velocity: 1.0 })
+        track.addNote({
+          midi: STAR_POWER_NOTE,
+          ticks: sp.tick,
+          durationTicks: Math.max(sp.duration, 1),
+          velocity: 1.0
+        })
       }
     }
     for (const solo of soloSections) {
       if (solo.instrument === inst) {
-        track.addNote({ midi: SOLO_NOTE, ticks: solo.tick, durationTicks: Math.max(solo.duration, 1), velocity: 1.0 })
+        track.addNote({
+          midi: SOLO_NOTE,
+          ticks: solo.tick,
+          durationTicks: Math.max(solo.duration, 1),
+          velocity: 1.0
+        })
       }
     }
   }
@@ -1714,7 +1932,12 @@ export function serializeMidiBase64(
   // the notes it covers.
   for (const [psTrackName, byKey] of psPhraseTicks) {
     const rawTrack = rawOut.tracks.find((t) =>
-      t.some((ev) => ev.type === 'trackName' && 'text' in ev && (ev as RawMidiEvent & { text: string }).text === psTrackName)
+      t.some(
+        (ev) =>
+          ev.type === 'trackName' &&
+          'text' in ev &&
+          (ev as RawMidiEvent & { text: string }).text === psTrackName
+      )
     )
     if (!rawTrack) continue
     type AbsEvent = { absTick: number; order: number; ev: RawMidiEvent }
@@ -1728,7 +1951,11 @@ export function serializeMidiBase64(
     for (const [key, tickSet] of byKey) {
       const [diffByte, code] = key.split('-').map(Number)
       const makeSysEx = (value: number): RawMidiEvent =>
-        ({ type: 'sysEx', deltaTime: 0, data: [0x50, 0x53, 0x00, 0x00, diffByte, code, value, 0xf7] }) as RawMidiEvent
+        ({
+          type: 'sysEx',
+          deltaTime: 0,
+          data: [0x50, 0x53, 0x00, 0x00, diffByte, code, value, 0xf7]
+        }) as RawMidiEvent
       const ticks = [...tickSet].sort((a, b) => a - b)
       let start = -1
       let end = -1
@@ -1793,18 +2020,30 @@ export function serializeMidiBase64(
         events.push({ type: 'lyrics', text: lyricText, deltaTime: 0, absTick: vn.tick } as RawEvent)
       }
 
-      const midiNote = vn.isPercussion ? VOCAL_PERCUSSION_NOTE : (typeof vn.lane === 'number' ? vn.lane : VOCAL_PITCH_MIN)
+      const midiNote = vn.isPercussion
+        ? VOCAL_PERCUSSION_NOTE
+        : typeof vn.lane === 'number'
+          ? vn.lane
+          : VOCAL_PITCH_MIN
 
       // Note on
       events.push({
-        type: 'noteOn', noteNumber: midiNote, velocity: vn.velocity || 100,
-        channel: 0, deltaTime: 0, absTick: vn.tick
+        type: 'noteOn',
+        noteNumber: midiNote,
+        velocity: vn.velocity || 100,
+        channel: 0,
+        deltaTime: 0,
+        absTick: vn.tick
       } as RawEvent)
 
       // Note off
       events.push({
-        type: 'noteOff', noteNumber: midiNote, velocity: 0,
-        channel: 0, deltaTime: 0, absTick: vn.tick + Math.max(vn.duration, 1)
+        type: 'noteOff',
+        noteNumber: midiNote,
+        velocity: 0,
+        channel: 0,
+        deltaTime: 0,
+        absTick: vn.tick + Math.max(vn.duration, 1)
       } as RawEvent)
     }
 
@@ -1812,12 +2051,20 @@ export function serializeMidiBase64(
     const partPhrases = phrasesByPart.get(part) || []
     for (const phrase of partPhrases) {
       events.push({
-        type: 'noteOn', noteNumber: VOCAL_PHRASE_NOTE, velocity: 100,
-        channel: 0, deltaTime: 0, absTick: phrase.tick
+        type: 'noteOn',
+        noteNumber: VOCAL_PHRASE_NOTE,
+        velocity: 100,
+        channel: 0,
+        deltaTime: 0,
+        absTick: phrase.tick
       } as RawEvent)
       events.push({
-        type: 'noteOff', noteNumber: VOCAL_PHRASE_NOTE, velocity: 0,
-        channel: 0, deltaTime: 0, absTick: phrase.tick + Math.max(phrase.duration, 1)
+        type: 'noteOff',
+        noteNumber: VOCAL_PHRASE_NOTE,
+        velocity: 0,
+        channel: 0,
+        deltaTime: 0,
+        absTick: phrase.tick + Math.max(phrase.duration, 1)
       } as RawEvent)
     }
 
@@ -1825,12 +2072,20 @@ export function serializeMidiBase64(
     for (const sp of starPowerPhrases) {
       if (sp.instrument === 'vocals') {
         events.push({
-          type: 'noteOn', noteNumber: STAR_POWER_NOTE, velocity: 100,
-          channel: 0, deltaTime: 0, absTick: sp.tick
+          type: 'noteOn',
+          noteNumber: STAR_POWER_NOTE,
+          velocity: 100,
+          channel: 0,
+          deltaTime: 0,
+          absTick: sp.tick
         } as RawEvent)
         events.push({
-          type: 'noteOff', noteNumber: STAR_POWER_NOTE, velocity: 0,
-          channel: 0, deltaTime: 0, absTick: sp.tick + Math.max(sp.duration, 1)
+          type: 'noteOff',
+          noteNumber: STAR_POWER_NOTE,
+          velocity: 0,
+          channel: 0,
+          deltaTime: 0,
+          absTick: sp.tick + Math.max(sp.duration, 1)
         } as RawEvent)
       }
     }
@@ -1839,12 +2094,20 @@ export function serializeMidiBase64(
     for (const solo of soloSections) {
       if (solo.instrument === 'vocals') {
         events.push({
-          type: 'noteOn', noteNumber: SOLO_NOTE, velocity: 100,
-          channel: 0, deltaTime: 0, absTick: solo.tick
+          type: 'noteOn',
+          noteNumber: SOLO_NOTE,
+          velocity: 100,
+          channel: 0,
+          deltaTime: 0,
+          absTick: solo.tick
         } as RawEvent)
         events.push({
-          type: 'noteOff', noteNumber: SOLO_NOTE, velocity: 0,
-          channel: 0, deltaTime: 0, absTick: solo.tick + Math.max(solo.duration, 1)
+          type: 'noteOff',
+          noteNumber: SOLO_NOTE,
+          velocity: 0,
+          channel: 0,
+          deltaTime: 0,
+          absTick: solo.tick + Math.max(solo.duration, 1)
         } as RawEvent)
       }
     }
@@ -1873,7 +2136,12 @@ export function serializeMidiBase64(
     for (const sec of songSections) {
       const name = String(sec.name || '').trim()
       if (!name) continue
-      events.push({ type: 'marker', text: `[section ${name}]`, deltaTime: 0, absTick: Math.max(0, sec.tick) } as RawEvent)
+      events.push({
+        type: 'marker',
+        text: `[section ${name}]`,
+        deltaTime: 0,
+        absTick: Math.max(0, sec.tick)
+      } as RawEvent)
     }
 
     events.sort((a, b) => a.absTick - b.absTick)
@@ -1889,11 +2157,12 @@ export function serializeMidiBase64(
     rawOut.tracks.push(rawEvents)
   }
 
-  const hasVenueEvents = venueTrack.lighting.length > 0
-    || venueTrack.postProcessing.length > 0
-    || venueTrack.stage.length > 0
-    || venueTrack.performer.length > 0
-    || venueTrack.cameraCuts.length > 0
+  const hasVenueEvents =
+    venueTrack.lighting.length > 0 ||
+    venueTrack.postProcessing.length > 0 ||
+    venueTrack.stage.length > 0 ||
+    venueTrack.performer.length > 0 ||
+    venueTrack.cameraCuts.length > 0
 
   if (hasVenueEvents) {
     type RawEvent = RawMidiEvent & { absTick: number }
@@ -1901,16 +2170,40 @@ export function serializeMidiBase64(
     events.push({ type: 'trackName', text: VENUE_TRACK_NAME, deltaTime: 0, absTick: 0 } as RawEvent)
 
     for (const event of buildVenueTextEvents({ ...venueTrack, performer: [] })) {
-      events.push({ type: 'marker', text: event.text, deltaTime: 0, absTick: Math.max(0, event.tick) } as RawEvent)
+      events.push({
+        type: 'marker',
+        text: event.text,
+        deltaTime: 0,
+        absTick: Math.max(0, event.tick)
+      } as RawEvent)
     }
 
     for (const performerEvent of venueTrack.performer) {
-      const midiNote = performerEvent.type === 'spotlight'
-        ? Object.entries(VENUE_SPOTLIGHT_NOTES).find(([, performer]) => performer === performerEvent.performer)?.[0]
-        : Object.entries(VENUE_SINGALONG_NOTES).find(([, performer]) => performer === performerEvent.performer)?.[0]
+      const midiNote =
+        performerEvent.type === 'spotlight'
+          ? Object.entries(VENUE_SPOTLIGHT_NOTES).find(
+              ([, performer]) => performer === performerEvent.performer
+            )?.[0]
+          : Object.entries(VENUE_SINGALONG_NOTES).find(
+              ([, performer]) => performer === performerEvent.performer
+            )?.[0]
       if (!midiNote) continue
-      events.push({ type: 'noteOn', noteNumber: Number(midiNote), velocity: 100, channel: 0, deltaTime: 0, absTick: Math.max(0, performerEvent.tick) } as RawEvent)
-      events.push({ type: 'noteOff', noteNumber: Number(midiNote), velocity: 0, channel: 0, deltaTime: 0, absTick: Math.max(0, performerEvent.tick + Math.max(performerEvent.duration, 1)) } as RawEvent)
+      events.push({
+        type: 'noteOn',
+        noteNumber: Number(midiNote),
+        velocity: 100,
+        channel: 0,
+        deltaTime: 0,
+        absTick: Math.max(0, performerEvent.tick)
+      } as RawEvent)
+      events.push({
+        type: 'noteOff',
+        noteNumber: Number(midiNote),
+        velocity: 0,
+        channel: 0,
+        deltaTime: 0,
+        absTick: Math.max(0, performerEvent.tick + Math.max(performerEvent.duration, 1))
+      } as RawEvent)
     }
 
     events.sort((a, b) => a.absTick - b.absTick)

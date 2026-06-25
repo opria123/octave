@@ -35,11 +35,11 @@ That's it for the basic flow. The advanced section covers everything else.
 
 ## Input modes
 
-| Mode | What to provide |
-|------|----------------|
-| **Single file** | Any audio file. Demucs will split it into stems. |
+| Mode                       | What to provide                                                                               |
+| -------------------------- | --------------------------------------------------------------------------------------------- |
+| **Single file**            | Any audio file. Demucs will split it into stems.                                              |
 | **Pre-split stems folder** | A folder with `drums.wav`, `bass.wav`, `vocals.wav`, `other.wav`. Skips Demucs (much faster). |
-| **YouTube URL** | The audio is downloaded with `yt-dlp` and processed as a single file. |
+| **YouTube URL**            | The audio is downloaded with `yt-dlp` and processed as a single file.                         |
 
 ## Bundled Python runtime
 

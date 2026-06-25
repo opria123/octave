@@ -1,9 +1,37 @@
 ﻿// MIDI Editor - Piano roll style note editor
 import { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from 'react'
 import { useProjectStore, getSongStore, useSettingsStore, useUIStore } from '../stores'
-import type { Note, NoteFlags, NoteModifiers, Instrument, DrumLane, GuitarLane, Difficulty, EditingTool, StarPowerPhrase, SoloSection, LaneMarker, LaneMarkerType, VocalNote, VocalPhrase, HarmonyPart,TempoEvent } from '../types'
-import { PRO_KEYS_MIN, PRO_KEYS_MAX, SUSTAIN_THRESHOLD_MID, SUSTAIN_THRESHOLD_CHART } from '../types'
-import { getAudioDuration, getAudioSources, onAudioLoaded, playPitchPreview, stopPitchPreview } from '../services/audioService'
+import type {
+  Note,
+  NoteFlags,
+  NoteModifiers,
+  Instrument,
+  DrumLane,
+  GuitarLane,
+  Difficulty,
+  EditingTool,
+  StarPowerPhrase,
+  SoloSection,
+  LaneMarker,
+  LaneMarkerType,
+  VocalNote,
+  VocalPhrase,
+  HarmonyPart,
+  TempoEvent
+} from '../types'
+import {
+  PRO_KEYS_MIN,
+  PRO_KEYS_MAX,
+  SUSTAIN_THRESHOLD_MID,
+  SUSTAIN_THRESHOLD_CHART
+} from '../types'
+import {
+  getAudioDuration,
+  getAudioSources,
+  onAudioLoaded,
+  playPitchPreview,
+  stopPitchPreview
+} from '../services/audioService'
 import { buildTickAlignedWaveformPeaks } from '../services/waveformService'
 import './MidiEditor.css'
 
@@ -47,10 +75,29 @@ const MIDI_EDITOR_CONFIG = {
   instrumentHeaderHeight: 28,
   pixelsPerTick: 0.1,
   snapDivisions: [1, 2, 4, 8, 12, 16, 24, 32],
-  drumLanes: ['kick', DOUBLE_KICK_EDITOR_LANE, 'snare', 'yellowTom', 'yellowCymbal', 'blueTom', 'blueCymbal', 'greenTom', 'greenCymbal'] as string[],
+  drumLanes: [
+    'kick',
+    DOUBLE_KICK_EDITOR_LANE,
+    'snare',
+    'yellowTom',
+    'yellowCymbal',
+    'blueTom',
+    'blueCymbal',
+    'greenTom',
+    'greenCymbal'
+  ] as string[],
   guitarLanes: ['open', 'green', 'red', 'yellow', 'blue', 'orange'] as GuitarLane[],
   proGuitarLanes: ['1', '2', '3', '4', '5', '6'] as string[], // Strings high E to low E
-  instruments: ['drums', 'guitar', 'bass', 'keys', 'proKeys', 'proGuitar', 'proBass', 'vocals'] as Instrument[],
+  instruments: [
+    'drums',
+    'guitar',
+    'bass',
+    'keys',
+    'proKeys',
+    'proGuitar',
+    'proBass',
+    'vocals'
+  ] as Instrument[],
   vocalPitchMin: 36,
   vocalPitchMax: 84,
   vocalRowHeight: 8, // Smaller rows for pitch display (49 pitch rows)
@@ -105,12 +152,18 @@ function VocalPitchPlaybackToggle(): React.JSX.Element {
   const toggle = useUIStore((s) => s.toggleVocalPitchPlayback)
   return (
     <button
-      title={enabled
-        ? 'Pitch playback on: vocal note pitches sound while the song plays'
-        : 'Pitch playback off: click to hear vocal note pitches while the song plays'}
+      title={
+        enabled
+          ? 'Pitch playback on: vocal note pitches sound while the song plays'
+          : 'Pitch playback off: click to hear vocal note pitches while the song plays'
+      }
       style={{
-        fontSize: 10, padding: '1px 5px', border: 'none', borderRadius: 3,
-        cursor: 'pointer', lineHeight: 1.4,
+        fontSize: 10,
+        padding: '1px 5px',
+        border: 'none',
+        borderRadius: 3,
+        cursor: 'pointer',
+        lineHeight: 1.4,
         backgroundColor: enabled ? '#E879F9' : 'rgba(255,255,255,0.15)',
         color: enabled ? '#000' : '#ccc',
         boxShadow: enabled ? '0 0 6px #E879F980' : 'none'
@@ -299,8 +352,10 @@ function Grid({
     const w = canvas.clientWidth
     const h = canvas.clientHeight
     if (w === 0 || h === 0) return // not laid out yet â€” ResizeObserver will trigger redraw
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h }
-    else ctx.clearRect(0, 0, w, h)
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w
+      canvas.height = h
+    } else ctx.clearRect(0, 0, w, h)
 
     ctx.fillStyle = '#1a1a2e'
     ctx.fillRect(0, 0, w, h)
@@ -325,7 +380,7 @@ function Grid({
     const firstSnapLine = Math.floor(startTick / snapTicks) * snapTicks
 
     for (let tick = firstSnapLine; tick <= endTick; tick += snapTicks) {
-      const x = (tick * pixelsPerTick) - scrollX
+      const x = tick * pixelsPerTick - scrollX
       if (x < 0 || x > w) continue
 
       const isBeat = tick % ticksPerBeat === 0
@@ -343,7 +398,7 @@ function Grid({
     if (tempoEvents && tempoEvents.length > 1) {
       for (let i = 1; i < tempoEvents.length; i++) {
         const te = tempoEvents[i]
-        const x = (te.tick * pixelsPerTick) - scrollX
+        const x = te.tick * pixelsPerTick - scrollX
         if (x < 0 || x > w) continue
         // Dashed orange line
         ctx.strokeStyle = '#FF8C00'
@@ -373,11 +428,13 @@ function Grid({
     const w = canvas.clientWidth
     const h = canvas.clientHeight
     if (w === 0 || h === 0) return
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h }
-    else ctx.clearRect(0, 0, w, h)
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w
+      canvas.height = h
+    } else ctx.clearRect(0, 0, w, h)
 
     const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
-    const playheadX = (currentTick * pixelsPerTick) - scrollX
+    const playheadX = currentTick * pixelsPerTick - scrollX
     if (playheadX >= 0 && playheadX <= w) {
       ctx.strokeStyle = '#FFFFFF'
       ctx.lineWidth = 2
@@ -391,7 +448,11 @@ function Grid({
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
       <canvas ref={gridCanvasRef} className="midi-grid-canvas" />
-      <canvas ref={playheadCanvasRef} className="midi-grid-canvas" style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }} />
+      <canvas
+        ref={playheadCanvasRef}
+        className="midi-grid-canvas"
+        style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
+      />
     </div>
   )
 }
@@ -530,12 +591,20 @@ function StarPowerLane({
         const newTick = Math.max(0, Math.round((drag.originalTick + dtick) / snapTicks) * snapTicks)
         songStore.getState().updateStarPowerPhrase(drag.phraseId, { tick: newTick })
       } else if (drag.mode === 'resize-start') {
-        const newStart = Math.max(0, Math.round((drag.originalTick + dtick) / snapTicks) * snapTicks)
+        const newStart = Math.max(
+          0,
+          Math.round((drag.originalTick + dtick) / snapTicks) * snapTicks
+        )
         const endTick = drag.originalTick + drag.originalDuration
         const newDuration = Math.max(snapTicks, endTick - newStart)
-        songStore.getState().updateStarPowerPhrase(drag.phraseId, { tick: newStart, duration: newDuration })
+        songStore
+          .getState()
+          .updateStarPowerPhrase(drag.phraseId, { tick: newStart, duration: newDuration })
       } else if (drag.mode === 'resize-end') {
-        const newDuration = Math.max(snapTicks, Math.round((drag.originalDuration + dtick) / snapTicks) * snapTicks)
+        const newDuration = Math.max(
+          snapTicks,
+          Math.round((drag.originalDuration + dtick) / snapTicks) * snapTicks
+        )
         songStore.getState().updateStarPowerPhrase(drag.phraseId, { duration: newDuration })
       }
     }
@@ -609,21 +678,41 @@ function StarPowerLane({
             }}
           >
             {/* Resize handles - visual indicators */}
-            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: SP_HANDLE_WIDTH, cursor: 'ew-resize' }} />
-            <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: SP_HANDLE_WIDTH, cursor: 'ew-resize' }} />
-            {w > 40 && (
-              <span style={{
+            <div
+              style={{
                 position: 'absolute',
-                left: '50%',
-                top: '50%',
-                transform: 'translate(-50%, -50%)',
-                fontSize: 9,
-                fontWeight: 600,
-                color: '#fff',
-                textShadow: '0 0 4px rgba(0,0,0,0.5)',
-                whiteSpace: 'nowrap',
-                pointerEvents: 'none'
-              }}>
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: SP_HANDLE_WIDTH,
+                cursor: 'ew-resize'
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: SP_HANDLE_WIDTH,
+                cursor: 'ew-resize'
+              }}
+            />
+            {w > 40 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  fontSize: 9,
+                  fontWeight: 600,
+                  color: '#fff',
+                  textShadow: '0 0 4px rgba(0,0,0,0.5)',
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'none'
+                }}
+              >
                 Star Power
               </span>
             )}
@@ -694,11 +783,29 @@ function SoloLane({
           songStore.getState().selectSoloSection(sec.id)
 
           if (localMx <= secX + SP_HANDLE_WIDTH) {
-            dragRef.current = { mode: 'resize-start', sectionId: sec.id, startMouseX: e.clientX, originalTick: sec.tick, originalDuration: sec.duration }
+            dragRef.current = {
+              mode: 'resize-start',
+              sectionId: sec.id,
+              startMouseX: e.clientX,
+              originalTick: sec.tick,
+              originalDuration: sec.duration
+            }
           } else if (localMx >= secX + secW - SP_HANDLE_WIDTH) {
-            dragRef.current = { mode: 'resize-end', sectionId: sec.id, startMouseX: e.clientX, originalTick: sec.tick, originalDuration: sec.duration }
+            dragRef.current = {
+              mode: 'resize-end',
+              sectionId: sec.id,
+              startMouseX: e.clientX,
+              originalTick: sec.tick,
+              originalDuration: sec.duration
+            }
           } else {
-            dragRef.current = { mode: 'move', sectionId: sec.id, startMouseX: e.clientX, originalTick: sec.tick, originalDuration: sec.duration }
+            dragRef.current = {
+              mode: 'move',
+              sectionId: sec.id,
+              startMouseX: e.clientX,
+              originalTick: sec.tick,
+              originalDuration: sec.duration
+            }
           }
           e.stopPropagation()
           return
@@ -712,7 +819,13 @@ function SoloLane({
         const created = latest[latest.length - 1]
         if (created) {
           songStore.getState().selectSoloSection(created.id)
-          dragRef.current = { mode: 'resize-end', sectionId: created.id, startMouseX: e.clientX, originalTick: created.tick, originalDuration: created.duration }
+          dragRef.current = {
+            mode: 'resize-end',
+            sectionId: created.id,
+            startMouseX: e.clientX,
+            originalTick: created.tick,
+            originalDuration: created.duration
+          }
         }
         e.stopPropagation()
       } else if (editTool === 'select') {
@@ -734,17 +847,27 @@ function SoloLane({
         const newTick = Math.max(0, Math.round((drag.originalTick + dtick) / snapTicks) * snapTicks)
         songStore.getState().updateSoloSection(drag.sectionId, { tick: newTick })
       } else if (drag.mode === 'resize-start') {
-        const newStart = Math.max(0, Math.round((drag.originalTick + dtick) / snapTicks) * snapTicks)
+        const newStart = Math.max(
+          0,
+          Math.round((drag.originalTick + dtick) / snapTicks) * snapTicks
+        )
         const endTick = drag.originalTick + drag.originalDuration
         const newDuration = Math.max(snapTicks, endTick - newStart)
-        songStore.getState().updateSoloSection(drag.sectionId, { tick: newStart, duration: newDuration })
+        songStore
+          .getState()
+          .updateSoloSection(drag.sectionId, { tick: newStart, duration: newDuration })
       } else if (drag.mode === 'resize-end') {
-        const newDuration = Math.max(snapTicks, Math.round((drag.originalDuration + dtick) / snapTicks) * snapTicks)
+        const newDuration = Math.max(
+          snapTicks,
+          Math.round((drag.originalDuration + dtick) / snapTicks) * snapTicks
+        )
         songStore.getState().updateSoloSection(drag.sectionId, { duration: newDuration })
       }
     }
 
-    const handleMouseUp = (): void => { dragRef.current = null }
+    const handleMouseUp = (): void => {
+      dragRef.current = null
+    }
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
     return () => {
@@ -761,7 +884,8 @@ function SoloLane({
         const secX = sec.tick * pixelsPerTick - scrollX
         const secW = sec.duration * pixelsPerTick
         if (localMx >= secX && localMx <= secX + secW) {
-          if (localMx <= secX + SP_HANDLE_WIDTH || localMx >= secX + secW - SP_HANDLE_WIDTH) return 'ew-resize'
+          if (localMx <= secX + SP_HANDLE_WIDTH || localMx >= secX + secW - SP_HANDLE_WIDTH)
+            return 'ew-resize'
           return editTool === 'erase' ? 'pointer' : 'grab'
         }
       }
@@ -772,14 +896,22 @@ function SoloLane({
 
   const [cursor, setCursor] = useState('default')
   const handleMouseMove = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => { if (!dragRef.current) setCursor(getCursor(e)) },
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!dragRef.current) setCursor(getCursor(e))
+    },
     [getCursor]
   )
 
   return (
     <div
       className="midi-sp-lane"
-      style={{ height, cursor, position: 'relative', overflow: 'hidden', borderBottomColor: 'rgba(255,215,0,0.3)' }}
+      style={{
+        height,
+        cursor,
+        position: 'relative',
+        overflow: 'hidden',
+        borderBottomColor: 'rgba(255,215,0,0.3)'
+      }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
     >
@@ -803,14 +935,41 @@ function SoloLane({
               pointerEvents: 'none'
             }}
           >
-            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: SP_HANDLE_WIDTH, cursor: 'ew-resize' }} />
-            <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: SP_HANDLE_WIDTH, cursor: 'ew-resize' }} />
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: SP_HANDLE_WIDTH,
+                cursor: 'ew-resize'
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: SP_HANDLE_WIDTH,
+                cursor: 'ew-resize'
+              }}
+            />
             {w > 40 && (
-              <span style={{
-                position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-                fontSize: 9, fontWeight: 600, color: '#000', textShadow: '0 0 4px rgba(255,255,255,0.3)',
-                whiteSpace: 'nowrap', pointerEvents: 'none'
-              }}>
+              <span
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  fontSize: 9,
+                  fontWeight: 600,
+                  color: '#000',
+                  textShadow: '0 0 4px rgba(255,255,255,0.3)',
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'none'
+                }}
+              >
                 Solo
               </span>
             )}
@@ -830,7 +989,11 @@ const LANE_MARKER_COLORS: Record<string, string> = {
   discoFlip: 'rgba(180,60,220,0.55)'
 }
 const LANE_MARKER_LABELS: Record<string, string> = {
-  drumRoll: 'Drum Roll', trill: 'Trill', tremolo: 'Tremolo', bre: 'BRE', discoFlip: 'Disco Flip'
+  drumRoll: 'Drum Roll',
+  trill: 'Trill',
+  tremolo: 'Tremolo',
+  bre: 'BRE',
+  discoFlip: 'Disco Flip'
 }
 function LaneMarkerLane({
   markers,
@@ -884,9 +1047,21 @@ function LaneMarkerLane({
             return
           }
           if (localMx >= mX + mW - SP_HANDLE_WIDTH) {
-            dragRef.current = { mode: 'resize-end', markerId: marker.id, startMouseX: e.clientX, originalTick: marker.tick, originalDuration: marker.duration }
+            dragRef.current = {
+              mode: 'resize-end',
+              markerId: marker.id,
+              startMouseX: e.clientX,
+              originalTick: marker.tick,
+              originalDuration: marker.duration
+            }
           } else {
-            dragRef.current = { mode: 'move', markerId: marker.id, startMouseX: e.clientX, originalTick: marker.tick, originalDuration: marker.duration }
+            dragRef.current = {
+              mode: 'move',
+              markerId: marker.id,
+              startMouseX: e.clientX,
+              originalTick: marker.tick,
+              originalDuration: marker.duration
+            }
           }
           e.stopPropagation()
           return
@@ -900,12 +1075,27 @@ function LaneMarkerLane({
         const latest = songStore.getState().song.laneMarkers
         const created = latest[latest.length - 1]
         if (created) {
-          dragRef.current = { mode: 'resize-end', markerId: created.id, startMouseX: e.clientX, originalTick: created.tick, originalDuration: created.duration }
+          dragRef.current = {
+            mode: 'resize-end',
+            markerId: created.id,
+            startMouseX: e.clientX,
+            originalTick: created.tick,
+            originalDuration: created.duration
+          }
         }
         e.stopPropagation()
       }
     },
-    [songStore, scrollX, pixelsPerTick, instrumentMarkers, editTool, instrument, snapDivision, activeType]
+    [
+      songStore,
+      scrollX,
+      pixelsPerTick,
+      instrumentMarkers,
+      editTool,
+      instrument,
+      snapDivision,
+      activeType
+    ]
   )
 
   useEffect(() => {
@@ -919,11 +1109,16 @@ function LaneMarkerLane({
         const newTick = Math.max(0, Math.round((drag.originalTick + dtick) / snapTicks) * snapTicks)
         songStore.getState().updateLaneMarker(drag.markerId, { tick: newTick })
       } else {
-        const newDuration = Math.max(snapTicks, Math.round((drag.originalDuration + dtick) / snapTicks) * snapTicks)
+        const newDuration = Math.max(
+          snapTicks,
+          Math.round((drag.originalDuration + dtick) / snapTicks) * snapTicks
+        )
         songStore.getState().updateLaneMarker(drag.markerId, { duration: newDuration })
       }
     }
-    const handleMouseUp = (): void => { dragRef.current = null }
+    const handleMouseUp = (): void => {
+      dragRef.current = null
+    }
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
     return () => {
@@ -937,25 +1132,55 @@ function LaneMarkerLane({
     : ['trill', 'tremolo', 'bre']
 
   return (
-    <div style={{ position: 'relative', flex: 1, height, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div
+      style={{
+        position: 'relative',
+        flex: 1,
+        height,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden'
+      }}
+    >
       {/* Type selector tabs */}
-      <div style={{ display: 'flex', height: 12, gap: 2, paddingLeft: 2, paddingTop: 1, flexShrink: 0 }}>
+      <div
+        style={{
+          display: 'flex',
+          height: 12,
+          gap: 2,
+          paddingLeft: 2,
+          paddingTop: 1,
+          flexShrink: 0
+        }}
+      >
         {availableTypes.map((t) => (
           <button
             key={t}
             onClick={() => setActiveType(t)}
             style={{
-              fontSize: 8, padding: '0 3px', height: 10, border: 'none', borderRadius: 2, cursor: 'pointer',
+              fontSize: 8,
+              padding: '0 3px',
+              height: 10,
+              border: 'none',
+              borderRadius: 2,
+              cursor: 'pointer',
               backgroundColor: activeType === t ? LANE_MARKER_COLORS[t] : 'rgba(255,255,255,0.08)',
               color: activeType === t ? '#fff' : 'rgba(255,255,255,0.5)'
             }}
-          >{LANE_MARKER_LABELS[t]}</button>
+          >
+            {LANE_MARKER_LABELS[t]}
+          </button>
         ))}
       </div>
       {/* Marker canvas area */}
       <div
         className="midi-sp-lane"
-        style={{ flex: 1, cursor: editTool === 'place' ? 'crosshair' : editTool === 'erase' ? 'pointer' : 'default', position: 'relative', overflow: 'hidden' }}
+        style={{
+          flex: 1,
+          cursor: editTool === 'place' ? 'crosshair' : editTool === 'erase' ? 'pointer' : 'default',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
         onMouseDown={handleMouseDown}
       >
         {instrumentMarkers.map((marker) => {
@@ -966,7 +1191,10 @@ function LaneMarkerLane({
               key={marker.id}
               style={{
                 position: 'absolute',
-                left: x, top: 1, width: w, height: height - 14,
+                left: x,
+                top: 1,
+                width: w,
+                height: height - 14,
                 backgroundColor: LANE_MARKER_COLORS[marker.type] || 'rgba(255,255,255,0.3)',
                 borderRadius: 2,
                 border: '1px solid rgba(255,255,255,0.3)',
@@ -974,7 +1202,18 @@ function LaneMarkerLane({
               }}
             >
               {w > 30 && (
-                <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', fontSize: 8, color: '#fff', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+                <span
+                  style={{
+                    position: 'absolute',
+                    left: '50%',
+                    top: '50%',
+                    transform: 'translate(-50%,-50%)',
+                    fontSize: 8,
+                    color: '#fff',
+                    whiteSpace: 'nowrap',
+                    pointerEvents: 'none'
+                  }}
+                >
                   {LANE_MARKER_LABELS[marker.type]}
                 </span>
               )}
@@ -1026,7 +1265,10 @@ function Notes({
 
   // Inline fret editing state (like vocal lyric editing)
   const [editingFret, setEditingFret] = useState<{
-    noteId: string; x: number; y: number; fret: string
+    noteId: string
+    x: number
+    y: number
+    fret: string
   } | null>(null)
 
   const commitFret = useCallback(() => {
@@ -1055,20 +1297,33 @@ function Notes({
   const visibleNotes = useMemo(() => {
     const cullWidth = Math.max(canvasWidth, width)
     const isDrums = instrument === 'drums'
-    const result: { note: Note; x: number; y: number; w: number; h: number; isSustain: boolean }[] = []
+    const result: { note: Note; x: number; y: number; w: number; h: number; isSustain: boolean }[] =
+      []
     for (const note of notes) {
       const laneIndex = lanes.indexOf(getEditorLaneForNote(note))
       if (laneIndex === -1) continue
       const x = note.tick * pixelsPerTick - scrollX
       const isSustain = !isDrums && note.duration >= sustainThreshold
-      const w = isSustain ? Math.max(note.duration * pixelsPerTick, STRUM_GEM_WIDTH) : STRUM_GEM_WIDTH
+      const w = isSustain
+        ? Math.max(note.duration * pixelsPerTick, STRUM_GEM_WIDTH)
+        : STRUM_GEM_WIDTH
       if (x + w < 0 || x > cullWidth) continue
       const y = laneIndex * rowHeight + 2
       const h = rowHeight - 4
       result.push({ note, x, y, w, h, isSustain })
     }
     return result
-  }, [notes, lanes, pixelsPerTick, scrollX, width, canvasWidth, rowHeight, instrument, sustainThreshold])
+  }, [
+    notes,
+    lanes,
+    pixelsPerTick,
+    scrollX,
+    width,
+    canvasWidth,
+    rowHeight,
+    instrument,
+    sustainThreshold
+  ])
 
   // Draw notes on canvas
   useEffect(() => {
@@ -1080,8 +1335,10 @@ function Notes({
     const w = canvas.clientWidth
     const h = canvas.clientHeight
     if (w === 0 || h === 0) return // not laid out yet â€” ResizeObserver will trigger redraw
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h }
-    else ctx.clearRect(0, 0, w, h)
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w
+      canvas.height = h
+    } else ctx.clearRect(0, 0, w, h)
 
     // Draw star power phrase backgrounds
     const totalLaneHeight = lanes.length * rowHeight
@@ -1167,7 +1424,18 @@ function Notes({
 
       ctx.globalAlpha = 1.0
     }
-  }, [visibleNotes, selectedNoteIds, width, height, starPowerPhrases, instrument, pixelsPerTick, scrollX, lanes, rowHeight])
+  }, [
+    visibleNotes,
+    selectedNoteIds,
+    width,
+    height,
+    starPowerPhrases,
+    instrument,
+    pixelsPerTick,
+    scrollX,
+    lanes,
+    rowHeight
+  ])
 
   // Handle mousedown: intercept sustain right-edge drags before click propagates
   const handleMouseDown = useCallback(
@@ -1262,10 +1530,19 @@ function Notes({
       }
 
       const selectedSet = new Set(selectedNoteIds)
-      if (selectedSet.size === 0) { canvas.style.cursor = ''; return }
+      if (selectedSet.size === 0) {
+        canvas.style.cursor = ''
+        return
+      }
       for (let i = visibleNotes.length - 1; i >= 0; i--) {
         const { note, x, y, w, h } = visibleNotes[i]
-        if (selectedSet.has(note.id) && mx >= x - 4 && mx <= x + w + 4 && my >= y - 2 && my <= y + h + 2) {
+        if (
+          selectedSet.has(note.id) &&
+          mx >= x - 4 &&
+          mx <= x + w + 4 &&
+          my >= y - 2 &&
+          my <= y + h + 2
+        ) {
           canvas.style.cursor = 'grab'
           return
         }
@@ -1354,7 +1631,10 @@ function VocalNotes({
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [editingLyric, setEditingLyric] = useState<{
-    noteId: string; x: number; y: number; lyric: string
+    noteId: string
+    x: number
+    y: number
+    lyric: string
   } | null>(null)
   const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
   const rowHeight = MIDI_EDITOR_CONFIG.vocalRowHeight
@@ -1403,7 +1683,17 @@ function VocalNotes({
       }
     }
     return result
-  }, [partNotes, pixelsPerTick, scrollX, width, canvasWidth, pitchMax, pitchMin, rowHeight, pitchRange])
+  }, [
+    partNotes,
+    pixelsPerTick,
+    scrollX,
+    width,
+    canvasWidth,
+    pitchMax,
+    pitchMin,
+    rowHeight,
+    pitchRange
+  ])
 
   // Draw
   useEffect(() => {
@@ -1415,8 +1705,10 @@ function VocalNotes({
     const w = canvas.clientWidth
     const h = canvas.clientHeight
     if (w === 0 || h === 0) return
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h }
-    else ctx.clearRect(0, 0, w, h)
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w
+      canvas.height = h
+    } else ctx.clearRect(0, 0, w, h)
 
     const totalHeight = pitchRange * rowHeight
 
@@ -1451,7 +1743,8 @@ function VocalNotes({
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)'
     ctx.lineWidth = 1
     for (let pitch = pitchMin; pitch <= pitchMax; pitch++) {
-      if (pitch % 12 === 0) { // C notes
+      if (pitch % 12 === 0) {
+        // C notes
         const y = (pitchMax - pitch) * rowHeight
         ctx.beginPath()
         ctx.moveTo(0, y)
@@ -1548,7 +1841,7 @@ function VocalNotes({
 
       // Color by harmony part
       const partColors = ['#E879F9', '#60A5FA', '#34D399', '#FBBF24']
-      const color = isPercussion ? '#888888' : (partColors[harmonyPart] || '#E879F9')
+      const color = isPercussion ? '#888888' : partColors[harmonyPart] || '#E879F9'
 
       // Note body
       ctx.fillStyle = color
@@ -1596,7 +1889,21 @@ function VocalNotes({
         ctx.fillText(note.lyric, x + 2, y - 2, Math.max(nw, 60))
       }
     }
-  }, [visibleNotes, selectedNoteIds, width, height, partPhrases, starPowerPhrases, pixelsPerTick, scrollX, pitchRange, pitchMax, pitchMin, rowHeight, harmonyPart])
+  }, [
+    visibleNotes,
+    selectedNoteIds,
+    width,
+    height,
+    partPhrases,
+    starPowerPhrases,
+    pixelsPerTick,
+    scrollX,
+    pitchRange,
+    pitchMax,
+    pitchMin,
+    rowHeight,
+    harmonyPart
+  ])
 
   // Hit testing
   const handleClick = useCallback(
@@ -1661,10 +1968,19 @@ function VocalNotes({
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
       const selectedSet = new Set(selectedNoteIds)
-      if (selectedSet.size === 0) { canvas.style.cursor = ''; return }
+      if (selectedSet.size === 0) {
+        canvas.style.cursor = ''
+        return
+      }
       for (let i = visibleNotes.length - 1; i >= 0; i--) {
         const { note, x, y, w, h } = visibleNotes[i]
-        if (selectedSet.has(note.id) && mx >= x - 4 && mx <= x + w + 4 && my >= y - 2 && my <= y + h + 2) {
+        if (
+          selectedSet.has(note.id) &&
+          mx >= x - 4 &&
+          mx <= x + w + 4 &&
+          my >= y - 2 &&
+          my <= y + h + 2
+        ) {
           canvas.style.cursor = 'grab'
           return
         }
@@ -1675,7 +1991,16 @@ function VocalNotes({
   )
 
   return (
-    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+    <div
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none'
+      }}
+    >
       <canvas
         ref={canvasRef}
         className="midi-notes-canvas"
@@ -1764,7 +2089,8 @@ function ProKeysNotes({
 
   const visibleNotes = useMemo(() => {
     const cullWidth = Math.max(canvasWidth, width)
-    const result: { note: Note; x: number; y: number; w: number; h: number; isSustain: boolean }[] = []
+    const result: { note: Note; x: number; y: number; w: number; h: number; isSustain: boolean }[] =
+      []
     for (const note of notes) {
       const isSustain = note.duration >= sustainThreshold
       const x = note.tick * pixelsPerTick - scrollX
@@ -1777,7 +2103,17 @@ function ProKeysNotes({
       result.push({ note, x, y, w, h, isSustain })
     }
     return result
-  }, [notes, pixelsPerTick, scrollX, width, canvasWidth, pitchMax, pitchMin, rowHeight, sustainThreshold])
+  }, [
+    notes,
+    pixelsPerTick,
+    scrollX,
+    width,
+    canvasWidth,
+    pitchMax,
+    pitchMin,
+    rowHeight,
+    sustainThreshold
+  ])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -1788,8 +2124,10 @@ function ProKeysNotes({
     const w = canvas.clientWidth
     const h = canvas.clientHeight
     if (w === 0 || h === 0) return
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h }
-    else ctx.clearRect(0, 0, w, h)
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w
+      canvas.height = h
+    } else ctx.clearRect(0, 0, w, h)
 
     const totalHeight = pitchRange * rowHeight
 
@@ -1834,7 +2172,19 @@ function ProKeysNotes({
       }
       ctx.globalAlpha = 1.0
     }
-  }, [visibleNotes, selectedNoteIds, width, height, starPowerPhrases, pixelsPerTick, scrollX, pitchRange, pitchMax, pitchMin, rowHeight])
+  }, [
+    visibleNotes,
+    selectedNoteIds,
+    width,
+    height,
+    starPowerPhrases,
+    pixelsPerTick,
+    scrollX,
+    pitchRange,
+    pitchMax,
+    pitchMin,
+    rowHeight
+  ])
 
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1865,10 +2215,19 @@ function ProKeysNotes({
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
       const selectedSet = new Set(selectedNoteIds)
-      if (selectedSet.size === 0) { canvas.style.cursor = ''; return }
+      if (selectedSet.size === 0) {
+        canvas.style.cursor = ''
+        return
+      }
       for (let i = visibleNotes.length - 1; i >= 0; i--) {
         const { note, x, y, w, h } = visibleNotes[i]
-        if (selectedSet.has(note.id) && mx >= x - 4 && mx <= x + w + 4 && my >= y - 2 && my <= y + h + 2) {
+        if (
+          selectedSet.has(note.id) &&
+          mx >= x - 4 &&
+          mx <= x + w + 4 &&
+          my >= y - 2 &&
+          my <= y + h + 2
+        ) {
           canvas.style.cursor = 'grab'
           return
         }
@@ -1924,12 +2283,37 @@ function NoteModifierToggles(): React.JSX.Element {
   const toggle = useUIStore((s) => s.toggleModifier)
   const hotkeys = useSettingsStore((s) => s.hotkeys)
 
-  const buttons: { key: keyof typeof mods; label: string; shortcut: string; activeColor: string }[] = [
-    { key: 'cymbalOrTap', label: 'Cymbal/Tap', shortcut: hotkeys.toggleCymbalOrTap, activeColor: '#FFD700' },
-    { key: 'ghostOrHopo', label: 'Ghost/HOPO', shortcut: hotkeys.toggleGhostOrHopo, activeColor: '#88BBFF' },
+  const buttons: {
+    key: keyof typeof mods
+    label: string
+    shortcut: string
+    activeColor: string
+  }[] = [
+    {
+      key: 'cymbalOrTap',
+      label: 'Cymbal/Tap',
+      shortcut: hotkeys.toggleCymbalOrTap,
+      activeColor: '#FFD700'
+    },
+    {
+      key: 'ghostOrHopo',
+      label: 'Ghost/HOPO',
+      shortcut: hotkeys.toggleGhostOrHopo,
+      activeColor: '#88BBFF'
+    },
     { key: 'accent', label: 'Accent', shortcut: hotkeys.toggleAccent, activeColor: '#FF6666' },
-    { key: 'openOrKick', label: 'Open/Kick', shortcut: hotkeys.toggleOpenOrKick, activeColor: '#CC44FF' },
-    { key: 'starPower', label: 'Star Power', shortcut: hotkeys.toggleStarPower, activeColor: '#00CED1' },
+    {
+      key: 'openOrKick',
+      label: 'Open/Kick',
+      shortcut: hotkeys.toggleOpenOrKick,
+      activeColor: '#CC44FF'
+    },
+    {
+      key: 'starPower',
+      label: 'Star Power',
+      shortcut: hotkeys.toggleStarPower,
+      activeColor: '#00CED1'
+    },
     { key: 'solo', label: 'Solo', shortcut: hotkeys.toggleSolo, activeColor: '#FFD700' },
     { key: 'talkie', label: 'Talkie', shortcut: hotkeys.toggleTalkie, activeColor: '#888888' }
   ]
@@ -1942,9 +2326,11 @@ function NoteModifierToggles(): React.JSX.Element {
           className={`modifier-toggle-button ${mods[btn.key] ? 'active' : ''}`}
           style={mods[btn.key] ? { backgroundColor: btn.activeColor, color: '#000' } : undefined}
           onClick={() => toggle(btn.key)}
-          title={btn.key === 'openOrKick'
-            ? `${btn.label} (${btn.shortcut}) - Hold Shift while placing a kick for 2x`
-            : `${btn.label} (${btn.shortcut})`}
+          title={
+            btn.key === 'openOrKick'
+              ? `${btn.label} (${btn.shortcut}) - Hold Shift while placing a kick for 2x`
+              : `${btn.label} (${btn.shortcut})`
+          }
         >
           <span>{btn.label}</span>
           <kbd>{btn.shortcut}</kbd>
@@ -1959,7 +2345,11 @@ function MidiShortcutHelpButton(): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const [panelStyle, setPanelStyle] = useState<{ top: number; left: number; maxHeight: number } | null>(null)
+  const [panelStyle, setPanelStyle] = useState<{
+    top: number
+    left: number
+    maxHeight: number
+  } | null>(null)
   const hotkeys = useSettingsStore((s) => s.hotkeys)
 
   useEffect(() => {
@@ -2040,39 +2430,150 @@ function MidiShortcutHelpButton(): React.JSX.Element {
           <div className="shortcut-help-title">Keyboard Shortcuts</div>
           <div className="shortcut-help-section">
             <div className="shortcut-help-section-title">Tools</div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toolSelect}</kbd></div><span className="shortcut-desc">Select tool</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toolPlace}</kbd></div><span className="shortcut-desc">Place tool</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toolErase}</kbd></div><span className="shortcut-desc">Erase tool</span></div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>{hotkeys.toolSelect}</kbd>
+              </div>
+              <span className="shortcut-desc">Select tool</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>{hotkeys.toolPlace}</kbd>
+              </div>
+              <span className="shortcut-desc">Place tool</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>{hotkeys.toolErase}</kbd>
+              </div>
+              <span className="shortcut-desc">Erase tool</span>
+            </div>
           </div>
           <div className="shortcut-help-section">
             <div className="shortcut-help-section-title">Note Modifiers (toggle)</div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toggleCymbalOrTap}</kbd></div><span className="shortcut-desc">Cymbal / Tap</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toggleGhostOrHopo}</kbd></div><span className="shortcut-desc">Ghost / HOPO</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toggleAccent}</kbd></div><span className="shortcut-desc">Accent</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toggleOpenOrKick}</kbd></div><span className="shortcut-desc">Open / Kick</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toggleStarPower}</kbd></div><span className="shortcut-desc">Star Power mode</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.toggleSolo}</kbd></div><span className="shortcut-desc">Solo section mode</span></div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>{hotkeys.toggleCymbalOrTap}</kbd>
+              </div>
+              <span className="shortcut-desc">Cymbal / Tap</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>{hotkeys.toggleGhostOrHopo}</kbd>
+              </div>
+              <span className="shortcut-desc">Ghost / HOPO</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>{hotkeys.toggleAccent}</kbd>
+              </div>
+              <span className="shortcut-desc">Accent</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>{hotkeys.toggleOpenOrKick}</kbd>
+              </div>
+              <span className="shortcut-desc">Open / Kick</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>{hotkeys.toggleStarPower}</kbd>
+              </div>
+              <span className="shortcut-desc">Star Power mode</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>{hotkeys.toggleSolo}</kbd>
+              </div>
+              <span className="shortcut-desc">Solo section mode</span>
+            </div>
           </div>
           <div className="shortcut-help-section">
             <div className="shortcut-help-section-title">Editing</div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.copy}</kbd></div><span className="shortcut-desc">Copy</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.paste}</kbd></div><span className="shortcut-desc">Paste at playhead</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.undo}</kbd></div><span className="shortcut-desc">Undo</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.redo}</kbd></div><span className="shortcut-desc">Redo</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.deleteSelection}</kbd></div><span className="shortcut-desc">Delete selected</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.createStarPower}</kbd></div><span className="shortcut-desc">Star Power from selection</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>Esc</kbd></div><span className="shortcut-desc">Clear selection</span></div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>{hotkeys.copy}</kbd>
+              </div>
+              <span className="shortcut-desc">Copy</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>{hotkeys.paste}</kbd>
+              </div>
+              <span className="shortcut-desc">Paste at playhead</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>{hotkeys.undo}</kbd>
+              </div>
+              <span className="shortcut-desc">Undo</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>{hotkeys.redo}</kbd>
+              </div>
+              <span className="shortcut-desc">Redo</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>{hotkeys.deleteSelection}</kbd>
+              </div>
+              <span className="shortcut-desc">Delete selected</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>{hotkeys.createStarPower}</kbd>
+              </div>
+              <span className="shortcut-desc">Star Power from selection</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>Esc</kbd>
+              </div>
+              <span className="shortcut-desc">Clear selection</span>
+            </div>
           </div>
           <div className="shortcut-help-section">
             <div className="shortcut-help-section-title">Click Modifiers</div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>Ctrl</kbd><span className="shortcut-plus">+</span><kbd>Click</kbd></div><span className="shortcut-desc">Multi-select</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>Click</kbd><span className="shortcut-plus">+</span><kbd>Drag</kbd></div><span className="shortcut-desc">Box select / Sustain</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>Shift</kbd><span className="shortcut-plus">+</span><kbd>Kick Place</kbd></div><span className="shortcut-desc">Mark kick as Double Bass (2x)</span></div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>Ctrl</kbd>
+                <span className="shortcut-plus">+</span>
+                <kbd>Click</kbd>
+              </div>
+              <span className="shortcut-desc">Multi-select</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>Click</kbd>
+                <span className="shortcut-plus">+</span>
+                <kbd>Drag</kbd>
+              </div>
+              <span className="shortcut-desc">Box select / Sustain</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>Shift</kbd>
+                <span className="shortcut-plus">+</span>
+                <kbd>Kick Place</kbd>
+              </div>
+              <span className="shortcut-desc">Mark kick as Double Bass (2x)</span>
+            </div>
           </div>
           <div className="shortcut-help-section">
             <div className="shortcut-help-section-title">Pro Guitar/Bass</div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>Dbl-click</kbd></div><span className="shortcut-desc">Edit fret number inline</span></div>
-            <div className="shortcut-row"><div className="shortcut-keys"><kbd>Up</kbd> / <kbd>Down</kbd></div><span className="shortcut-desc">Fret +1 / -1</span></div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>Dbl-click</kbd>
+              </div>
+              <span className="shortcut-desc">Edit fret number inline</span>
+            </div>
+            <div className="shortcut-row">
+              <div className="shortcut-keys">
+                <kbd>Up</kbd> / <kbd>Down</kbd>
+              </div>
+              <span className="shortcut-desc">Fret +1 / -1</span>
+            </div>
           </div>
         </div>
       )}
@@ -2102,21 +2603,27 @@ function PlayheadRuler({
   const [isDragging, setIsDragging] = useState(false)
   const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
 
-  const tickFromX = useCallback((clientX: number): number => {
-    const canvas = rulerCanvasRef.current
-    if (!canvas) return 0
-    const rect = canvas.getBoundingClientRect()
-    const x = clientX - rect.left + scrollX
-    const rawTick = x / pixelsPerTick
-    const snapTicks = 480 / snapDivision
-    return Math.max(0, Math.round(rawTick / snapTicks) * snapTicks)
-  }, [scrollX, pixelsPerTick, snapDivision])
+  const tickFromX = useCallback(
+    (clientX: number): number => {
+      const canvas = rulerCanvasRef.current
+      if (!canvas) return 0
+      const rect = canvas.getBoundingClientRect()
+      const x = clientX - rect.left + scrollX
+      const rawTick = x / pixelsPerTick
+      const snapTicks = 480 / snapDivision
+      return Math.max(0, Math.round(rawTick / snapTicks) * snapTicks)
+    },
+    [scrollX, pixelsPerTick, snapDivision]
+  )
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    setIsDragging(true)
-    const tick = tickFromX(e.clientX)
-    songStore.getState().setCurrentTick(tick)
-  }, [tickFromX, songStore])
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      setIsDragging(true)
+      const tick = tickFromX(e.clientX)
+      songStore.getState().setCurrentTick(tick)
+    },
+    [tickFromX, songStore]
+  )
 
   useEffect(() => {
     if (!isDragging) return
@@ -2202,16 +2709,18 @@ function PlayheadRuler({
 
   return (
     <div className="midi-ruler" style={{ marginLeft: headerWidth, position: 'relative' }}>
-      <canvas
-        ref={rulerCanvasRef}
-        className="midi-ruler-canvas"
-        style={{ cursor: 'col-resize' }}
-      />
+      <canvas ref={rulerCanvasRef} className="midi-ruler-canvas" style={{ cursor: 'col-resize' }} />
       <canvas
         ref={playheadCanvasRef}
         className="midi-ruler-canvas"
         onMouseDown={handleMouseDown}
-        style={{ cursor: 'col-resize', position: 'absolute', top: 0, left: 0, pointerEvents: 'auto' }}
+        style={{
+          cursor: 'col-resize',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          pointerEvents: 'auto'
+        }}
       />
     </div>
   )
@@ -2244,7 +2753,16 @@ const SWAP_LANE_OPTIONS: Record<Instrument, string[]> = {
   guitar: ['open', 'green', 'red', 'yellow', 'blue', 'orange'],
   bass: ['open', 'green', 'red', 'yellow', 'blue', 'orange'],
   keys: ['open', 'green', 'red', 'yellow', 'blue', 'orange'],
-  drums: ['kick', 'snare', 'yellowTom', 'yellowCymbal', 'blueTom', 'blueCymbal', 'greenTom', 'greenCymbal'],
+  drums: [
+    'kick',
+    'snare',
+    'yellowTom',
+    'yellowCymbal',
+    'blueTom',
+    'blueCymbal',
+    'greenTom',
+    'greenCymbal'
+  ],
   proGuitar: ['1', '2', '3', '4', '5', '6'],
   proBass: ['1', '2', '3', '4', '5', '6'],
   proKeys: [],
@@ -2386,11 +2904,19 @@ export function MidiEditor(): React.JSX.Element {
     updateSettings
   } = useSettingsStore()
   const showHighwayWaveform = useUIStore((s) => s.showHighwayWaveform)
-  const setZoomLevel = useCallback((updater: number | ((prev: number) => number)) => {
-    const newZoom = typeof updater === 'function' ? updater(useSettingsStore.getState().pianoRollZoom ?? 2.0) : updater
-    updateSettings({ pianoRollZoom: Math.max(0.1, Math.min(5, newZoom)) })
-  }, [updateSettings])
-  const [visibleInstruments, setVisibleInstruments] = useState<Set<Instrument>>(new Set(MIDI_EDITOR_CONFIG.instruments))
+  const setZoomLevel = useCallback(
+    (updater: number | ((prev: number) => number)) => {
+      const newZoom =
+        typeof updater === 'function'
+          ? updater(useSettingsStore.getState().pianoRollZoom ?? 2.0)
+          : updater
+      updateSettings({ pianoRollZoom: Math.max(0.1, Math.min(5, newZoom)) })
+    },
+    [updateSettings]
+  )
+  const [visibleInstruments, setVisibleInstruments] = useState<Set<Instrument>>(
+    new Set(MIDI_EDITOR_CONFIG.instruments)
+  )
   const [collapsedInstruments, setCollapsedInstruments] = useState<Set<Instrument>>(new Set())
   const isUserScrolling = useRef(false)
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -2400,7 +2926,8 @@ export function MidiEditor(): React.JSX.Element {
   const editTool = useUIStore((s) => s.editTool)
   const [notes, setNotes] = useState<Note[]>([])
   const eraserCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 21h10'/%3E%3Cpath d='M5.5 11.5 17 23'/%3E%3Cpath d='m2 17 4.5-4.5 6 6L8 23z'/%3E%3Cpath d='m6.5 12.5 6-6 5 5-6 6'/%3E%3Cpath d='m12.5 6.5 4-4 5 5-4 4'/%3E%3C/svg%3E") 4 20, auto`
-  const gridCursor = editTool === 'place' ? 'crosshair' : editTool === 'erase' ? eraserCursor : 'default'
+  const gridCursor =
+    editTool === 'place' ? 'crosshair' : editTool === 'erase' ? eraserCursor : 'default'
   const [starPowerPhrases, setStarPowerPhrases] = useState<StarPowerPhrase[]>([])
   const [soloSections, setSoloSections] = useState<SoloSection[]>([])
   const [laneMarkers, setLaneMarkers] = useState<LaneMarker[]>([])
@@ -2416,8 +2943,12 @@ export function MidiEditor(): React.JSX.Element {
   const [currentTick, setCurrentTick] = useState(0)
   const [activeDifficulty, setActiveDifficulty] = useState<Difficulty>('expert')
   const [tempoEvents, setTempoEvents] = useState<TempoEvent[]>([{ tick: 0, bpm: 120 }])
-  const [audioDuration, setAudioDuration] = useState<number>(() => activeSongId ? getAudioDuration(activeSongId) : 0)
-  const [waveformSources, setWaveformSources] = useState<Array<{ filePath: string; filename: string }>>([])
+  const [audioDuration, setAudioDuration] = useState<number>(() =>
+    activeSongId ? getAudioDuration(activeSongId) : 0
+  )
+  const [waveformSources, setWaveformSources] = useState<
+    Array<{ filePath: string; filename: string }>
+  >([])
 
   useEffect(() => {
     if (!activeSongId) {
@@ -2427,7 +2958,9 @@ export function MidiEditor(): React.JSX.Element {
 
     const syncSources = (): void => {
       const sources = getAudioSources(activeSongId)
-      setWaveformSources(sources.map((source) => ({ filePath: source.filePath, filename: source.filename })))
+      setWaveformSources(
+        sources.map((source) => ({ filePath: source.filePath, filename: source.filename }))
+      )
     }
 
     syncSources()
@@ -2436,7 +2969,10 @@ export function MidiEditor(): React.JSX.Element {
 
   // Keep audioDuration in sync when audio loads or song changes
   useEffect(() => {
-    if (!activeSongId) { setAudioDuration(0); return }
+    if (!activeSongId) {
+      setAudioDuration(0)
+      return
+    }
     setAudioDuration(getAudioDuration(activeSongId))
     return onAudioLoaded(activeSongId, (dur) => setAudioDuration(dur))
   }, [activeSongId])
@@ -2449,7 +2985,7 @@ export function MidiEditor(): React.JSX.Element {
       ...notes.map((n) => n.tick + n.duration),
       ...vocalNotes.map((n) => n.tick + n.duration),
       ...starPowerPhrases.map((p) => p.tick + p.duration),
-      ...soloSections.map((s) => s.tick + s.duration),
+      ...soloSections.map((s) => s.tick + s.duration)
     ]
     const lastNoteTick = allTicks.length > 0 ? Math.max(...allTicks) : 0
     const bpm = tempoEvents[0]?.bpm ?? 120
@@ -2457,7 +2993,16 @@ export function MidiEditor(): React.JSX.Element {
     const lastTick = Math.max(lastNoteTick, audioDurationTick)
     const paddingTicks = (5 * bpm * 480) / 60
     return Math.max(0, (lastTick + paddingTicks) * pixelsPerTick - dimensions.width * 0.5)
-  }, [notes, vocalNotes, starPowerPhrases, soloSections, zoomLevel, audioDuration, tempoEvents, dimensions.width])
+  }, [
+    notes,
+    vocalNotes,
+    starPowerPhrases,
+    soloSections,
+    zoomLevel,
+    audioDuration,
+    tempoEvents,
+    dimensions.width
+  ])
 
   // Compute sustain threshold based on source format (doesn't change per song)
   const sustainThreshold = useMemo(() => {
@@ -2509,19 +3054,26 @@ export function MidiEditor(): React.JSX.Element {
       if (state.song.notes !== prev.song.notes) {
         setNotes(state.song.notes)
       }
-      if (state.song.starPowerPhrases !== prev.song.starPowerPhrases) setStarPowerPhrases(state.song.starPowerPhrases || [])
-      if (state.song.soloSections !== prev.song.soloSections) setSoloSections(state.song.soloSections || [])
-      if (state.song.laneMarkers !== prev.song.laneMarkers) setLaneMarkers(state.song.laneMarkers || [])
+      if (state.song.starPowerPhrases !== prev.song.starPowerPhrases)
+        setStarPowerPhrases(state.song.starPowerPhrases || [])
+      if (state.song.soloSections !== prev.song.soloSections)
+        setSoloSections(state.song.soloSections || [])
+      if (state.song.laneMarkers !== prev.song.laneMarkers)
+        setLaneMarkers(state.song.laneMarkers || [])
       if (state.song.vocalNotes !== prev.song.vocalNotes) setVocalNotes(state.song.vocalNotes || [])
-      if (state.song.vocalPhrases !== prev.song.vocalPhrases) setVocalPhrases(state.song.vocalPhrases || [])
-      if (state.activeHarmonyPart !== prev.activeHarmonyPart) setActiveHarmonyPart(state.activeHarmonyPart)
+      if (state.song.vocalPhrases !== prev.song.vocalPhrases)
+        setVocalPhrases(state.song.vocalPhrases || [])
+      if (state.activeHarmonyPart !== prev.activeHarmonyPart)
+        setActiveHarmonyPart(state.activeHarmonyPart)
       if (state.selectedNoteIds !== prev.selectedNoteIds) setSelectedNoteIds(state.selectedNoteIds)
-      if (state.selectedVocalNoteIds !== prev.selectedVocalNoteIds) setSelectedVocalNoteIds(state.selectedVocalNoteIds || [])
+      if (state.selectedVocalNoteIds !== prev.selectedVocalNoteIds)
+        setSelectedVocalNoteIds(state.selectedVocalNoteIds || [])
       if (state.selectedSpId !== prev.selectedSpId) setSelectedSpId(state.selectedSpId)
       if (state.selectedSoloId !== prev.selectedSoloId) setSelectedSoloId(state.selectedSoloId)
       if (state.snapDivision !== prev.snapDivision) setSnapDivisionState(state.snapDivision)
       if (state.isPlaying !== prev.isPlaying) setIsPlaying(state.isPlaying)
-      if (state.song.tempoEvents !== prev.song.tempoEvents) setTempoEvents(state.song.tempoEvents || [{ tick: 0, bpm: 120 }])
+      if (state.song.tempoEvents !== prev.song.tempoEvents)
+        setTempoEvents(state.song.tempoEvents || [{ tick: 0, bpm: 120 }])
       // Throttle currentTick updates during playback to reduce re-renders
       if (state.currentTick !== prev.currentTick) {
         if (!state.isPlaying) {
@@ -2615,9 +3167,8 @@ export function MidiEditor(): React.JSX.Element {
       if (playheadX >= prev + margin && playheadX <= prev + dimensions.width - margin) {
         return prev // playhead still visible — don't disturb the view
       }
-      const next = playheadX < prev + margin
-        ? playheadX - margin
-        : playheadX - dimensions.width + margin
+      const next =
+        playheadX < prev + margin ? playheadX - margin : playheadX - dimensions.width + margin
       return Math.min(maxScrollX, Math.max(0, next))
     })
   }, [currentTick, isPlaying, zoomLevel, dimensions.width, maxScrollX])
@@ -2639,13 +3190,14 @@ export function MidiEditor(): React.JSX.Element {
     if (instrument === 'drums') return MIDI_EDITOR_CONFIG.drumLanes
     if (instrument === 'vocals') return VOCAL_PITCH_LANES
     if (instrument === 'proKeys') return PRO_KEYS_PITCH_LANES
-    if (instrument === 'proGuitar' || instrument === 'proBass') return MIDI_EDITOR_CONFIG.proGuitarLanes
+    if (instrument === 'proGuitar' || instrument === 'proBass')
+      return MIDI_EDITOR_CONFIG.proGuitarLanes
     return MIDI_EDITOR_CONFIG.guitarLanes
   }, [])
 
   // Filter instruments to only visible ones
   const displayedInstruments = useMemo(() => {
-    return MIDI_EDITOR_CONFIG.instruments.filter(inst => visibleInstruments.has(inst))
+    return MIDI_EDITOR_CONFIG.instruments.filter((inst) => visibleInstruments.has(inst))
   }, [visibleInstruments])
 
   // Calculate total height for visible instruments
@@ -2659,22 +3211,30 @@ export function MidiEditor(): React.JSX.Element {
     return displayedInstruments.reduce((total, inst) => {
       const lanes = getLanesForInstrument(inst)
       const rh = getRowHeight(inst)
-      return total + MIDI_EDITOR_CONFIG.instrumentHeaderHeight + MIDI_EDITOR_CONFIG.spRowHeight * (inst === 'vocals' ? 2 : 3) + lanes.length * rh
+      return (
+        total +
+        MIDI_EDITOR_CONFIG.instrumentHeaderHeight +
+        MIDI_EDITOR_CONFIG.spRowHeight * (inst === 'vocals' ? 2 : 3) +
+        lanes.length * rh
+      )
     }, 0)
   }, [displayedInstruments, getLanesForInstrument, getRowHeight])
 
-  const verticalWheelDelta = useCallback((deltaY: number) => {
-    return invertPianoRollVerticalScroll ? -deltaY : deltaY
-  }, [invertPianoRollVerticalScroll])
+  const verticalWheelDelta = useCallback(
+    (deltaY: number) => {
+      return invertPianoRollVerticalScroll ? -deltaY : deltaY
+    },
+    [invertPianoRollVerticalScroll]
+  )
 
   // Filter notes for current difficulty
   const filteredNotes = useMemo(() => {
-    const result = notes.filter(
-      (note) => note.difficulty === activeDifficulty
-    )
+    const result = notes.filter((note) => note.difficulty === activeDifficulty)
     if (notes.length > 0 && result.length === 0) {
-      const diffs = new Set(notes.map(n => n.difficulty))
-      console.warn(`[MidiEditor] 0/${notes.length} notes match difficulty '${activeDifficulty}'. Available: ${[...diffs].join(',')}`)
+      const diffs = new Set(notes.map((n) => n.difficulty))
+      console.warn(
+        `[MidiEditor] 0/${notes.length} notes match difficulty '${activeDifficulty}'. Available: ${[...diffs].join(',')}`
+      )
     }
     return result
   }, [notes, activeDifficulty])
@@ -2684,7 +3244,10 @@ export function MidiEditor(): React.JSX.Element {
     const map = new Map<Instrument, Note[]>()
     for (const note of filteredNotes) {
       let arr = map.get(note.instrument)
-      if (!arr) { arr = []; map.set(note.instrument, arr) }
+      if (!arr) {
+        arr = []
+        map.set(note.instrument, arr)
+      }
       arr.push(note)
     }
     return map
@@ -2709,43 +3272,21 @@ export function MidiEditor(): React.JSX.Element {
   }, [])
 
   // Handle scroll on notes area - vertical scroll + horizontal scroll
-  const handleNotesScroll = useCallback((e: React.WheelEvent) => {
-    e.stopPropagation()
-    e.preventDefault()
-    
-    if (e.ctrlKey || e.metaKey) {
-      // Zoom
-      const wheelY = verticalWheelDelta(e.deltaY)
-      const delta = wheelY > 0 ? 0.9 : 1.1
-      setZoomLevel((prev) => Math.max(0.1, Math.min(5, prev * delta)))
-    } else if (e.shiftKey) {
-      // Shift+scroll = horizontal scroll (timeline)
-      isUserScrolling.current = true
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
-      const hDelta = e.deltaX + verticalWheelDelta(e.deltaY)
-      setScrollX((prev) => {
-        const newScrollX = Math.min(maxScrollX, Math.max(0, prev + hDelta))
-        if (songStore && !songStore.getState().isPlaying) {
-          const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
-          const newTick = Math.round(newScrollX / pixelsPerTick)
-          songStore.getState().setCurrentTick(newTick)
-        }
-        return newScrollX
-      })
-      
-      scrollTimeoutRef.current = setTimeout(() => {
-        isUserScrolling.current = false
-      }, 200)
-    } else {
-      // Default: deltaY = vertical, deltaX = horizontal
-      const maxScrollY = Math.max(0, totalHeight - dimensions.height + 50)
-      const wheelY = verticalWheelDelta(e.deltaY)
-      setScrollY((prev) => Math.max(0, Math.min(maxScrollY, prev + wheelY)))
-      
-      if (Math.abs(e.deltaX) > 0) {
+  const handleNotesScroll = useCallback(
+    (e: React.WheelEvent) => {
+      e.stopPropagation()
+      e.preventDefault()
+
+      if (e.ctrlKey || e.metaKey) {
+        // Zoom
+        const wheelY = verticalWheelDelta(e.deltaY)
+        const delta = wheelY > 0 ? 0.9 : 1.1
+        setZoomLevel((prev) => Math.max(0.1, Math.min(5, prev * delta)))
+      } else if (e.shiftKey) {
+        // Shift+scroll = horizontal scroll (timeline)
         isUserScrolling.current = true
         if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
-        const hDelta = e.deltaX
+        const hDelta = e.deltaX + verticalWheelDelta(e.deltaY)
         setScrollX((prev) => {
           const newScrollX = Math.min(maxScrollX, Math.max(0, prev + hDelta))
           if (songStore && !songStore.getState().isPlaying) {
@@ -2755,60 +3296,66 @@ export function MidiEditor(): React.JSX.Element {
           }
           return newScrollX
         })
-        
+
         scrollTimeoutRef.current = setTimeout(() => {
           isUserScrolling.current = false
         }, 200)
+      } else {
+        // Default: deltaY = vertical, deltaX = horizontal
+        const maxScrollY = Math.max(0, totalHeight - dimensions.height + 50)
+        const wheelY = verticalWheelDelta(e.deltaY)
+        setScrollY((prev) => Math.max(0, Math.min(maxScrollY, prev + wheelY)))
+
+        if (Math.abs(e.deltaX) > 0) {
+          isUserScrolling.current = true
+          if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+          const hDelta = e.deltaX
+          setScrollX((prev) => {
+            const newScrollX = Math.min(maxScrollX, Math.max(0, prev + hDelta))
+            if (songStore && !songStore.getState().isPlaying) {
+              const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
+              const newTick = Math.round(newScrollX / pixelsPerTick)
+              songStore.getState().setCurrentTick(newTick)
+            }
+            return newScrollX
+          })
+
+          scrollTimeoutRef.current = setTimeout(() => {
+            isUserScrolling.current = false
+          }, 200)
+        }
       }
-    }
-  }, [songStore, zoomLevel, totalHeight, dimensions.height, maxScrollX, verticalWheelDelta])
+    },
+    [songStore, zoomLevel, totalHeight, dimensions.height, maxScrollX, verticalWheelDelta]
+  )
 
   // Handle scroll on lane headers - vertical scroll
-  const handleHeaderScroll = useCallback((e: React.WheelEvent) => {
-    e.stopPropagation()
-    e.preventDefault()
-    
-    // Vertical scroll - ensure max is at least 0
-    const maxScroll = Math.max(0, totalHeight - dimensions.height + 50)
-    const wheelY = verticalWheelDelta(e.deltaY)
-    setScrollY((prev) => Math.max(0, Math.min(maxScroll, prev + wheelY)))
-  }, [totalHeight, dimensions.height, verticalWheelDelta])
+  const handleHeaderScroll = useCallback(
+    (e: React.WheelEvent) => {
+      e.stopPropagation()
+      e.preventDefault()
 
-  // Handle scroll on editor area (fallback)
-  const handleScroll = useCallback((e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      // Zoom
-      const wheelY = verticalWheelDelta(e.deltaY)
-      const delta = wheelY > 0 ? 0.9 : 1.1
-      setZoomLevel((prev) => prev * delta)
-    } else if (e.shiftKey) {
-      // Shift+scroll = horizontal scroll (timeline)
-      isUserScrolling.current = true
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
-      const hDelta = e.deltaX + verticalWheelDelta(e.deltaY)
-      setScrollX((prev) => {
-        const newScrollX = Math.min(maxScrollX, Math.max(0, prev + hDelta))
-        if (songStore && !songStore.getState().isPlaying) {
-          const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
-          const newTick = Math.round(newScrollX / pixelsPerTick)
-          songStore.getState().setCurrentTick(newTick)
-        }
-        return newScrollX
-      })
-      
-      scrollTimeoutRef.current = setTimeout(() => {
-        isUserScrolling.current = false
-      }, 200)
-    } else {
-      // Default: deltaY = vertical, deltaX = horizontal
+      // Vertical scroll - ensure max is at least 0
       const maxScroll = Math.max(0, totalHeight - dimensions.height + 50)
       const wheelY = verticalWheelDelta(e.deltaY)
       setScrollY((prev) => Math.max(0, Math.min(maxScroll, prev + wheelY)))
-      
-      if (Math.abs(e.deltaX) > 0) {
+    },
+    [totalHeight, dimensions.height, verticalWheelDelta]
+  )
+
+  // Handle scroll on editor area (fallback)
+  const handleScroll = useCallback(
+    (e: React.WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        // Zoom
+        const wheelY = verticalWheelDelta(e.deltaY)
+        const delta = wheelY > 0 ? 0.9 : 1.1
+        setZoomLevel((prev) => prev * delta)
+      } else if (e.shiftKey) {
+        // Shift+scroll = horizontal scroll (timeline)
         isUserScrolling.current = true
         if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
-        const hDelta = e.deltaX
+        const hDelta = e.deltaX + verticalWheelDelta(e.deltaY)
         setScrollX((prev) => {
           const newScrollX = Math.min(maxScrollX, Math.max(0, prev + hDelta))
           if (songStore && !songStore.getState().isPlaying) {
@@ -2818,13 +3365,38 @@ export function MidiEditor(): React.JSX.Element {
           }
           return newScrollX
         })
-        
+
         scrollTimeoutRef.current = setTimeout(() => {
           isUserScrolling.current = false
         }, 200)
+      } else {
+        // Default: deltaY = vertical, deltaX = horizontal
+        const maxScroll = Math.max(0, totalHeight - dimensions.height + 50)
+        const wheelY = verticalWheelDelta(e.deltaY)
+        setScrollY((prev) => Math.max(0, Math.min(maxScroll, prev + wheelY)))
+
+        if (Math.abs(e.deltaX) > 0) {
+          isUserScrolling.current = true
+          if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+          const hDelta = e.deltaX
+          setScrollX((prev) => {
+            const newScrollX = Math.min(maxScrollX, Math.max(0, prev + hDelta))
+            if (songStore && !songStore.getState().isPlaying) {
+              const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
+              const newTick = Math.round(newScrollX / pixelsPerTick)
+              songStore.getState().setCurrentTick(newTick)
+            }
+            return newScrollX
+          })
+
+          scrollTimeoutRef.current = setTimeout(() => {
+            isUserScrolling.current = false
+          }, 200)
+        }
       }
-    }
-  }, [songStore, zoomLevel, totalHeight, dimensions.height, maxScrollX, verticalWheelDelta])
+    },
+    [songStore, zoomLevel, totalHeight, dimensions.height, maxScrollX, verticalWheelDelta]
+  )
 
   // Handle note click - tool-aware, supports flag toggling with modifier toggles
   const handleNoteClick = useCallback(
@@ -2910,7 +3482,13 @@ export function MidiEditor(): React.JSX.Element {
   } | null>(null)
 
   // Selection box visual state (tracks which instrument the drag is on)
-  const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; w: number; h: number; instrument: Instrument } | null>(null)
+  const [selectionBox, setSelectionBox] = useState<{
+    x: number
+    y: number
+    w: number
+    h: number
+    instrument: Instrument
+  } | null>(null)
 
   // Handle mousedown on grid - tool-aware, starts drag
   const handleGridMouseDown = useCallback(
@@ -2934,17 +3512,21 @@ export function MidiEditor(): React.JSX.Element {
         if (selectedIds.size > 0 && lane) {
           // Use generous hit padding so short notes are easy to grab
           const hitPadTicks = Math.max(240, 480 / snapDivision)
-          const hitNote = songStore.getState().song.notes.find(
-            (n) =>
-              selectedIds.has(n.id) &&
-              n.instrument === instrument &&
-              n.difficulty === activeDifficulty &&
-              getEditorLaneForNote(n) === lane &&
-              clickTick >= n.tick - hitPadTicks && clickTick <= n.tick + n.duration + hitPadTicks
-          )
+          const hitNote = songStore
+            .getState()
+            .song.notes.find(
+              (n) =>
+                selectedIds.has(n.id) &&
+                n.instrument === instrument &&
+                n.difficulty === activeDifficulty &&
+                getEditorLaneForNote(n) === lane &&
+                clickTick >= n.tick - hitPadTicks &&
+                clickTick <= n.tick + n.duration + hitPadTicks
+            )
           if (hitNote) {
-            const originals = songStore.getState().song.notes
-              .filter((n) => selectedIds.has(n.id))
+            const originals = songStore
+              .getState()
+              .song.notes.filter((n) => selectedIds.has(n.id))
               .map((n) => ({ id: n.id, tick: n.tick, lane: n.lane as string | number }))
             const snapshot = songStore.getState().song
             songStore.temporal.getState().pause()
@@ -2980,13 +3562,15 @@ export function MidiEditor(): React.JSX.Element {
         const erasedIds = new Set<string>()
         if (lane) {
           const snapTicks = 480 / snapDivision
-          const target = songStore.getState().song.notes.find(
-            (n) =>
-              n.instrument === instrument &&
-              n.difficulty === activeDifficulty &&
-              getEditorLaneForNote(n) === lane &&
-              Math.abs(n.tick - clickTick) <= snapTicks / 2
-          )
+          const target = songStore
+            .getState()
+            .song.notes.find(
+              (n) =>
+                n.instrument === instrument &&
+                n.difficulty === activeDifficulty &&
+                getEditorLaneForNote(n) === lane &&
+                Math.abs(n.tick - clickTick) <= snapTicks / 2
+            )
           if (target) {
             songStore.getState().deleteNote(target.id)
             erasedIds.add(target.id)
@@ -3072,7 +3656,8 @@ export function MidiEditor(): React.JSX.Element {
           const kickPlacement = mods.openOrKick || clickedKickLane || clickedDoubleKickLane
           if (kickPlacement) {
             finalLane = 'kick'
-            const wantsDoubleKick = clickedDoubleKickLane || ((mods.openOrKick || clickedKickLane) && shiftPlace)
+            const wantsDoubleKick =
+              clickedDoubleKickLane || ((mods.openOrKick || clickedKickLane) && shiftPlace)
             if (wantsDoubleKick) finalFlags.isDoubleKick = true
             else delete finalFlags.isDoubleKick
           }
@@ -3082,10 +3667,10 @@ export function MidiEditor(): React.JSX.Element {
         const existingNotes = songStore.getState().song.notes
         const sameTickLane = existingNotes.find(
           (n) =>
-            n.instrument === instrument
-            && n.difficulty === activeDifficulty
-            && n.tick === tick
-            && String(n.lane) === finalLane
+            n.instrument === instrument &&
+            n.difficulty === activeDifficulty &&
+            n.tick === tick &&
+            String(n.lane) === finalLane
         )
         if (sameTickLane) {
           if (instrument === 'drums' && finalLane === 'kick') {
@@ -3111,7 +3696,7 @@ export function MidiEditor(): React.JSX.Element {
           lane: finalLane as DrumLane | GuitarLane,
           velocity: 100,
           ...(normalizedFlags ? { flags: normalizedFlags } : {}),
-          ...(isProGtr ? { string: parseInt(finalLane, 10) as 1|2|3|4|5|6, fret: 0 } : {})
+          ...(isProGtr ? { string: parseInt(finalLane, 10) as 1 | 2 | 3 | 4 | 5 | 6, fret: 0 } : {})
         })
         // Start sustain drag for non-drum instruments
         if (instrument !== 'drums') {
@@ -3173,7 +3758,8 @@ export function MidiEditor(): React.JSX.Element {
       const pitchIdx = Math.floor(y / vocalRowH)
       const pitch = MIDI_EDITOR_CONFIG.vocalPitchMax - pitchIdx
 
-      if (pitch < MIDI_EDITOR_CONFIG.vocalPitchMin || pitch > MIDI_EDITOR_CONFIG.vocalPitchMax) return
+      if (pitch < MIDI_EDITOR_CONFIG.vocalPitchMin || pitch > MIDI_EDITOR_CONFIG.vocalPitchMax)
+        return
 
       if (tool === 'select') {
         // Check if clicking on an already-selected vocal note â€” start move
@@ -3186,13 +3772,19 @@ export function MidiEditor(): React.JSX.Element {
             (n) =>
               selectedIds.has(n.id) &&
               n.harmonyPart === hp &&
-              typeof n.lane === 'number' && Math.abs(n.lane - pitch) <= 1 &&
-              clickTick >= n.tick - hitPadTicks && clickTick <= n.tick + n.duration + hitPadTicks
+              typeof n.lane === 'number' &&
+              Math.abs(n.lane - pitch) <= 1 &&
+              clickTick >= n.tick - hitPadTicks &&
+              clickTick <= n.tick + n.duration + hitPadTicks
           )
           if (hitNote) {
             const originals = (songStore.getState().song.vocalNotes || [])
               .filter((n) => selectedIds.has(n.id))
-              .map((n) => ({ id: n.id, tick: n.tick, lane: getEditorLaneForNote(n) as string | number }))
+              .map((n) => ({
+                id: n.id,
+                tick: n.tick,
+                lane: getEditorLaneForNote(n) as string | number
+              }))
             const snapshot = songStore.getState().song
             songStore.temporal.getState().pause()
             gridDragRef.current = {
@@ -3229,7 +3821,8 @@ export function MidiEditor(): React.JSX.Element {
         const target = (songStore.getState().song.vocalNotes || []).find(
           (n) =>
             n.harmonyPart === songStore.getState().activeHarmonyPart &&
-            typeof n.lane === 'number' && n.lane === pitch &&
+            typeof n.lane === 'number' &&
+            n.lane === pitch &&
             Math.abs(n.tick - clickTick) <= snapTicks / 2
         )
         if (target) {
@@ -3308,7 +3901,8 @@ export function MidiEditor(): React.JSX.Element {
       const pitchIdx = Math.floor(y / proKeysRowH)
       const pitch = MIDI_EDITOR_CONFIG.proKeysPitchMax - pitchIdx
 
-      if (pitch < MIDI_EDITOR_CONFIG.proKeysPitchMin || pitch > MIDI_EDITOR_CONFIG.proKeysPitchMax) return
+      if (pitch < MIDI_EDITOR_CONFIG.proKeysPitchMin || pitch > MIDI_EDITOR_CONFIG.proKeysPitchMax)
+        return
 
       if (tool === 'select') {
         // Check if clicking on an already-selected proKeys note â€” start move
@@ -3316,17 +3910,22 @@ export function MidiEditor(): React.JSX.Element {
         if (selectedIds.size > 0) {
           // Use generous hit padding so short notes are easy to grab
           const hitPadTicks = Math.max(240, 480 / snapDivision)
-          const hitNote = songStore.getState().song.notes.find(
-            (n) =>
-              selectedIds.has(n.id) &&
-              n.instrument === instrument &&
-              n.difficulty === activeDifficulty &&
-              typeof n.lane === 'number' && Math.abs(n.lane - pitch) <= 1 &&
-              clickTick >= n.tick - hitPadTicks && clickTick <= n.tick + n.duration + hitPadTicks
-          )
+          const hitNote = songStore
+            .getState()
+            .song.notes.find(
+              (n) =>
+                selectedIds.has(n.id) &&
+                n.instrument === instrument &&
+                n.difficulty === activeDifficulty &&
+                typeof n.lane === 'number' &&
+                Math.abs(n.lane - pitch) <= 1 &&
+                clickTick >= n.tick - hitPadTicks &&
+                clickTick <= n.tick + n.duration + hitPadTicks
+            )
           if (hitNote) {
-            const originals = songStore.getState().song.notes
-              .filter((n) => selectedIds.has(n.id))
+            const originals = songStore
+              .getState()
+              .song.notes.filter((n) => selectedIds.has(n.id))
               .map((n) => ({ id: n.id, tick: n.tick, lane: n.lane as string | number }))
             const snapshot = songStore.getState().song
             songStore.temporal.getState().pause()
@@ -3360,13 +3959,16 @@ export function MidiEditor(): React.JSX.Element {
       if (tool === 'erase') {
         const erasedIds = new Set<string>()
         const snapTicks = 480 / snapDivision
-        const target = songStore.getState().song.notes.find(
-          (n) =>
-            n.instrument === instrument &&
-            n.difficulty === activeDifficulty &&
-            typeof n.lane === 'number' && n.lane === pitch &&
-            Math.abs(n.tick - clickTick) <= snapTicks / 2
-        )
+        const target = songStore
+          .getState()
+          .song.notes.find(
+            (n) =>
+              n.instrument === instrument &&
+              n.difficulty === activeDifficulty &&
+              typeof n.lane === 'number' &&
+              n.lane === pitch &&
+              Math.abs(n.tick - clickTick) <= snapTicks / 2
+          )
         if (target) {
           songStore.getState().deleteNote(target.id)
           erasedIds.add(target.id)
@@ -3395,8 +3997,13 @@ export function MidiEditor(): React.JSX.Element {
           if (created) {
             songStore.getState().selectStarPowerPhrase(created.id)
             gridDragRef.current = {
-              mode: 'sp-extend', startTick: tick, startX: e.clientX - rect.left,
-              noteId: created.id, instrument, rect, lanes: []
+              mode: 'sp-extend',
+              startTick: tick,
+              startX: e.clientX - rect.left,
+              noteId: created.id,
+              instrument,
+              rect,
+              lanes: []
             }
           }
           return
@@ -3410,8 +4017,13 @@ export function MidiEditor(): React.JSX.Element {
           if (created) {
             songStore.getState().selectSoloSection(created.id)
             gridDragRef.current = {
-              mode: 'solo-extend', startTick: tick, startX: e.clientX - rect.left,
-              noteId: created.id, instrument, rect, lanes: []
+              mode: 'solo-extend',
+              startTick: tick,
+              startX: e.clientX - rect.left,
+              noteId: created.id,
+              instrument,
+              rect,
+              lanes: []
             }
           }
           return
@@ -3482,11 +4094,14 @@ export function MidiEditor(): React.JSX.Element {
         // Update visual selection box
         const x1 = Math.min(drag.startX, e.clientX - drag.rect.left)
         const x2 = Math.max(drag.startX, e.clientX - drag.rect.left)
-        const totalH = drag.instrument === 'vocals'
-          ? (MIDI_EDITOR_CONFIG.vocalPitchMax - MIDI_EDITOR_CONFIG.vocalPitchMin + 1) * MIDI_EDITOR_CONFIG.vocalRowHeight
-          : drag.instrument === 'proKeys'
-          ? (MIDI_EDITOR_CONFIG.proKeysPitchMax - MIDI_EDITOR_CONFIG.proKeysPitchMin + 1) * MIDI_EDITOR_CONFIG.proKeysRowHeight
-          : drag.lanes.length * MIDI_EDITOR_CONFIG.rowHeight
+        const totalH =
+          drag.instrument === 'vocals'
+            ? (MIDI_EDITOR_CONFIG.vocalPitchMax - MIDI_EDITOR_CONFIG.vocalPitchMin + 1) *
+              MIDI_EDITOR_CONFIG.vocalRowHeight
+            : drag.instrument === 'proKeys'
+              ? (MIDI_EDITOR_CONFIG.proKeysPitchMax - MIDI_EDITOR_CONFIG.proKeysPitchMin + 1) *
+                MIDI_EDITOR_CONFIG.proKeysRowHeight
+              : drag.lanes.length * MIDI_EDITOR_CONFIG.rowHeight
         setSelectionBox({ x: x1, y: 0, w: x2 - x1, h: totalH, instrument: drag.instrument })
       } else if (drag.mode === 'erase') {
         const erased = drag.erasedIds || new Set<string>()
@@ -3506,7 +4121,8 @@ export function MidiEditor(): React.JSX.Element {
             (n) =>
               !erased.has(n.id) &&
               n.harmonyPart === state.activeHarmonyPart &&
-              typeof n.lane === 'number' && n.lane === pitch &&
+              typeof n.lane === 'number' &&
+              n.lane === pitch &&
               n.tick + n.duration >= sweepMin &&
               n.tick <= sweepMax
           )
@@ -3528,7 +4144,8 @@ export function MidiEditor(): React.JSX.Element {
                 !erased.has(n.id) &&
                 n.instrument === drag.instrument &&
                 n.difficulty === state.activeDifficulty &&
-                typeof n.lane === 'number' && n.lane === pitch &&
+                typeof n.lane === 'number' &&
+                n.lane === pitch &&
                 n.tick + n.duration >= sweepMin &&
                 n.tick <= sweepMax
             )
@@ -3578,15 +4195,23 @@ export function MidiEditor(): React.JSX.Element {
           for (const orig of drag.moveOriginals) {
             const newTick = Math.max(0, orig.tick + tickDelta)
             const origPitch = typeof orig.lane === 'number' ? orig.lane : 60
-            const newPitch = Math.max(MIDI_EDITOR_CONFIG.vocalPitchMin,
-              Math.min(MIDI_EDITOR_CONFIG.vocalPitchMax, origPitch + pitchDelta))
-            state.updateVocalNote(orig.id, { tick: newTick, lane: newPitch as unknown as VocalNote['lane'] })
+            const newPitch = Math.max(
+              MIDI_EDITOR_CONFIG.vocalPitchMin,
+              Math.min(MIDI_EDITOR_CONFIG.vocalPitchMax, origPitch + pitchDelta)
+            )
+            state.updateVocalNote(orig.id, {
+              tick: newTick,
+              lane: newPitch as unknown as VocalNote['lane']
+            })
           }
           // Preview the pitch of the first moved note
           if (drag.moveOriginals.length > 0) {
-            const origPitch = typeof drag.moveOriginals[0].lane === 'number' ? drag.moveOriginals[0].lane : 60
-            const newPitch = Math.max(MIDI_EDITOR_CONFIG.vocalPitchMin,
-              Math.min(MIDI_EDITOR_CONFIG.vocalPitchMax, origPitch + pitchDelta))
+            const origPitch =
+              typeof drag.moveOriginals[0].lane === 'number' ? drag.moveOriginals[0].lane : 60
+            const newPitch = Math.max(
+              MIDI_EDITOR_CONFIG.vocalPitchMin,
+              Math.min(MIDI_EDITOR_CONFIG.vocalPitchMax, origPitch + pitchDelta)
+            )
             playPitchPreview(newPitch)
           }
         } else if (drag.instrument === 'proKeys') {
@@ -3597,15 +4222,20 @@ export function MidiEditor(): React.JSX.Element {
           for (const orig of drag.moveOriginals) {
             const newTick = Math.max(0, orig.tick + tickDelta)
             const origPitch = typeof orig.lane === 'number' ? orig.lane : 48
-            const newPitch = Math.max(MIDI_EDITOR_CONFIG.proKeysPitchMin,
-              Math.min(MIDI_EDITOR_CONFIG.proKeysPitchMax, origPitch + pitchDelta))
+            const newPitch = Math.max(
+              MIDI_EDITOR_CONFIG.proKeysPitchMin,
+              Math.min(MIDI_EDITOR_CONFIG.proKeysPitchMax, origPitch + pitchDelta)
+            )
             state.updateNote(orig.id, { tick: newTick, lane: newPitch as unknown as Note['lane'] })
           }
           // Preview the pitch of the first moved note
           if (drag.moveOriginals.length > 0) {
-            const origPitch = typeof drag.moveOriginals[0].lane === 'number' ? drag.moveOriginals[0].lane : 48
-            const newPitch = Math.max(MIDI_EDITOR_CONFIG.proKeysPitchMin,
-              Math.min(MIDI_EDITOR_CONFIG.proKeysPitchMax, origPitch + pitchDelta))
+            const origPitch =
+              typeof drag.moveOriginals[0].lane === 'number' ? drag.moveOriginals[0].lane : 48
+            const newPitch = Math.max(
+              MIDI_EDITOR_CONFIG.proKeysPitchMin,
+              Math.min(MIDI_EDITOR_CONFIG.proKeysPitchMax, origPitch + pitchDelta)
+            )
             playPitchPreview(newPitch)
           }
         } else {
@@ -3617,7 +4247,10 @@ export function MidiEditor(): React.JSX.Element {
             const newTick = Math.max(0, orig.tick + tickDelta)
             const origLaneIdx = drag.lanes.indexOf(String(orig.lane))
             if (origLaneIdx >= 0) {
-              const newLaneIdx = Math.max(0, Math.min(drag.lanes.length - 1, origLaneIdx + laneDelta))
+              const newLaneIdx = Math.max(
+                0,
+                Math.min(drag.lanes.length - 1, origLaneIdx + laneDelta)
+              )
               const targetLane = drag.lanes[newLaneIdx]
               if (drag.instrument === 'drums') {
                 if (targetLane === DOUBLE_KICK_EDITOR_LANE) {
@@ -3659,7 +4292,9 @@ export function MidiEditor(): React.JSX.Element {
         // If sustain drag gave 0 duration, keep as strum for lane-based instruments; default for vocals
         if (gridDragRef.current.mode === 'sustain' && gridDragRef.current.noteId && songStore) {
           if (gridDragRef.current.instrument === 'vocals') {
-            const note = (songStore.getState().song.vocalNotes || []).find((n) => n.id === gridDragRef.current!.noteId)
+            const note = (songStore.getState().song.vocalNotes || []).find(
+              (n) => n.id === gridDragRef.current!.noteId
+            )
             if (note && note.duration === 0) {
               songStore.getState().updateVocalNote(note.id, { duration: 480 / snapDivision })
             }
@@ -3667,7 +4302,11 @@ export function MidiEditor(): React.JSX.Element {
           // For guitar/bass/keys: duration 0 = strum, which is the correct default
         }
         // Commit move as a single undo entry
-        if (gridDragRef.current.mode === 'move' && gridDragRef.current.preMoveSnapshot && songStore) {
+        if (
+          gridDragRef.current.mode === 'move' &&
+          gridDragRef.current.preMoveSnapshot &&
+          songStore
+        ) {
           const finalSong = songStore.getState().song
           // Restore pre-move state (still paused, not tracked)
           songStore.setState({ song: gridDragRef.current.preMoveSnapshot as typeof finalSong })
@@ -3756,7 +4395,9 @@ export function MidiEditor(): React.JSX.Element {
           >
             <option value="__mix__">Mix</option>
             {waveformSources.map((source) => (
-              <option key={source.filePath} value={source.filePath}>{source.filename}</option>
+              <option key={source.filePath} value={source.filePath}>
+                {source.filename}
+              </option>
             ))}
           </select>
         </div>
@@ -3764,17 +4405,28 @@ export function MidiEditor(): React.JSX.Element {
         {(() => {
           if (!songStore || selectedNoteIds.length === 0) return null
           const selNotes = notes.filter((n) => selectedNoteIds.includes(n.id))
-          const proNotes = selNotes.filter((n) => n.instrument === 'proGuitar' || n.instrument === 'proBass')
+          const proNotes = selNotes.filter(
+            (n) => n.instrument === 'proGuitar' || n.instrument === 'proBass'
+          )
           if (proNotes.length === 0) return null
           const frets = proNotes.map((n) => n.fret ?? 0)
           const allSame = frets.every((f) => f === frets[0])
           return (
-            <div className="midi-fret-editor" style={{
-              display: 'flex', alignItems: 'center', gap: 4,
-              marginLeft: 8, padding: '0 6px',
-              border: '1px solid rgba(249,115,22,0.4)', borderRadius: 4,
-              background: 'rgba(249,115,22,0.08)', fontSize: 11, color: '#F97316'
-            }}>
+            <div
+              className="midi-fret-editor"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                marginLeft: 8,
+                padding: '0 6px',
+                border: '1px solid rgba(249,115,22,0.4)',
+                borderRadius: 4,
+                background: 'rgba(249,115,22,0.08)',
+                fontSize: 11,
+                color: '#F97316'
+              }}
+            >
               <span style={{ fontWeight: 600 }}>Fret:</span>
               <input
                 type="number"
@@ -3792,16 +4444,25 @@ export function MidiEditor(): React.JSX.Element {
                 }}
                 onKeyDown={(e) => e.stopPropagation()}
                 style={{
-                  width: 38, height: 20, fontSize: 12, fontWeight: 700,
-                  color: '#fff', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(249,115,22,0.5)',
-                  borderRadius: 3, textAlign: 'center', outline: 'none'
+                  width: 38,
+                  height: 20,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: '#fff',
+                  background: 'rgba(0,0,0,0.3)',
+                  border: '1px solid rgba(249,115,22,0.5)',
+                  borderRadius: 3,
+                  textAlign: 'center',
+                  outline: 'none'
                 }}
               />
               <span style={{ fontSize: 9, opacity: 0.6 }}>({proNotes.length})</span>
             </div>
           )
         })()}
-        <div className="midi-scroll-hint">Scroll: vertical | Shift+Scroll: horizontal | Ctrl+Scroll: zoom</div>
+        <div className="midi-scroll-hint">
+          Scroll: vertical | Shift+Scroll: horizontal | Ctrl+Scroll: zoom
+        </div>
         <MidiShortcutHelpButton />
       </div>
 
@@ -3830,7 +4491,10 @@ export function MidiEditor(): React.JSX.Element {
 
       {/* Editor area with stacked instruments */}
       <div className="midi-editor-area" onWheel={handleScroll}>
-        <div className="midi-instruments-container" style={{ transform: `translateY(-${scrollY}px)` }}>
+        <div
+          className="midi-instruments-container"
+          style={{ transform: `translateY(-${scrollY}px)` }}
+        >
           {displayedInstruments.map((instrument) => {
             const lanes = getLanesForInstrument(instrument)
             const isCollapsed = collapsedInstruments.has(instrument)
@@ -3842,7 +4506,9 @@ export function MidiEditor(): React.JSX.Element {
             const noteAreaHeight = lanes.length * laneRowHeight
             const sectionHeight = isCollapsed
               ? MIDI_EDITOR_CONFIG.instrumentHeaderHeight
-              : MIDI_EDITOR_CONFIG.instrumentHeaderHeight + MIDI_EDITOR_CONFIG.spRowHeight * (isVocal ? 2 : 3) + noteAreaHeight
+              : MIDI_EDITOR_CONFIG.instrumentHeaderHeight +
+                MIDI_EDITOR_CONFIG.spRowHeight * (isVocal ? 2 : 3) +
+                noteAreaHeight
             const instrumentNotes = notesByInstrument.get(instrument) || []
 
             const toggleCollapse = (): void => {
@@ -3855,7 +4521,11 @@ export function MidiEditor(): React.JSX.Element {
             }
 
             return (
-              <div key={instrument} className="midi-instrument-section" style={{ height: sectionHeight, flexDirection: 'column' }}>
+              <div
+                key={instrument}
+                className="midi-instrument-section"
+                style={{ height: sectionHeight, flexDirection: 'column' }}
+              >
                 {/* Instrument name header - full width */}
                 <div
                   className="midi-instrument-label"
@@ -3868,216 +4538,316 @@ export function MidiEditor(): React.JSX.Element {
                   onClick={toggleCollapse}
                 >
                   <span style={{ marginRight: 6, fontSize: 9 }}>{isCollapsed ? '>' : 'v'}</span>
-                  {({ proKeys: 'Pro Keys', proGuitar: 'Pro Guitar', proBass: 'Pro Bass' } as Record<string, string>)[instrument] || instrument.charAt(0).toUpperCase() + instrument.slice(1)}
+                  {(
+                    { proKeys: 'Pro Keys', proGuitar: 'Pro Guitar', proBass: 'Pro Bass' } as Record<
+                      string,
+                      string
+                    >
+                  )[instrument] || instrument.charAt(0).toUpperCase() + instrument.slice(1)}
                 </div>
 
                 {!isCollapsed && (
-                <>
-                  {/* Star Power row: label + lane */}
-                  <div style={{ display: 'flex', flexDirection: 'row', height: MIDI_EDITOR_CONFIG.spRowHeight }}>
+                  <>
+                    {/* Star Power row: label + lane */}
                     <div
-                      className="midi-lane-label"
                       style={{
-                        width: MIDI_EDITOR_CONFIG.headerWidth,
-                        height: MIDI_EDITOR_CONFIG.spRowHeight,
-                        backgroundColor: 'rgba(0, 204, 255, 0.1)',
-                        borderRight: '1px solid var(--border-color)',
-                        flexShrink: 0
+                        display: 'flex',
+                        flexDirection: 'row',
+                        height: MIDI_EDITOR_CONFIG.spRowHeight
                       }}
                     >
-                      <span className="midi-lane-color" style={{ backgroundColor: SP_COLOR }} />
-                      <span className="midi-lane-name">Star Power</span>
-                    </div>
-                    <StarPowerLane
-                      phrases={starPowerPhrases}
-                      instrument={instrument}
-                      scrollX={effectiveScrollX}
-                      zoomLevel={zoomLevel}
-                      width={Math.max(dimensions.width, 100)}
-                      selectedSpId={selectedSpId}
-                      songStore={songStore}
-                      editTool={editTool}
-                      snapDivision={snapDivision}
-                    />
-                  </div>
-
-                  {/* Solo section row: label + lane */}
-                  <div style={{ display: 'flex', flexDirection: 'row', height: MIDI_EDITOR_CONFIG.spRowHeight }}>
-                    <div
-                      className="midi-lane-label"
-                      style={{
-                        width: MIDI_EDITOR_CONFIG.headerWidth,
-                        height: MIDI_EDITOR_CONFIG.spRowHeight,
-                        backgroundColor: 'rgba(255, 215, 0, 0.1)',
-                        borderRight: '1px solid var(--border-color)',
-                        flexShrink: 0
-                      }}
-                    >
-                      <span className="midi-lane-color" style={{ backgroundColor: SOLO_COLOR }} />
-                      <span className="midi-lane-name">Solo</span>
-                    </div>
-                    <SoloLane
-                      sections={soloSections}
-                      instrument={instrument}
-                      scrollX={effectiveScrollX}
-                      zoomLevel={zoomLevel}
-                      width={Math.max(dimensions.width, 100)}
-                      selectedSoloId={selectedSoloId}
-                      songStore={songStore}
-                      editTool={editTool}
-                      snapDivision={snapDivision}
-                    />
-                  </div>
-
-                  {/* Lane markers row (non-vocal instruments only) */}
-                  {!isVocal && (
-                    <div style={{ display: 'flex', flexDirection: 'row', height: MIDI_EDITOR_CONFIG.spRowHeight }}>
                       <div
                         className="midi-lane-label"
                         style={{
                           width: MIDI_EDITOR_CONFIG.headerWidth,
                           height: MIDI_EDITOR_CONFIG.spRowHeight,
-                          backgroundColor: 'rgba(255,140,0,0.08)',
+                          backgroundColor: 'rgba(0, 204, 255, 0.1)',
                           borderRight: '1px solid var(--border-color)',
                           flexShrink: 0
                         }}
                       >
-                        <span className="midi-lane-color" style={{ backgroundColor: 'rgba(255,140,0,0.7)' }} />
-                        <span className="midi-lane-name">Lane Markers</span>
+                        <span className="midi-lane-color" style={{ backgroundColor: SP_COLOR }} />
+                        <span className="midi-lane-name">Star Power</span>
                       </div>
-                      <LaneMarkerLane
-                        markers={laneMarkers}
+                      <StarPowerLane
+                        phrases={starPowerPhrases}
                         instrument={instrument}
                         scrollX={effectiveScrollX}
                         zoomLevel={zoomLevel}
+                        width={Math.max(dimensions.width, 100)}
+                        selectedSpId={selectedSpId}
                         songStore={songStore}
                         editTool={editTool}
                         snapDivision={snapDivision}
                       />
                     </div>
-                  )}
 
-                  {/* Note lanes row: lane headers + grid */}
-                  <div style={{ display: 'flex', flexDirection: 'row', height: noteAreaHeight }}>
-                    <div className="midi-lane-header" style={{ width: MIDI_EDITOR_CONFIG.headerWidth, flexShrink: 0 }} onWheel={handleHeaderScroll}>
-                      {isVocal ? (
-                        // Vocal pitch header - compact with octave labels
-                        <div style={{ position: 'relative', height: noteAreaHeight }}>
-                          {(lanes as string[]).map((lane) => {
-                            const isOctave = lane.includes('C') && !lane.includes('#')
-                            return (
-                              <div
-                                key={lane}
-                                className="midi-lane-label"
-                                style={{
-                                  height: laneRowHeight,
-                                  fontSize: 7,
-                                  opacity: isOctave ? 1 : 0.4,
-                                  backgroundColor: isOctave ? 'rgba(232, 121, 249, 0.1)' : undefined
-                                }}
-                              >
-                                {isOctave && <span className="midi-lane-name" style={{ fontSize: 8 }}>{lane}</span>}
-                              </div>
-                            )
-                          })}
-                          {/* Harmony part selector */}
-                          <div style={{
-                            position: 'absolute', bottom: 4, left: 4, right: 4,
-                            display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center',
-                            padding: '3px 2px',
-                            backgroundColor: 'rgba(0,0,0,0.5)',
-                            borderRadius: 4
-                          }}>
-                            {([0, 1, 2, 3] as HarmonyPart[]).map((part) => {
-                              const partLabels = ['Main', 'H1', 'H2', 'H3']
-                              const partColors = ['#E879F9', '#60A5FA', '#34D399', '#FBBF24']
-                              const hasNotes = vocalNotes.some((n) => n.harmonyPart === part)
-                              if (!hasNotes && part !== 0 && part !== activeHarmonyPart) return null
+                    {/* Solo section row: label + lane */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        height: MIDI_EDITOR_CONFIG.spRowHeight
+                      }}
+                    >
+                      <div
+                        className="midi-lane-label"
+                        style={{
+                          width: MIDI_EDITOR_CONFIG.headerWidth,
+                          height: MIDI_EDITOR_CONFIG.spRowHeight,
+                          backgroundColor: 'rgba(255, 215, 0, 0.1)',
+                          borderRight: '1px solid var(--border-color)',
+                          flexShrink: 0
+                        }}
+                      >
+                        <span className="midi-lane-color" style={{ backgroundColor: SOLO_COLOR }} />
+                        <span className="midi-lane-name">Solo</span>
+                      </div>
+                      <SoloLane
+                        sections={soloSections}
+                        instrument={instrument}
+                        scrollX={effectiveScrollX}
+                        zoomLevel={zoomLevel}
+                        width={Math.max(dimensions.width, 100)}
+                        selectedSoloId={selectedSoloId}
+                        songStore={songStore}
+                        editTool={editTool}
+                        snapDivision={snapDivision}
+                      />
+                    </div>
+
+                    {/* Lane markers row (non-vocal instruments only) */}
+                    {!isVocal && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'row',
+                          height: MIDI_EDITOR_CONFIG.spRowHeight
+                        }}
+                      >
+                        <div
+                          className="midi-lane-label"
+                          style={{
+                            width: MIDI_EDITOR_CONFIG.headerWidth,
+                            height: MIDI_EDITOR_CONFIG.spRowHeight,
+                            backgroundColor: 'rgba(255,140,0,0.08)',
+                            borderRight: '1px solid var(--border-color)',
+                            flexShrink: 0
+                          }}
+                        >
+                          <span
+                            className="midi-lane-color"
+                            style={{ backgroundColor: 'rgba(255,140,0,0.7)' }}
+                          />
+                          <span className="midi-lane-name">Lane Markers</span>
+                        </div>
+                        <LaneMarkerLane
+                          markers={laneMarkers}
+                          instrument={instrument}
+                          scrollX={effectiveScrollX}
+                          zoomLevel={zoomLevel}
+                          songStore={songStore}
+                          editTool={editTool}
+                          snapDivision={snapDivision}
+                        />
+                      </div>
+                    )}
+
+                    {/* Note lanes row: lane headers + grid */}
+                    <div style={{ display: 'flex', flexDirection: 'row', height: noteAreaHeight }}>
+                      <div
+                        className="midi-lane-header"
+                        style={{ width: MIDI_EDITOR_CONFIG.headerWidth, flexShrink: 0 }}
+                        onWheel={handleHeaderScroll}
+                      >
+                        {isVocal ? (
+                          // Vocal pitch header - compact with octave labels
+                          <div style={{ position: 'relative', height: noteAreaHeight }}>
+                            {(lanes as string[]).map((lane) => {
+                              const isOctave = lane.includes('C') && !lane.includes('#')
                               return (
-                                <button
-                                  key={part}
+                                <div
+                                  key={lane}
+                                  className="midi-lane-label"
                                   style={{
-                                    fontSize: 10, padding: '2px 6px', border: 'none', borderRadius: 3, cursor: 'pointer',
-                                    fontWeight: activeHarmonyPart === part ? 700 : 500,
-                                    backgroundColor: activeHarmonyPart === part ? partColors[part] : 'rgba(255,255,255,0.15)',
-                                    color: activeHarmonyPart === part ? '#000' : '#ccc',
-                                    boxShadow: activeHarmonyPart === part ? `0 0 6px ${partColors[part]}80` : 'none'
+                                    height: laneRowHeight,
+                                    fontSize: 7,
+                                    opacity: isOctave ? 1 : 0.4,
+                                    backgroundColor: isOctave
+                                      ? 'rgba(232, 121, 249, 0.1)'
+                                      : undefined
                                   }}
-                                  onClick={() => songStore?.getState().setActiveHarmonyPart(part)}
                                 >
-                                  {partLabels[part]}
-                                </button>
+                                  {isOctave && (
+                                    <span className="midi-lane-name" style={{ fontSize: 8 }}>
+                                      {lane}
+                                    </span>
+                                  )}
+                                </div>
                               )
                             })}
-                            {/* Hear charted pitches during playback (issue #10) */}
-                            <VocalPitchPlaybackToggle />
-                            {/* Add harmony part button */}
-                            {(() => {
-                              const usedParts = new Set(vocalNotes.map((n) => n.harmonyPart))
-                              const nextPart = ([1, 2, 3] as HarmonyPart[]).find((p) => !usedParts.has(p))
-                              if (nextPart === undefined) return null
-                              return (
+                            {/* Harmony part selector */}
+                            <div
+                              style={{
+                                position: 'absolute',
+                                bottom: 4,
+                                left: 4,
+                                right: 4,
+                                display: 'flex',
+                                gap: 3,
+                                flexWrap: 'wrap',
+                                alignItems: 'center',
+                                padding: '3px 2px',
+                                backgroundColor: 'rgba(0,0,0,0.5)',
+                                borderRadius: 4
+                              }}
+                            >
+                              {([0, 1, 2, 3] as HarmonyPart[]).map((part) => {
+                                const partLabels = ['Main', 'H1', 'H2', 'H3']
+                                const partColors = ['#E879F9', '#60A5FA', '#34D399', '#FBBF24']
+                                const hasNotes = vocalNotes.some((n) => n.harmonyPart === part)
+                                if (!hasNotes && part !== 0 && part !== activeHarmonyPart)
+                                  return null
+                                return (
+                                  <button
+                                    key={part}
+                                    style={{
+                                      fontSize: 10,
+                                      padding: '2px 6px',
+                                      border: 'none',
+                                      borderRadius: 3,
+                                      cursor: 'pointer',
+                                      fontWeight: activeHarmonyPart === part ? 700 : 500,
+                                      backgroundColor:
+                                        activeHarmonyPart === part
+                                          ? partColors[part]
+                                          : 'rgba(255,255,255,0.15)',
+                                      color: activeHarmonyPart === part ? '#000' : '#ccc',
+                                      boxShadow:
+                                        activeHarmonyPart === part
+                                          ? `0 0 6px ${partColors[part]}80`
+                                          : 'none'
+                                    }}
+                                    onClick={() => songStore?.getState().setActiveHarmonyPart(part)}
+                                  >
+                                    {partLabels[part]}
+                                  </button>
+                                )
+                              })}
+                              {/* Hear charted pitches during playback (issue #10) */}
+                              <VocalPitchPlaybackToggle />
+                              {/* Add harmony part button */}
+                              {(() => {
+                                const usedParts = new Set(vocalNotes.map((n) => n.harmonyPart))
+                                const nextPart = ([1, 2, 3] as HarmonyPart[]).find(
+                                  (p) => !usedParts.has(p)
+                                )
+                                if (nextPart === undefined) return null
+                                return (
+                                  <button
+                                    title={`Add Harmony ${nextPart}`}
+                                    style={{
+                                      fontSize: 10,
+                                      padding: '1px 5px',
+                                      border: '1px dashed rgba(255,255,255,0.3)',
+                                      borderRadius: 3,
+                                      cursor: 'pointer',
+                                      backgroundColor: 'transparent',
+                                      color: '#aaa',
+                                      lineHeight: 1
+                                    }}
+                                    onClick={() =>
+                                      songStore?.getState().setActiveHarmonyPart(nextPart)
+                                    }
+                                  >
+                                    +
+                                  </button>
+                                )
+                              })()}
+                              {/* Remove current harmony part button (not Main) */}
+                              {activeHarmonyPart !== 0 && (
                                 <button
-                                  title={`Add Harmony ${nextPart}`}
+                                  title={`Remove all notes from ${['Main', 'H1', 'H2', 'H3'][activeHarmonyPart]}`}
                                   style={{
-                                    fontSize: 10, padding: '1px 5px', border: '1px dashed rgba(255,255,255,0.3)',
-                                    borderRadius: 3, cursor: 'pointer', backgroundColor: 'transparent', color: '#aaa',
-                                    lineHeight: 1
+                                    fontSize: 10,
+                                    padding: '1px 5px',
+                                    border: '1px dashed rgba(255,100,100,0.4)',
+                                    borderRadius: 3,
+                                    cursor: 'pointer',
+                                    backgroundColor: 'transparent',
+                                    color: '#f88',
+                                    lineHeight: 1,
+                                    marginLeft: 'auto'
                                   }}
-                                  onClick={() => songStore?.getState().setActiveHarmonyPart(nextPart)}
+                                  onClick={() => {
+                                    if (
+                                      confirm(
+                                        `Delete all notes and phrases for ${['Main', 'H1', 'H2', 'H3'][activeHarmonyPart]}?`
+                                      )
+                                    ) {
+                                      songStore
+                                        ?.getState()
+                                        .deleteHarmonyPartNotes(activeHarmonyPart)
+                                    }
+                                  }}
                                 >
-                                  +
+                                  Del
                                 </button>
-                              )
-                            })()}
-                            {/* Remove current harmony part button (not Main) */}
-                            {activeHarmonyPart !== 0 && (
-                              <button
-                                title={`Remove all notes from ${['Main', 'H1', 'H2', 'H3'][activeHarmonyPart]}`}
-                                style={{
-                                  fontSize: 10, padding: '1px 5px', border: '1px dashed rgba(255,100,100,0.4)',
-                                  borderRadius: 3, cursor: 'pointer', backgroundColor: 'transparent', color: '#f88',
-                                  lineHeight: 1, marginLeft: 'auto'
-                                }}
-                                onClick={() => {
-                                  if (confirm(`Delete all notes and phrases for ${['Main', 'H1', 'H2', 'H3'][activeHarmonyPart]}?`)) {
-                                    songStore?.getState().deleteHarmonyPartNotes(activeHarmonyPart)
-                                  }
-                                }}
-                              >
-                                Del
-                              </button>
-                            )}
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ) : isProKeys ? (
-                        // Pro Keys pitch header - compact with octave labels (like vocals but purple)
-                        <div style={{ height: noteAreaHeight }}>
-                          {(lanes as string[]).map((lane) => {
-                            const isOctave = lane.includes('C') && !lane.includes('#')
-                            const isBlackKey = lane.includes('#')
+                        ) : isProKeys ? (
+                          // Pro Keys pitch header - compact with octave labels (like vocals but purple)
+                          <div style={{ height: noteAreaHeight }}>
+                            {(lanes as string[]).map((lane) => {
+                              const isOctave = lane.includes('C') && !lane.includes('#')
+                              const isBlackKey = lane.includes('#')
+                              return (
+                                <div
+                                  key={lane}
+                                  className="midi-lane-label"
+                                  style={{
+                                    height: laneRowHeight,
+                                    fontSize: 8,
+                                    opacity: isOctave ? 1 : isBlackKey ? 0.3 : 0.5,
+                                    backgroundColor: isOctave
+                                      ? 'rgba(167, 139, 250, 0.1)'
+                                      : isBlackKey
+                                        ? 'rgba(0,0,0,0.15)'
+                                        : undefined
+                                  }}
+                                >
+                                  {(isOctave || !isBlackKey) && (
+                                    <span className="midi-lane-name" style={{ fontSize: 8 }}>
+                                      {lane}
+                                    </span>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        ) : isProGuitar ? (
+                          // Pro Guitar/Bass string headers
+                          (lanes as string[]).map((lane) => {
+                            const stringNames = ['e', 'B', 'G', 'D', 'A', 'E']
+                            const idx = parseInt(lane) - 1
                             return (
                               <div
                                 key={lane}
                                 className="midi-lane-label"
-                                style={{
-                                  height: laneRowHeight,
-                                  fontSize: 8,
-                                  opacity: isOctave ? 1 : isBlackKey ? 0.3 : 0.5,
-                                  backgroundColor: isOctave ? 'rgba(167, 139, 250, 0.1)' : isBlackKey ? 'rgba(0,0,0,0.15)' : undefined
-                                }}
+                                style={{ height: laneRowHeight }}
                               >
-                                {(isOctave || !isBlackKey) && <span className="midi-lane-name" style={{ fontSize: 8 }}>{lane}</span>}
+                                <span
+                                  className="midi-lane-color"
+                                  style={{ backgroundColor: MIDI_EDITOR_CONFIG.laneColors[lane] }}
+                                />
+                                <span className="midi-lane-name">{stringNames[idx] || lane}</span>
                               </div>
                             )
-                          })}
-                        </div>
-                      ) : isProGuitar ? (
-                        // Pro Guitar/Bass string headers
-                        (lanes as string[]).map((lane) => {
-                          const stringNames = ['e', 'B', 'G', 'D', 'A', 'E']
-                          const idx = parseInt(lane) - 1
-                          return (
+                          })
+                        ) : (
+                          // Standard lane headers
+                          (lanes as string[]).map((lane) => (
                             <div
                               key={lane}
                               className="midi-lane-label"
@@ -4087,106 +4857,104 @@ export function MidiEditor(): React.JSX.Element {
                                 className="midi-lane-color"
                                 style={{ backgroundColor: MIDI_EDITOR_CONFIG.laneColors[lane] }}
                               />
-                              <span className="midi-lane-name">{stringNames[idx] || lane}</span>
+                              <span className="midi-lane-name">{formatLaneLabel(lane)}</span>
                             </div>
-                          )
-                        })
-                      ) : (
-                        // Standard lane headers
-                        (lanes as string[]).map((lane) => (
-                          <div
-                            key={lane}
-                            className="midi-lane-label"
-                            style={{ height: laneRowHeight }}
-                          >
-                            <span
-                              className="midi-lane-color"
-                              style={{ backgroundColor: MIDI_EDITOR_CONFIG.laneColors[lane] }}
-                            />
-                            <span className="midi-lane-name">{formatLaneLabel(lane)}</span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                    <div
-                      className="midi-grid-area"
-                      style={{ minWidth: dimensions.width, height: noteAreaHeight, cursor: gridCursor }}
-                      onMouseDown={isPitchBased ? undefined : (e) => handleGridMouseDown(e, instrument, lanes as string[])}
-                      onWheel={handleNotesScroll}
-                    >
-                      <Grid
-                        width={Math.max(dimensions.width, 100)}
-                        height={noteAreaHeight}
-                        lanes={lanes as string[]}
-                        rowHeight={laneRowHeight}
-                        scrollX={effectiveScrollX}
-                        zoomLevel={zoomLevel}
-                        ticksPerBeat={480}
-                        snapDivision={snapDivision}
-                        currentTick={currentTick}
-                        tempoEvents={tempoEvents}
-                      />
-                      {isVocal ? (
-                        <VocalNotes
-                          vocalNotes={vocalNotes}
-                          vocalPhrases={vocalPhrases}
-                          harmonyPart={activeHarmonyPart}
-                          scrollX={effectiveScrollX}
-                          zoomLevel={zoomLevel}
+                          ))
+                        )}
+                      </div>
+                      <div
+                        className="midi-grid-area"
+                        style={{
+                          minWidth: dimensions.width,
+                          height: noteAreaHeight,
+                          cursor: gridCursor
+                        }}
+                        onMouseDown={
+                          isPitchBased
+                            ? undefined
+                            : (e) => handleGridMouseDown(e, instrument, lanes as string[])
+                        }
+                        onWheel={handleNotesScroll}
+                      >
+                        <Grid
                           width={Math.max(dimensions.width, 100)}
                           height={noteAreaHeight}
-                          selectedNoteIds={selectedVocalNoteIds}
-                          onNoteClick={handleNoteClick}
-                          onLyricChange={(noteId, lyric) => songStore?.getState().updateVocalNote(noteId, { lyric })}
-                          onGridMouseDown={handleVocalGridMouseDown}
-                          starPowerPhrases={starPowerPhrases}
-                        />
-                      ) : isProKeys ? (
-                        <ProKeysNotes
-                          notes={instrumentNotes}
-                          scrollX={effectiveScrollX}
-                          zoomLevel={zoomLevel}
-                          width={Math.max(dimensions.width, 100)}
-                          height={noteAreaHeight}
-                          selectedNoteIds={selectedNoteIds}
-                          onNoteClick={handleNoteClick}
-                          starPowerPhrases={starPowerPhrases}
-                          onGridMouseDown={(e) => handleProKeysGridMouseDown(e, instrument)}
-                          sustainThreshold={sustainThreshold}
-                        />
-                      ) : (
-                        <Notes
-                          notes={instrumentNotes}
                           lanes={lanes as string[]}
                           rowHeight={laneRowHeight}
                           scrollX={effectiveScrollX}
                           zoomLevel={zoomLevel}
-                          width={Math.max(dimensions.width, 100)}
-                          height={noteAreaHeight}
-                          selectedNoteIds={selectedNoteIds}
-                          onNoteClick={handleNoteClick}
-                          onNoteMove={handleNoteMove}
-                          starPowerPhrases={starPowerPhrases}
-                          instrument={instrument}
-                          onFretChange={(noteId, fret) => songStore?.getState().updateNote(noteId, { fret })}
-                          onSustainResize={(noteId, e) => handleSustainResize(noteId, e, instrument, lanes as string[])}
-                          sustainThreshold={sustainThreshold}
+                          ticksPerBeat={480}
+                          snapDivision={snapDivision}
+                          currentTick={currentTick}
+                          tempoEvents={tempoEvents}
                         />
-                      )}
-                      {selectionBox && selectionBox.instrument === instrument && (
-                        <div
-                          className="midi-selection-box"
-                          style={{
-                            left: selectionBox.x,
-                            top: selectionBox.y,
-                            width: selectionBox.w,
-                            height: selectionBox.h
-                          }}
-                        />
-                      )}
+                        {isVocal ? (
+                          <VocalNotes
+                            vocalNotes={vocalNotes}
+                            vocalPhrases={vocalPhrases}
+                            harmonyPart={activeHarmonyPart}
+                            scrollX={effectiveScrollX}
+                            zoomLevel={zoomLevel}
+                            width={Math.max(dimensions.width, 100)}
+                            height={noteAreaHeight}
+                            selectedNoteIds={selectedVocalNoteIds}
+                            onNoteClick={handleNoteClick}
+                            onLyricChange={(noteId, lyric) =>
+                              songStore?.getState().updateVocalNote(noteId, { lyric })
+                            }
+                            onGridMouseDown={handleVocalGridMouseDown}
+                            starPowerPhrases={starPowerPhrases}
+                          />
+                        ) : isProKeys ? (
+                          <ProKeysNotes
+                            notes={instrumentNotes}
+                            scrollX={effectiveScrollX}
+                            zoomLevel={zoomLevel}
+                            width={Math.max(dimensions.width, 100)}
+                            height={noteAreaHeight}
+                            selectedNoteIds={selectedNoteIds}
+                            onNoteClick={handleNoteClick}
+                            starPowerPhrases={starPowerPhrases}
+                            onGridMouseDown={(e) => handleProKeysGridMouseDown(e, instrument)}
+                            sustainThreshold={sustainThreshold}
+                          />
+                        ) : (
+                          <Notes
+                            notes={instrumentNotes}
+                            lanes={lanes as string[]}
+                            rowHeight={laneRowHeight}
+                            scrollX={effectiveScrollX}
+                            zoomLevel={zoomLevel}
+                            width={Math.max(dimensions.width, 100)}
+                            height={noteAreaHeight}
+                            selectedNoteIds={selectedNoteIds}
+                            onNoteClick={handleNoteClick}
+                            onNoteMove={handleNoteMove}
+                            starPowerPhrases={starPowerPhrases}
+                            instrument={instrument}
+                            onFretChange={(noteId, fret) =>
+                              songStore?.getState().updateNote(noteId, { fret })
+                            }
+                            onSustainResize={(noteId, e) =>
+                              handleSustainResize(noteId, e, instrument, lanes as string[])
+                            }
+                            sustainThreshold={sustainThreshold}
+                          />
+                        )}
+                        {selectionBox && selectionBox.instrument === instrument && (
+                          <div
+                            className="midi-selection-box"
+                            style={{
+                              left: selectionBox.x,
+                              top: selectionBox.y,
+                              width: selectionBox.w,
+                              height: selectionBox.h
+                            }}
+                          />
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </>
+                  </>
                 )}
               </div>
             )

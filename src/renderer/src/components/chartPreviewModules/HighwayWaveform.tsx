@@ -106,7 +106,13 @@ export function HighwayWaveform({
       rotation={[-Math.PI / 2, 0, 0]}
     >
       <planeGeometry args={[TRACK_WIDTH, HIGHWAY_LENGTH]} />
-      <meshBasicMaterial map={texture} transparent opacity={0.4} color="#4DD0E1" depthWrite={false} />
+      <meshBasicMaterial
+        map={texture}
+        transparent
+        opacity={0.4}
+        color="#4DD0E1"
+        depthWrite={false}
+      />
     </mesh>
   )
 }

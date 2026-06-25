@@ -6,15 +6,15 @@ A DAW-style mixer for the loaded song's audio stems. Open it from the toolbar (m
 
 OCTAVE auto-loads every audio file it finds in the song folder as a separate stem. Common conventions:
 
-| Filename | Stem |
-|----------|------|
-| `song.ogg` / `song.opus` | Backing track (everything not in another stem) |
-| `drums.ogg`, `drums_1.ogg`, `drums_2.ogg`, `drums_3.ogg`, `drums_4.ogg` | Drum stems (split kit or single mix) |
-| `bass.ogg` | Bass guitar |
-| `guitar.ogg` | Lead / rhythm guitar |
-| `keys.ogg` | Keys / piano |
-| `vocals.ogg`, `vocals_1.ogg`, `vocals_2.ogg` | Lead vocals + harmonies |
-| `crowd.ogg` | Crowd noise |
+| Filename                                                                | Stem                                           |
+| ----------------------------------------------------------------------- | ---------------------------------------------- |
+| `song.ogg` / `song.opus`                                                | Backing track (everything not in another stem) |
+| `drums.ogg`, `drums_1.ogg`, `drums_2.ogg`, `drums_3.ogg`, `drums_4.ogg` | Drum stems (split kit or single mix)           |
+| `bass.ogg`                                                              | Bass guitar                                    |
+| `guitar.ogg`                                                            | Lead / rhythm guitar                           |
+| `keys.ogg`                                                              | Keys / piano                                   |
+| `vocals.ogg`, `vocals_1.ogg`, `vocals_2.ogg`                            | Lead vocals + harmonies                        |
+| `crowd.ogg`                                                             | Crowd noise                                    |
 
 Both `.ogg`, `.opus`, and `.mp3` are supported.
 

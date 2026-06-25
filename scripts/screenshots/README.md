@@ -38,6 +38,7 @@ Open `capture.mjs` and add a step to the `STEPS` array:
 ```
 
 Each step:
+
 1. Runs after the previous step (the harness shares one app instance for speed).
 2. Has a unique `name` — used as the output filename `<name>.png`.
 3. Receives the active `page` (BrowserWindow) and the Electron `app` handle.

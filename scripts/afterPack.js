@@ -18,10 +18,7 @@ const fs = require('fs')
 exports.default = async function (context) {
   if (context.electronPlatformName !== 'darwin') return
 
-  const appPath = path.join(
-    context.appOutDir,
-    `${context.packager.appInfo.productFilename}.app`
-  )
+  const appPath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
   const entitlements = path.resolve('build', 'entitlements.mac.plist')
 
   console.log('  • [afterPack] stripping all existing signatures from Mach-O binaries')
@@ -29,10 +26,10 @@ exports.default = async function (context) {
   // Step 1: Find EVERY Mach-O binary and remove its signature.
   // This strips Electron's team ID completely.
   try {
-    const allFiles = execSync(
-      `find "${appPath}" -type f`,
-      { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
-    ).trim()
+    const allFiles = execSync(`find "${appPath}" -type f`, {
+      encoding: 'utf-8',
+      maxBuffer: 10 * 1024 * 1024
+    }).trim()
 
     if (allFiles) {
       let stripped = 0
@@ -60,10 +57,10 @@ exports.default = async function (context) {
 
   // 2a. Sign ALL individual Mach-O files throughout the entire bundle
   try {
-    const allFiles = execSync(
-      `find "${appPath}" -type f`,
-      { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
-    ).trim()
+    const allFiles = execSync(`find "${appPath}" -type f`, {
+      encoding: 'utf-8',
+      maxBuffer: 10 * 1024 * 1024
+    }).trim()
 
     let signedFiles = 0
     if (allFiles) {
@@ -89,17 +86,18 @@ exports.default = async function (context) {
   if (fs.existsSync(frameworksPath)) {
     // 2b. Sign helper apps (bundle directories)
     try {
-      const apps = execSync(
-        `find "${frameworksPath}" -name "*.app" -type d -maxdepth 2`,
-        { encoding: 'utf-8' }
-      ).trim()
+      const apps = execSync(`find "${frameworksPath}" -name "*.app" -type d -maxdepth 2`, {
+        encoding: 'utf-8'
+      }).trim()
       if (apps) {
         for (const a of apps.split('\n')) {
           console.log('    sign helper:', path.basename(a))
           execSync(`codesign --force --sign - "${a}"`, { stdio: 'pipe' })
         }
       }
-    } catch { /* none found */ }
+    } catch {
+      /* none found */
+    }
 
     // 2c. Sign framework bundles
     const entries = fs.readdirSync(frameworksPath)
@@ -114,13 +112,8 @@ exports.default = async function (context) {
 
   // Step 3: Sign the outer .app bundle with entitlements
   console.log('    sign app:', path.basename(appPath))
-  const entFlag = fs.existsSync(entitlements)
-    ? `--entitlements "${entitlements}"`
-    : ''
-  execSync(
-    `codesign --force --sign - ${entFlag} "${appPath}"`,
-    { stdio: 'inherit' }
-  )
+  const entFlag = fs.existsSync(entitlements) ? `--entitlements "${entitlements}"` : ''
+  execSync(`codesign --force --sign - ${entFlag} "${appPath}"`, { stdio: 'inherit' })
 
   // Step 4: Verify
   try {

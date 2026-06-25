@@ -26,20 +26,20 @@ Audio can be `.ogg` (Vorbis), `.opus`, or `.mp3`. OCTAVE never re-encodes existi
 
 Standard format-1 MIDI with one track per instrument:
 
-| Track name | Instrument |
-|-----------|-----------|
-| `PART DRUMS` | Drums (5-lane / Pro) |
-| `PART GUITAR` | Lead guitar (5-fret) |
-| `PART BASS` | Bass guitar (5-fret) |
-| `PART KEYS` | Keys (5-fret) |
+| Track name         | Instrument                               |
+| ------------------ | ---------------------------------------- |
+| `PART DRUMS`       | Drums (5-lane / Pro)                     |
+| `PART GUITAR`      | Lead guitar (5-fret)                     |
+| `PART BASS`        | Bass guitar (5-fret)                     |
+| `PART KEYS`        | Keys (5-fret)                            |
 | `PART REAL_KEYS_X` | Pro Keys (Expert / Hard / Medium / Easy) |
-| `PART REAL_GUITAR` | Pro Guitar (6-string × 22 frets) |
-| `PART REAL_BASS` | Pro Bass |
-| `PART VOCALS` | Lead vocals + lyrics |
-| `HARM2` / `HARM3` | Vocal harmonies |
-| `EVENTS` | Practice sections, lighting cues |
-| `BEAT` | Beat track for strikeline timing |
-| `VENUE` | Venue lighting and camera cuts |
+| `PART REAL_GUITAR` | Pro Guitar (6-string × 22 frets)         |
+| `PART REAL_BASS`   | Pro Bass                                 |
+| `PART VOCALS`      | Lead vocals + lyrics                     |
+| `HARM2` / `HARM3`  | Vocal harmonies                          |
+| `EVENTS`           | Practice sections, lighting cues         |
+| `BEAT`             | Beat track for strikeline timing         |
+| `VENUE`            | Venue lighting and camera cuts           |
 
 OCTAVE preserves any track it doesn't understand, so round-tripping a chart is safe.
 

@@ -24,13 +24,14 @@ By default the tempo is detected automatically. If detection misbehaves you can 
 - **Manual BPM** — a constant tempo (one number)
 - **Tempo map editor** — a list of `(time, BPM)` events for songs with tempo changes
 
-When a manual tempo map is provided, OCTAVE *retimes* the auto-detected events to that grid using `mido` — so notes still land on bars/beats correctly.
+When a manual tempo map is provided, OCTAVE _retimes_ the auto-detected events to that grid using `mido` — so notes still land on bars/beats correctly.
 
 > Use this when you already know the song's tempo (e.g. you have a click track from the original session).
 
 ## Offline mode
 
 Skips any network calls — no model downloads, no `yt-dlp`. Requires:
+
 - The bundled Python runtime to already be present (run Auto-Chart once online first).
 - All required model weights cached locally.
 

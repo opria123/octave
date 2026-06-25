@@ -1,6 +1,6 @@
 # Settings
 
-Open with `Ctrl+,` (or *Toolbar → Settings*).
+Open with `Ctrl+,` (or _Toolbar → Settings_).
 
 ![Settings modal](/screenshots/settings-modal.png)
 
@@ -44,10 +44,10 @@ Full list of remappable shortcuts. See the [Keyboard Shortcuts reference](/refer
 
 Settings are stored as JSON next to the Electron user data:
 
-| Platform | Path |
-|----------|------|
-| Windows | `%APPDATA%\octave\settings.json` |
-| macOS | `~/Library/Application Support/octave/settings.json` |
-| Linux | `~/.config/octave/settings.json` |
+| Platform | Path                                                 |
+| -------- | ---------------------------------------------------- |
+| Windows  | `%APPDATA%\octave\settings.json`                     |
+| macOS    | `~/Library/Application Support/octave/settings.json` |
+| Linux    | `~/.config/octave/settings.json`                     |
 
 Editing this file by hand is supported — restart OCTAVE to pick up changes.

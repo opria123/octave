@@ -43,24 +43,29 @@ export function Layout(): React.JSX.Element {
   const hasTopPanel = panelVisible.explorer || panelVisible.preview || panelVisible.properties
   const hasBottomPanel = panelVisible.midi || panelVisible.video
 
-  const topPaneConfig = useMemo(() => ({
-    explorer: panelVisible.explorer
-      ? { preferredSize: '18%' as const, minSize: 150, maxSize: 400 }
-      : { preferredSize: 0, minSize: 0, maxSize: 0 },
-    preview: panelVisible.preview
-      ? { preferredSize: '57%' as const, minSize: 300, maxSize: undefined }
-      : { preferredSize: 0, minSize: 0, maxSize: 0 },
-    properties: panelVisible.properties
-      ? { preferredSize: '25%' as const, minSize: 200, maxSize: 500 }
-      : { preferredSize: 0, minSize: 0, maxSize: 0 }
-  }), [panelVisible.explorer, panelVisible.preview, panelVisible.properties])
+  const topPaneConfig = useMemo(
+    () => ({
+      explorer: panelVisible.explorer
+        ? { preferredSize: '18%' as const, minSize: 150, maxSize: 400 }
+        : { preferredSize: 0, minSize: 0, maxSize: 0 },
+      preview: panelVisible.preview
+        ? { preferredSize: '57%' as const, minSize: 300, maxSize: undefined }
+        : { preferredSize: 0, minSize: 0, maxSize: 0 },
+      properties: panelVisible.properties
+        ? { preferredSize: '25%' as const, minSize: 200, maxSize: 500 }
+        : { preferredSize: 0, minSize: 0, maxSize: 0 }
+    }),
+    [panelVisible.explorer, panelVisible.preview, panelVisible.properties]
+  )
 
   const topContent = !hasTopPanel ? (
     <div className="panel panel-center" style={{ width: '100%', height: '100%' }}>
       <div className="empty-state">
         <div className="empty-state-icon">🪟</div>
         <div className="empty-state-title">All Top Panels Hidden</div>
-        <div className="empty-state-description">Use View menu to re-enable Explorer, Preview, or Properties.</div>
+        <div className="empty-state-description">
+          Use View menu to re-enable Explorer, Preview, or Properties.
+        </div>
       </div>
     </div>
   ) : (
@@ -108,7 +113,11 @@ export function Layout(): React.JSX.Element {
       <div className="layout">
         <Toolbar />
         <div className="layout-main">
-          <div className="panel panel-center" style={{ width: '100%', height: '100%' }} onFocus={() => setFocusedPanel('preview')}>
+          <div
+            className="panel panel-center"
+            style={{ width: '100%', height: '100%' }}
+            onFocus={() => setFocusedPanel('preview')}
+          >
             <ChartPreview />
           </div>
         </div>

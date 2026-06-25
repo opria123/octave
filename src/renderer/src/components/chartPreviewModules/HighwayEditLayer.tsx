@@ -2,13 +2,28 @@
 import { useMemo, useState, useCallback, useRef } from 'react'
 import * as THREE from 'three'
 import {
-  TRACK_WIDTH, STRIKE_LINE_POS, HIGHWAY_LENGTH, COLORS, DRUM_KICK_COLOR,
-  PRO_GUITAR_COLORS, PRO_KEYS_COLOR, VOCAL_COLOR, getLaneConfig, getFretX,
+  TRACK_WIDTH,
+  STRIKE_LINE_POS,
+  HIGHWAY_LENGTH,
+  COLORS,
+  DRUM_KICK_COLOR,
+  PRO_GUITAR_COLORS,
+  PRO_KEYS_COLOR,
+  VOCAL_COLOR,
+  getLaneConfig,
+  getFretX,
   PRO_KEYS_MIN
 } from './constants'
 import type { InstrumentRenderType } from './constants'
 import { getSongStore, useUIStore } from '../../stores'
-import type { Note, NoteFlags, NoteModifiers, Instrument, Difficulty, ProGuitarString } from '../../types'
+import type {
+  Note,
+  NoteFlags,
+  NoteModifiers,
+  Instrument,
+  Difficulty,
+  ProGuitarString
+} from '../../types'
 import type { HighwayAssets, EditingTool } from './types'
 
 // Build note flags from UI toggle modifiers
@@ -120,16 +135,25 @@ export function HighwayEditLayer({
   assets: HighwayAssets | null
   proKeysViewStart?: number
 }): React.JSX.Element {
-  const instrumentType: InstrumentRenderType = instrument === 'drums' ? 'drums'
-    : instrument === 'proKeys' ? 'proKeys'
-    : instrument === 'vocals' ? 'vocals'
-    : (instrument === 'proGuitar' || instrument === 'proBass') ? 'proGuitar'
-    : 'guitar'
+  const instrumentType: InstrumentRenderType =
+    instrument === 'drums'
+      ? 'drums'
+      : instrument === 'proKeys'
+        ? 'proKeys'
+        : instrument === 'vocals'
+          ? 'vocals'
+          : instrument === 'proGuitar' || instrument === 'proBass'
+            ? 'proGuitar'
+            : 'guitar'
   const { laneCount } = getLaneConfig(instrumentType)
-  const colors = instrumentType === 'proGuitar' ? PRO_GUITAR_COLORS
-    : instrumentType === 'proKeys' ? [PRO_KEYS_COLOR]
-    : instrumentType === 'vocals' ? [VOCAL_COLOR]
-    : COLORS[instrumentType === 'drums' ? 'drums' : 'guitar'].notes
+  const colors =
+    instrumentType === 'proGuitar'
+      ? PRO_GUITAR_COLORS
+      : instrumentType === 'proKeys'
+        ? [PRO_KEYS_COLOR]
+        : instrumentType === 'vocals'
+          ? [VOCAL_COLOR]
+          : COLORS[instrumentType === 'drums' ? 'drums' : 'guitar'].notes
   const noteModifiers = useUIStore((s) => s.noteModifiers)
   const planeRef = useRef<THREE.Mesh>(null)
   const [ghost, setGhost] = useState<{
@@ -288,12 +312,20 @@ export function HighwayEditLayer({
       const isSoloMode = mods.solo && editTool === 'place'
       const isOpenStrum = mods.openOrKick && instrumentType !== 'drums'
       const isFullWidth = isSpMode || isSoloMode || isOpenStrum
-      const x = isFullWidth ? offsetX : effectiveKick ? offsetX : offsetX + getFretX(lane, laneCount)
-      const color = isSpMode ? '#00CCFF'
-        : isSoloMode ? '#FFD700'
-        : effectiveKick ? DRUM_KICK_COLOR
-        : (mods.openOrKick && instrumentType !== 'drums') ? '#CC44FF'
-        : (colors[lane % colors.length] || '#FFFFFF')
+      const x = isFullWidth
+        ? offsetX
+        : effectiveKick
+          ? offsetX
+          : offsetX + getFretX(lane, laneCount)
+      const color = isSpMode
+        ? '#00CCFF'
+        : isSoloMode
+          ? '#FFD700'
+          : effectiveKick
+            ? DRUM_KICK_COLOR
+            : mods.openOrKick && instrumentType !== 'drums'
+              ? '#CC44FF'
+              : colors[lane % colors.length] || '#FFFFFF'
       setGhost({
         position: [x, 0.02, z],
         lane,
@@ -303,7 +335,22 @@ export function HighwayEditLayer({
         isKick: isFullWidth || effectiveKick
       })
     },
-    [editTool, worldToTickAndLane, currentTick, pixelsPerTick, offsetX, laneCount, colors, ghost.visible, instrumentType, songId, instrument, difficulty, getLaneString, ticksPerSnap]
+    [
+      editTool,
+      worldToTickAndLane,
+      currentTick,
+      pixelsPerTick,
+      offsetX,
+      laneCount,
+      colors,
+      ghost.visible,
+      instrumentType,
+      songId,
+      instrument,
+      difficulty,
+      getLaneString,
+      ticksPerSnap
+    ]
   )
 
   const handlePointerLeave = useCallback(() => {
@@ -321,13 +368,15 @@ export function HighwayEditLayer({
         // Check if clicking near existing note first
         const selectLane = getLaneString(lane, isKick)
         const existingNotes = store.getState().song.notes
-        const isGuitarLikeSelect = instrument === 'guitar' || instrument === 'bass' || instrument === 'keys'
+        const isGuitarLikeSelect =
+          instrument === 'guitar' || instrument === 'bass' || instrument === 'keys'
         const target = existingNotes.find(
           (n) =>
             n.instrument === instrument &&
             n.difficulty === difficulty &&
             Math.abs(n.tick - tick) <= ticksPerSnap / 2 &&
-            (String(n.lane) === String(selectLane) || (isGuitarLikeSelect && String(n.lane) === 'open'))
+            (String(n.lane) === String(selectLane) ||
+              (isGuitarLikeSelect && String(n.lane) === 'open'))
         )
         if (target) {
           store.getState().selectNote(target.id, native?.ctrlKey || native?.metaKey)
@@ -355,7 +404,13 @@ export function HighwayEditLayer({
           if (created) {
             store.getState().selectStarPowerPhrase(created.id)
             isDragging.current = true
-            dragRef.current = { mode: 'sp-extend', startTick: tick, noteId: created.id, instrument, preAddSnapshot }
+            dragRef.current = {
+              mode: 'sp-extend',
+              startTick: tick,
+              noteId: created.id,
+              instrument,
+              preAddSnapshot
+            }
           } else {
             store.temporal.getState().resume()
           }
@@ -376,7 +431,13 @@ export function HighwayEditLayer({
           if (created) {
             store.getState().selectSoloSection(created.id)
             isDragging.current = true
-            dragRef.current = { mode: 'solo-extend', startTick: tick, noteId: created.id, instrument, preAddSnapshot }
+            dragRef.current = {
+              mode: 'solo-extend',
+              startTick: tick,
+              noteId: created.id,
+              instrument,
+              preAddSnapshot
+            }
           } else {
             store.temporal.getState().resume()
           }
@@ -399,8 +460,8 @@ export function HighwayEditLayer({
             n.instrument === instrument &&
             n.difficulty === difficulty &&
             n.tick === tick &&
-            String(n.lane) === String(noteLane)
-            && (!isKickPlacement || !!n.flags?.isDoubleKick === wantsDoubleKick)
+            String(n.lane) === String(noteLane) &&
+            (!isKickPlacement || !!n.flags?.isDoubleKick === wantsDoubleKick)
         )
         if (duplicate) {
           store.getState().selectNote(duplicate.id)
@@ -408,12 +469,12 @@ export function HighwayEditLayer({
         }
         const existingKickAtTick = isKickPlacement
           ? existingNotes.find(
-            (n) =>
-              n.instrument === instrument
-              && n.difficulty === difficulty
-              && n.tick === tick
-              && String(n.lane) === 'kick'
-          )
+              (n) =>
+                n.instrument === instrument &&
+                n.difficulty === difficulty &&
+                n.tick === tick &&
+                String(n.lane) === 'kick'
+            )
           : undefined
         if (existingKickAtTick) {
           store.getState().updateNote(existingKickAtTick.id, {
@@ -428,9 +489,9 @@ export function HighwayEditLayer({
         const baseFlags = buildNoteFlags(instrument, mods)
         const flags = isKickPlacement
           ? {
-            ...(baseFlags || {}),
-            isDoubleKick: wantsDoubleKick || undefined
-          }
+              ...(baseFlags || {}),
+              isDoubleKick: wantsDoubleKick || undefined
+            }
           : baseFlags
         const normalizedFlags = flags && Object.keys(flags).length > 0 ? flags : undefined
         // Pro guitar/bass: add string and fret info
@@ -454,14 +515,21 @@ export function HighwayEditLayer({
           const placed = newNotes[newNotes.length - 1]
           if (placed) {
             isDragging.current = true
-            dragRef.current = { mode: 'sustain', startTick: tick, noteId: placed.id, instrument, preAddSnapshot }
+            dragRef.current = {
+              mode: 'sustain',
+              startTick: tick,
+              noteId: placed.id,
+              instrument,
+              preAddSnapshot
+            }
           }
         } else {
           store.temporal.getState().resume()
         }
       } else if (editTool === 'erase') {
         const eraseLane = getLaneString(lane, isKick)
-        const isGuitarLikeErase = instrument === 'guitar' || instrument === 'bass' || instrument === 'keys'
+        const isGuitarLikeErase =
+          instrument === 'guitar' || instrument === 'bass' || instrument === 'keys'
         const existingNotes = store.getState().song.notes
         const matchesTick = existingNotes.filter(
           (n) =>
@@ -469,11 +537,12 @@ export function HighwayEditLayer({
             n.difficulty === difficulty &&
             Math.abs(n.tick - tick) <= ticksPerSnap / 2
         )
-        const target = matchesTick.find((n) => String(n.lane) === String(eraseLane))
-          || (instrumentType === 'drums' && !isKick
+        const target =
+          matchesTick.find((n) => String(n.lane) === String(eraseLane)) ||
+          (instrumentType === 'drums' && !isKick
             ? matchesTick.find((n) => String(n.lane) === 'kick')
-            : undefined)
-          || (isGuitarLikeErase ? matchesTick.find((n) => String(n.lane) === 'open') : undefined)
+            : undefined) ||
+          (isGuitarLikeErase ? matchesTick.find((n) => String(n.lane) === 'open') : undefined)
         if (target) {
           store.getState().deleteNote(target.id)
         }
@@ -485,9 +554,9 @@ export function HighwayEditLayer({
   const handlePointerUp = useCallback(() => {
     const drag = dragRef.current
     if (
-      isDragging.current
-      && drag?.preAddSnapshot
-      && (drag.mode === 'sustain' || drag.mode === 'sp-extend' || drag.mode === 'solo-extend')
+      isDragging.current &&
+      drag?.preAddSnapshot &&
+      (drag.mode === 'sustain' || drag.mode === 'sp-extend' || drag.mode === 'solo-extend')
     ) {
       const store = getSongStore(songId)
       const finalSong = store.getState().song
@@ -526,7 +595,13 @@ export function HighwayEditLayer({
       {ghost.visible && editTool === 'erase' && (
         <mesh position={ghost.position}>
           <ringGeometry args={[0.08, 0.12, 16]} />
-          <meshBasicMaterial color="#FF3333" transparent opacity={0.6} side={THREE.DoubleSide} toneMapped={false} />
+          <meshBasicMaterial
+            color="#FF3333"
+            transparent
+            opacity={0.6}
+            side={THREE.DoubleSide}
+            toneMapped={false}
+          />
         </mesh>
       )}
     </group>

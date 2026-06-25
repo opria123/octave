@@ -25,11 +25,17 @@ describe('open fret / tap note MIDI round-trip', () => {
       mkNote({ tick: 1920, lane: 'open', difficulty: 'hard', instrument: 'bass' }),
       mkNote({ tick: 1920, lane: 'green', difficulty: 'expert', instrument: 'bass' })
     ]
-    const b64 = serializeMidiBase64(notes, [{ tick: 0, bpm: 120 }], [{ tick: 0, numerator: 4, denominator: 4 }])
+    const b64 = serializeMidiBase64(
+      notes,
+      [{ tick: 0, bpm: 120 }],
+      [{ tick: 0, numerator: 4, denominator: 4 }]
+    )
     const parsed = parseMidiBase64(b64)
 
     const find = (tick: number, instrument: string, difficulty: string): Note | undefined =>
-      parsed.notes.find((n) => n.tick === tick && n.instrument === instrument && n.difficulty === difficulty)
+      parsed.notes.find(
+        (n) => n.tick === tick && n.instrument === instrument && n.difficulty === difficulty
+      )
 
     expect(find(0, 'guitar', 'expert')?.lane).toBe('open')
     expect(find(0, 'guitar', 'expert')?.flags?.isTap).toBeFalsy()
@@ -51,7 +57,11 @@ describe('open fret / tap note MIDI round-trip', () => {
       mkNote({ tick: 480, lane: 'yellow', flags: { isTap: true } })
     ]
     const once = parseMidiBase64(
-      serializeMidiBase64(notes, [{ tick: 0, bpm: 120 }], [{ tick: 0, numerator: 4, denominator: 4 }])
+      serializeMidiBase64(
+        notes,
+        [{ tick: 0, bpm: 120 }],
+        [{ tick: 0, numerator: 4, denominator: 4 }]
+      )
     )
     const twice = parseMidiBase64(
       serializeMidiBase64(once.notes, once.tempoEvents, once.timeSignatures)

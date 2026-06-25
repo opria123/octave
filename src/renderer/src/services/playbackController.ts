@@ -83,14 +83,20 @@ function triggerVocalPitchTones(
     if (typeof note.lane !== 'number') continue
     if (note.tick >= fromTick && note.tick < toTick) {
       const durationSec =
-        (tickToSeconds(note.tick + note.duration, tempoEvents) - tickToSeconds(note.tick, tempoEvents)) /
+        (tickToSeconds(note.tick + note.duration, tempoEvents) -
+          tickToSeconds(note.tick, tempoEvents)) /
         Math.max(0.1, speed)
       audioService.playVocalTone(note.lane, durationSec)
     }
   }
 }
 
-function startVisualRaf(songId: string, startTick: number, tempoEvents: TempoEvent[], speed: number = 1.0): void {
+function startVisualRaf(
+  songId: string,
+  startTick: number,
+  tempoEvents: TempoEvent[],
+  speed: number = 1.0
+): void {
   cancelVisualRaf()
   const startSeconds = tickToSeconds(startTick, tempoEvents)
   const startTime = performance.now()
@@ -106,7 +112,7 @@ function startVisualRaf(songId: string, startTick: number, tempoEvents: TempoEve
     // Throttle to ~30fps to reduce downstream re-renders
     if (now - lastUpdateTime >= 33) {
       lastUpdateTime = now
-      const elapsed = (now - startTime) / 1000 * speed
+      const elapsed = ((now - startTime) / 1000) * speed
       const currentSeconds = startSeconds + elapsed
       const newTick = secondsToTick(currentSeconds, tempoEvents)
       const prevTick = store.getState().currentTick

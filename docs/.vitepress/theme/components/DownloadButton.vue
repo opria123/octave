@@ -31,7 +31,9 @@ const PLATFORM_MATCHERS: Record<Exclude<Platform, 'unknown'>, RegExp> = {
 onMounted(async () => {
   platform.value = detectPlatform()
   try {
-    const res = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`)
+    const res = await fetch(
+      `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`
+    )
     if (!res.ok) {
       loading.value = false
       return
@@ -53,10 +55,14 @@ onMounted(async () => {
 
 const platformLabel = computed(() => {
   switch (platform.value) {
-    case 'win': return 'Windows'
-    case 'mac': return 'macOS'
-    case 'linux': return 'Linux'
-    default: return 'Your Platform'
+    case 'win':
+      return 'Windows'
+    case 'mac':
+      return 'macOS'
+    case 'linux':
+      return 'Linux'
+    default:
+      return 'Your Platform'
   }
 })
 
@@ -97,7 +103,10 @@ const primaryHref = computed(() => assetUrl.value ?? fallbackUrl)
   border-radius: 999px;
   text-decoration: none;
   box-shadow: 0 8px 24px rgba(242, 166, 90, 0.28);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
 }
 
 .dl-primary:hover {

@@ -44,7 +44,8 @@ const PYTHON_VERSION = '3.12.10'
 // The hash is the first 12 characters of sha256(requirements.txt), so each
 // new requirements.txt change creates new assets without invalidating older
 // app builds.
-const PREBUILT_RUNTIME_BASE_URL = 'https://github.com/opria123/octave/releases/download/runtime-cache'
+const PREBUILT_RUNTIME_BASE_URL =
+  'https://github.com/opria123/octave/releases/download/runtime-cache'
 
 type RuntimeTarget = {
   /** python-build-standalone target triple */
@@ -131,8 +132,8 @@ function getRuntimeExecutable(): string {
   const target = TARGETS[`${process.platform}-${process.arch}`]
   if (!target) {
     throw new Error(
-      `OCTAVE does not yet ship a bootstrappable Python runtime for `
-      + `${process.platform}-${process.arch}. Supported: ${Object.keys(TARGETS).join(', ')}.`
+      `OCTAVE does not yet ship a bootstrappable Python runtime for ` +
+        `${process.platform}-${process.arch}. Supported: ${Object.keys(TARGETS).join(', ')}.`
     )
   }
   return join(getRuntimeRoot(), target.executableRel)
@@ -164,8 +165,8 @@ function getDownloadUrl(): string {
     throw new Error(`No python-build-standalone target for ${process.platform}-${process.arch}.`)
   }
   return (
-    `https://github.com/astral-sh/python-build-standalone/releases/download/`
-    + `${PYTHON_BUILD_STANDALONE_TAG}/cpython-${PYTHON_VERSION}+${PYTHON_BUILD_STANDALONE_TAG}-${target.triple}.tar.gz`
+    `https://github.com/astral-sh/python-build-standalone/releases/download/` +
+    `${PYTHON_BUILD_STANDALONE_TAG}/cpython-${PYTHON_VERSION}+${PYTHON_BUILD_STANDALONE_TAG}-${target.triple}.tar.gz`
   )
 }
 
@@ -188,11 +189,15 @@ async function tryPrebuiltRuntime(
   try {
     const head = await fetch(url, { method: 'HEAD', redirect: 'follow' })
     if (!head.ok) {
-      console.log(`[BOOTSTRAP] No prebuilt tarball at ${url} (${head.status}); falling back to pip install.`)
+      console.log(
+        `[BOOTSTRAP] No prebuilt tarball at ${url} (${head.status}); falling back to pip install.`
+      )
       return false
     }
   } catch (err) {
-    console.log(`[BOOTSTRAP] Prebuilt tarball HEAD failed (${err instanceof Error ? err.message : String(err)}); falling back.`)
+    console.log(
+      `[BOOTSTRAP] Prebuilt tarball HEAD failed (${err instanceof Error ? err.message : String(err)}); falling back.`
+    )
     return false
   }
 
@@ -212,7 +217,12 @@ async function tryPrebuiltRuntime(
   return true
 }
 
-async function downloadFile(url: string, destination: string, runId: string | undefined, label: string): Promise<void> {
+async function downloadFile(
+  url: string,
+  destination: string,
+  runId: string | undefined,
+  label: string
+): Promise<void> {
   const response = await fetch(url, { redirect: 'follow' })
   if (!response.ok || !response.body) {
     throw new Error(`Download failed (${response.status} ${response.statusText}) for ${url}`)
@@ -238,7 +248,10 @@ async function downloadFile(url: string, destination: string, runId: string | un
         const now = Date.now()
         if (total > 0 && now - lastEmit > 250) {
           const pct = Math.min(99, Math.round((received / total) * 100))
-          emitProgress(runId, `${label}: ${pct}% (${(received / 1_000_000).toFixed(1)} / ${(total / 1_000_000).toFixed(1)} MB)`)
+          emitProgress(
+            runId,
+            `${label}: ${pct}% (${(received / 1_000_000).toFixed(1)} / ${(total / 1_000_000).toFixed(1)} MB)`
+          )
           lastEmit = now
         }
         this.push(Buffer.from(value))
@@ -298,7 +311,12 @@ function runStreaming(
       pushTail(chunk)
       const now = Date.now()
       if (now - lastBroadcast > 1000) {
-        const text = chunk.toString('utf-8').split(/\r?\n/).map((s) => s.trim()).filter(Boolean).pop()
+        const text = chunk
+          .toString('utf-8')
+          .split(/\r?\n/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .pop()
         if (text) emitProgress(runId, `${label}: ${text.slice(0, 160)}`)
         lastBroadcast = now
       }
@@ -315,18 +333,25 @@ function runStreaming(
         return
       }
       // Prefer the last error-ish lines pip emitted; fall back to the raw tail.
-      const errorLines = tail.filter((l) =>
-        /^(ERROR|error:|FAILED|fatal|note:|Could not|No matching distribution|Building wheel for|Failed building wheel|Consider using|Cannot install|Requirement already|HINT|hint:)/i.test(l)
-        || /\bexit code\b/i.test(l)
+      const errorLines = tail.filter(
+        (l) =>
+          /^(ERROR|error:|FAILED|fatal|note:|Could not|No matching distribution|Building wheel for|Failed building wheel|Consider using|Cannot install|Requirement already|HINT|hint:)/i.test(
+            l
+          ) || /\bexit code\b/i.test(l)
       )
       const excerpt = (errorLines.length > 0 ? errorLines.slice(-25) : tail.slice(-25)).join('\n')
-      const detail = excerpt ? `\n--- pip output (tail) ---\n${excerpt}\n--- end pip output ---` : ''
+      const detail = excerpt
+        ? `\n--- pip output (tail) ---\n${excerpt}\n--- end pip output ---`
+        : ''
       reject(new Error(`${label} failed with exit code ${code}.${detail}`))
     })
   })
 }
 
-function splitRequirements(requirementsPath: string, accelerator: 'cuda' | 'cpu'): {
+function splitRequirements(
+  requirementsPath: string,
+  accelerator: 'cuda' | 'cpu'
+): {
   basicPitchRequirement: string | null
   demucsRequirement: string | null
   torchRequirements: string[]
@@ -338,34 +363,36 @@ function splitRequirements(requirementsPath: string, accelerator: 'cuda' | 'cpu'
   let basicPitchRequirement: string | null = null
   let demucsRequirement: string | null = null
   const torchRequirements: string[] = []
-  const baseLines = lines.map((line) => {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) return line
-    const requirement = trimmed.split('#')[0].trim()
-    // basic-pitch is installed last with --no-deps so it can't pull in TF.
-    if (requirement.startsWith('basic-pitch')) {
-      basicPitchRequirement = requirement
-      return null
-    }
-    // demucs is installed with --no-deps so pip skips diffq (no cp312 wheel,
-    // needs MSVC). Its runtime deps are listed explicitly below.
-    if (requirement.startsWith('demucs==') || requirement === 'demucs') {
-      demucsRequirement = requirement
-      return null
-    }
-    // torch needs the matching CUDA index URL.
-    if (requirement.startsWith('torch==') || requirement.startsWith('torchaudio==')) {
-      torchRequirements.push(requirement)
-      return null
-    }
-    // Swap the onnxruntime variant on CUDA hosts so basic-pitch can run
-    // its ONNX model on the GPU. Both packages publish the same import
-    // name (`onnxruntime`).
-    if (accelerator === 'cuda' && /^onnxruntime==/.test(requirement)) {
-      return line.replace('onnxruntime==', 'onnxruntime-gpu==')
-    }
-    return line
-  }).filter((line): line is string => line !== null)
+  const baseLines = lines
+    .map((line) => {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) return line
+      const requirement = trimmed.split('#')[0].trim()
+      // basic-pitch is installed last with --no-deps so it can't pull in TF.
+      if (requirement.startsWith('basic-pitch')) {
+        basicPitchRequirement = requirement
+        return null
+      }
+      // demucs is installed with --no-deps so pip skips diffq (no cp312 wheel,
+      // needs MSVC). Its runtime deps are listed explicitly below.
+      if (requirement.startsWith('demucs==') || requirement === 'demucs') {
+        demucsRequirement = requirement
+        return null
+      }
+      // torch needs the matching CUDA index URL.
+      if (requirement.startsWith('torch==') || requirement.startsWith('torchaudio==')) {
+        torchRequirements.push(requirement)
+        return null
+      }
+      // Swap the onnxruntime variant on CUDA hosts so basic-pitch can run
+      // its ONNX model on the GPU. Both packages publish the same import
+      // name (`onnxruntime`).
+      if (accelerator === 'cuda' && /^onnxruntime==/.test(requirement)) {
+        return line.replace('onnxruntime==', 'onnxruntime-gpu==')
+      }
+      return line
+    })
+    .filter((line): line is string => line !== null)
 
   return {
     basicPitchRequirement,
@@ -389,7 +416,8 @@ async function installRequirements(
     'pip setuptools'
   )
 
-  const { basicPitchRequirement, demucsRequirement, torchRequirements, baseRequirementsText } = splitRequirements(requirementsPath, accelerator)
+  const { basicPitchRequirement, demucsRequirement, torchRequirements, baseRequirementsText } =
+    splitRequirements(requirementsPath, accelerator)
 
   if (torchRequirements.length > 0) {
     const isCuda = accelerator === 'cuda'
@@ -406,9 +434,15 @@ async function installRequirements(
     await runStreaming(
       pythonPath,
       [
-        '-m', 'pip', 'install', '--upgrade', '--no-build-isolation',
-        '--index-url', torchIndex,
-        '--extra-index-url', 'https://pypi.org/simple',
+        '-m',
+        'pip',
+        'install',
+        '--upgrade',
+        '--no-build-isolation',
+        '--index-url',
+        torchIndex,
+        '--extra-index-url',
+        'https://pypi.org/simple',
         ...torchRequirements
       ],
       runId,
@@ -446,7 +480,15 @@ async function installRequirements(
       emitProgress(runId, 'Installing basic-pitch...', 90)
       await runStreaming(
         pythonPath,
-        ['-m', 'pip', 'install', '--upgrade', '--no-deps', '--prefer-binary', basicPitchRequirement],
+        [
+          '-m',
+          'pip',
+          'install',
+          '--upgrade',
+          '--no-deps',
+          '--prefer-binary',
+          basicPitchRequirement
+        ],
         runId,
         'pip basic-pitch'
       )
@@ -474,12 +516,12 @@ export async function ensureBootstrappedPython(
   const state = readState()
 
   if (
-    existsSync(pythonPath)
-    && state
-    && state.requirementsHash === requirementsHash
-    && state.pythonBuildTag === PYTHON_BUILD_STANDALONE_TAG
-    && state.pythonVersion === PYTHON_VERSION
-    && (state.accelerator ?? 'cpu') === accelerator
+    existsSync(pythonPath) &&
+    state &&
+    state.requirementsHash === requirementsHash &&
+    state.pythonBuildTag === PYTHON_BUILD_STANDALONE_TAG &&
+    state.pythonVersion === PYTHON_VERSION &&
+    (state.accelerator ?? 'cpu') === accelerator
   ) {
     return pythonPath
   }
@@ -498,12 +540,15 @@ export async function ensureBootstrappedPython(
       // this platform + requirements hash. Drops install time from minutes
       // to ~30 sec. Skipped when an NVIDIA GPU is detected because the
       // prebuilt tarballs ship CPU torch only.
-      const usedPrebuilt = accelerator === 'cuda'
-        ? false
-        : await tryPrebuiltRuntime(runtimeRoot, requirementsHash, runId).catch((err) => {
-            console.warn(`[BOOTSTRAP] Prebuilt runtime path failed; falling back to pip install. ${err instanceof Error ? err.message : String(err)}`)
-            return false
-          })
+      const usedPrebuilt =
+        accelerator === 'cuda'
+          ? false
+          : await tryPrebuiltRuntime(runtimeRoot, requirementsHash, runId).catch((err) => {
+              console.warn(
+                `[BOOTSTRAP] Prebuilt runtime path failed; falling back to pip install. ${err instanceof Error ? err.message : String(err)}`
+              )
+              return false
+            })
 
       if (!usedPrebuilt) {
         const url = getDownloadUrl()
@@ -517,8 +562,8 @@ export async function ensureBootstrappedPython(
 
         if (!existsSync(pythonPath)) {
           throw new Error(
-            `Python runtime extracted but ${pythonPath} is missing. The downloaded `
-            + `archive may be for the wrong platform (${process.platform}-${process.arch}).`
+            `Python runtime extracted but ${pythonPath} is missing. The downloaded ` +
+              `archive may be for the wrong platform (${process.platform}-${process.arch}).`
           )
         }
 
@@ -589,12 +634,11 @@ export function getRuntimeStatus(requirementsPath: string): RuntimeStatus {
   if (!state) return status
   const requirementsHash = sha256OfFile(requirementsPath)
   const accelerator = detectAccelerator()
-  status.ready = (
-    state.requirementsHash === requirementsHash
-    && state.pythonBuildTag === PYTHON_BUILD_STANDALONE_TAG
-    && state.pythonVersion === PYTHON_VERSION
-    && (state.accelerator ?? 'cpu') === accelerator
-  )
+  status.ready =
+    state.requirementsHash === requirementsHash &&
+    state.pythonBuildTag === PYTHON_BUILD_STANDALONE_TAG &&
+    state.pythonVersion === PYTHON_VERSION &&
+    (state.accelerator ?? 'cpu') === accelerator
   // A state file exists but doesn't match → next bootstrap will wipe and
   // replace the runtime rather than installing fresh.
   status.isUpgrade = !status.ready

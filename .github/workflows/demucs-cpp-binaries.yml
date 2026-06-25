@@ -39,9 +39,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,  platform: linux,   arch: x64,   exe: demucs_mt.cpp.main }
-          - { os: macos-14,       platform: darwin,  arch: arm64, exe: demucs_mt.cpp.main }
-          - { os: windows-latest, platform: win32,   arch: x64,   exe: demucs_mt.cpp.main.exe }
+          - { os: ubuntu-latest, platform: linux, arch: x64, exe: demucs_mt.cpp.main }
+          - { os: macos-14, platform: darwin, arch: arm64, exe: demucs_mt.cpp.main }
+          - { os: windows-latest, platform: win32, arch: x64, exe: demucs_mt.cpp.main.exe }
 
     runs-on: ${{ matrix.os }}
 

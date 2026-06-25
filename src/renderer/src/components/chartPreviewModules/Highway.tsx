@@ -2,7 +2,16 @@
 import { useMemo, useRef, useContext } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { TRACK_WIDTH, STRIKE_LINE_POS, HIGHWAY_LENGTH, COLORS, getLaneConfig, isBlackKey, PRO_KEYS_MIN, PRO_KEYS_VISIBLE } from './constants'
+import {
+  TRACK_WIDTH,
+  STRIKE_LINE_POS,
+  HIGHWAY_LENGTH,
+  COLORS,
+  getLaneConfig,
+  isBlackKey,
+  PRO_KEYS_MIN,
+  PRO_KEYS_VISIBLE
+} from './constants'
 import type { InstrumentRenderType } from './constants'
 import { HighwayAssetsContext } from './AssetProvider'
 
@@ -24,7 +33,7 @@ export function Highway({
   const isProKeys = instrumentType === 'proKeys'
   const isVocals = instrumentType === 'vocals'
   // For proKeys/vocals, skip shader lane lines — we draw overlays instead
-  const shaderLaneCount = (isProKeys || isVocals) ? 1 : laneCount
+  const shaderLaneCount = isProKeys || isVocals ? 1 : laneCount
   const assets = useContext(HighwayAssetsContext)
   const shaderRef = useRef<THREE.ShaderMaterial>(null)
 
@@ -138,53 +147,69 @@ export function Highway({
       ))}
 
       {/* Pro Keys: white/black key lane dividers (sliding viewport) */}
-      {isProKeys && Array.from({ length: laneCount }, (_, i) => {
-        const x = (TRACK_WIDTH / laneCount) * i - TRACK_WIDTH / 2 + TRACK_WIDTH / (2 * laneCount)
-        const w = TRACK_WIDTH / laneCount
-        const viewBase = proKeysViewStart ?? PRO_KEYS_MIN
-        const black = isBlackKey(viewBase + i)
-        return (
-          <mesh key={`pk-${i}`} position={[x, 0.0005, highwayCenterZ]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[w - 0.01, HIGHWAY_LENGTH]} />
-            <meshBasicMaterial
-              color={black ? '#0A0A14' : '#1A1A28'}
-              transparent
-              opacity={black ? 0.6 : 0.25}
-              depthWrite={false}
-            />
-          </mesh>
-        )
-      })}
+      {isProKeys &&
+        Array.from({ length: laneCount }, (_, i) => {
+          const x = (TRACK_WIDTH / laneCount) * i - TRACK_WIDTH / 2 + TRACK_WIDTH / (2 * laneCount)
+          const w = TRACK_WIDTH / laneCount
+          const viewBase = proKeysViewStart ?? PRO_KEYS_MIN
+          const black = isBlackKey(viewBase + i)
+          return (
+            <mesh
+              key={`pk-${i}`}
+              position={[x, 0.0005, highwayCenterZ]}
+              rotation={[-Math.PI / 2, 0, 0]}
+            >
+              <planeGeometry args={[w - 0.01, HIGHWAY_LENGTH]} />
+              <meshBasicMaterial
+                color={black ? '#0A0A14' : '#1A1A28'}
+                transparent
+                opacity={black ? 0.6 : 0.25}
+                depthWrite={false}
+              />
+            </mesh>
+          )
+        })}
       {/* Pro Keys: C note markers (octave boundaries) within viewport */}
-      {isProKeys && (() => {
-        const viewBase = proKeysViewStart ?? PRO_KEYS_MIN
-        const markers: React.JSX.Element[] = []
-        for (let pitch = viewBase; pitch < viewBase + PRO_KEYS_VISIBLE; pitch++) {
-          if (pitch % 12 === 0) { // C notes
-            const laneIdx = pitch - viewBase
-            const x = (TRACK_WIDTH / laneCount) * laneIdx - TRACK_WIDTH / 2
-            markers.push(
-              <mesh key={`pk-c-${pitch}`} position={[x, 0.001, highwayCenterZ]} rotation={[-Math.PI / 2, 0, 0]}>
-                <planeGeometry args={[0.02, HIGHWAY_LENGTH]} />
-                <meshBasicMaterial color="#A78BFA" transparent opacity={0.5} depthWrite={false} />
-              </mesh>
-            )
+      {isProKeys &&
+        (() => {
+          const viewBase = proKeysViewStart ?? PRO_KEYS_MIN
+          const markers: React.JSX.Element[] = []
+          for (let pitch = viewBase; pitch < viewBase + PRO_KEYS_VISIBLE; pitch++) {
+            if (pitch % 12 === 0) {
+              // C notes
+              const laneIdx = pitch - viewBase
+              const x = (TRACK_WIDTH / laneCount) * laneIdx - TRACK_WIDTH / 2
+              markers.push(
+                <mesh
+                  key={`pk-c-${pitch}`}
+                  position={[x, 0.001, highwayCenterZ]}
+                  rotation={[-Math.PI / 2, 0, 0]}
+                >
+                  <planeGeometry args={[0.02, HIGHWAY_LENGTH]} />
+                  <meshBasicMaterial color="#A78BFA" transparent opacity={0.5} depthWrite={false} />
+                </mesh>
+              )
+            }
           }
-        }
-        return markers
-      })()}
+          return markers
+        })()}
 
       {/* Vocals: pitch grid lines (every 6 semitones) */}
-      {isVocals && Array.from({ length: 5 }, (_, i) => {
-        const frac = (i + 1) / 6
-        const x = frac * TRACK_WIDTH - TRACK_WIDTH / 2
-        return (
-          <mesh key={`vg-${i}`} position={[x, 0.001, highwayCenterZ]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[0.01, HIGHWAY_LENGTH]} />
-            <meshBasicMaterial color="#E879F9" transparent opacity={0.2} depthWrite={false} />
-          </mesh>
-        )
-      })}
+      {isVocals &&
+        Array.from({ length: 5 }, (_, i) => {
+          const frac = (i + 1) / 6
+          const x = frac * TRACK_WIDTH - TRACK_WIDTH / 2
+          return (
+            <mesh
+              key={`vg-${i}`}
+              position={[x, 0.001, highwayCenterZ]}
+              rotation={[-Math.PI / 2, 0, 0]}
+            >
+              <planeGeometry args={[0.01, HIGHWAY_LENGTH]} />
+              <meshBasicMaterial color="#E879F9" transparent opacity={0.2} depthWrite={false} />
+            </mesh>
+          )
+        })}
     </group>
   )
 }

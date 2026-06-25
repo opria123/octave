@@ -90,7 +90,7 @@ export function validateChart(song: SongData): ValidationIssue[] {
   // Guitar/bass should generally only have one note per lane per tick — but chords are valid, so skip.
 
   // --- 6. Vocal notes with no lyrics (except percussion) ---
-  const vocalNotesWithoutLyric = vocalNotes.filter(n => !n.isPercussion && !n.lyric)
+  const vocalNotesWithoutLyric = vocalNotes.filter((n) => !n.isPercussion && !n.lyric)
   if (vocalNotesWithoutLyric.length > 5) {
     issues.push({
       severity: 'warning',

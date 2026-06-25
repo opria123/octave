@@ -65,11 +65,30 @@ export const HOTKEY_ACTION_LABELS: Record<HotkeyAction, string> = {
 export const HOTKEY_GROUPS: Array<{ title: string; actions: HotkeyAction[] }> = [
   {
     title: 'General',
-    actions: ['openSettings', 'undo', 'redo', 'copy', 'paste', 'save', 'selectAll', 'playPause', 'deleteSelection']
+    actions: [
+      'openSettings',
+      'undo',
+      'redo',
+      'copy',
+      'paste',
+      'save',
+      'selectAll',
+      'playPause',
+      'deleteSelection'
+    ]
   },
   {
     title: 'Placement',
-    actions: ['createStarPower', 'createSolo', 'toolSelect', 'toolPlace', 'toolErase', 'zoomIn', 'zoomOut', 'resetZoom']
+    actions: [
+      'createStarPower',
+      'createSolo',
+      'toolSelect',
+      'toolPlace',
+      'toolErase',
+      'zoomIn',
+      'zoomOut',
+      'resetZoom'
+    ]
   },
   {
     title: 'Movement',
@@ -77,7 +96,15 @@ export const HOTKEY_GROUPS: Array<{ title: string; actions: HotkeyAction[] }> = 
   },
   {
     title: 'Modifiers',
-    actions: ['toggleCymbalOrTap', 'toggleGhostOrHopo', 'toggleAccent', 'toggleOpenOrKick', 'toggleStarPower', 'toggleSolo', 'toggleTalkie']
+    actions: [
+      'toggleCymbalOrTap',
+      'toggleGhostOrHopo',
+      'toggleAccent',
+      'toggleOpenOrKick',
+      'toggleStarPower',
+      'toggleSolo',
+      'toggleTalkie'
+    ]
   }
 ]
 
@@ -118,7 +145,9 @@ export function normalizeHotkey(input: string): string {
     modifiers.has('Shift') ? 'Shift' : '',
     modifiers.has('Alt') ? 'Alt' : '',
     key
-  ].filter(Boolean).join('+')
+  ]
+    .filter(Boolean)
+    .join('+')
 }
 
 export function keyboardEventToHotkey(event: KeyboardEvent): string {

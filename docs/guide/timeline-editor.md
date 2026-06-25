@@ -1,20 +1,20 @@
 # Timeline & Venue Editor
 
-OCTAVE's bottom panel has two views: the **MIDI Editor** (notes per instrument) and the **Timeline Editor** — a tick-accurate timeline for everything that *isn't* a note: background video, secondary audio, and the full YARG / RB3 venue track.
+OCTAVE's bottom panel has two views: the **MIDI Editor** (notes per instrument) and the **Timeline Editor** — a tick-accurate timeline for everything that _isn't_ a note: background video, secondary audio, and the full YARG / RB3 venue track.
 
 Switch with the tab toggle in the bottom panel header, or with the keyboard shortcut for the Timeline view (see [Keyboard Shortcuts](/reference/keyboard-shortcuts)).
 
 ## What the timeline holds
 
-| Track | What it controls |
-|-------|------------------|
-| **Background video** | One or more video clips that play behind the highway during preview, with per-clip offset and trim. |
-| **Secondary audio** | Extra audio clips layered on top of the song stems (commentary, alternate masters, etc.). |
-| **Venue → Lighting** | Keyframed and automatic lighting cues — `verse`, `chorus`, `strobe_fast`, `searchlights`, `blackout_fast`, etc. |
-| **Venue → Post-processing** | Per-section camera filters — `bloom.pp`, `film_b+w.pp`, `video_trails.pp`, `photo_negative.pp`, etc. |
-| **Venue → Camera cuts** | Directed and co-op camera shots — guitarist close, bassist focus, drummer wide, crowd, etc. |
-| **Venue → Stage** | Stage effects like `FogOn` / `FogOff` and bonus FX. |
-| **Venue → Performer** | Per-character animation states (sing, play solo, intense, mellow, etc.). |
+| Track                       | What it controls                                                                                                |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Background video**        | One or more video clips that play behind the highway during preview, with per-clip offset and trim.             |
+| **Secondary audio**         | Extra audio clips layered on top of the song stems (commentary, alternate masters, etc.).                       |
+| **Venue → Lighting**        | Keyframed and automatic lighting cues — `verse`, `chorus`, `strobe_fast`, `searchlights`, `blackout_fast`, etc. |
+| **Venue → Post-processing** | Per-section camera filters — `bloom.pp`, `film_b+w.pp`, `video_trails.pp`, `photo_negative.pp`, etc.            |
+| **Venue → Camera cuts**     | Directed and co-op camera shots — guitarist close, bassist focus, drummer wide, crowd, etc.                     |
+| **Venue → Stage**           | Stage effects like `FogOn` / `FogOff` and bonus FX.                                                             |
+| **Venue → Performer**       | Per-character animation states (sing, play solo, intense, mellow, etc.).                                        |
 
 All five venue sub-tracks are written into the same `VENUE` MIDI track that YARG and Clone Hero already read. No proprietary format.
 

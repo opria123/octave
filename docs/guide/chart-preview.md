@@ -36,6 +36,7 @@ When the Place tool is active, the highway overlays a placement preview at the s
 ## Performance
 
 The preview targets 60 FPS on integrated GPUs. If you see stutter:
+
 - Lower the chart preview window size by dragging the divider
-- Disable the animated venue in *Settings → Chart Preview → Static venue*
-- Reduce the FBX gem detail in *Settings → Chart Preview → Gem quality*
+- Disable the animated venue in _Settings → Chart Preview → Static venue_
+- Reduce the FBX gem detail in _Settings → Chart Preview → Gem quality_

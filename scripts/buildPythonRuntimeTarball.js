@@ -17,7 +17,14 @@
  */
 'use strict'
 
-const { existsSync, createWriteStream, readFileSync, writeFileSync, mkdirSync, rmSync } = require('node:fs')
+const {
+  existsSync,
+  createWriteStream,
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  rmSync
+} = require('node:fs')
 const { execFileSync, spawnSync } = require('node:child_process')
 const { createHash } = require('node:crypto')
 const { join, resolve } = require('node:path')
@@ -40,9 +47,13 @@ const REQUIREMENTS_PATH = join(PROJECT_ROOT, 'resources', 'strum', 'requirements
 const OUT_DIR = join(PROJECT_ROOT, 'dist-runtime')
 const RUNTIME_DIR = join(OUT_DIR, 'python-runtime')
 
-function log(msg) { console.log(`[runtime-builder] ${msg}`) }
+function log(msg) {
+  console.log(`[runtime-builder] ${msg}`)
+}
 
-function platformKey() { return `${process.platform}-${process.arch}` }
+function platformKey() {
+  return `${process.platform}-${process.arch}`
+}
 
 function shortHash(filePath) {
   return createHash('sha256').update(readFileSync(filePath)).digest('hex').slice(0, 12)
@@ -51,7 +62,8 @@ function shortHash(filePath) {
 async function downloadFile(url, dest) {
   log(`GET ${url}`)
   const res = await fetch(url, { redirect: 'follow' })
-  if (!res.ok || !res.body) throw new Error(`Download failed: ${res.status} ${res.statusText} for ${url}`)
+  if (!res.ok || !res.body)
+    throw new Error(`Download failed: ${res.status} ${res.statusText} for ${url}`)
   const total = Number(res.headers.get('content-length') ?? 0)
   let received = 0
   let lastLogged = 0
@@ -60,15 +72,22 @@ async function downloadFile(url, dest) {
     async read() {
       try {
         const { value, done } = await reader.read()
-        if (done) { this.push(null); return }
+        if (done) {
+          this.push(null)
+          return
+        }
         received += value.byteLength
         if (total > 0 && received - lastLogged > 25_000_000) {
           const pct = Math.round((received / total) * 100)
-          log(`  ${pct}% (${(received / 1_000_000).toFixed(1)}/${(total / 1_000_000).toFixed(1)} MB)`)
+          log(
+            `  ${pct}% (${(received / 1_000_000).toFixed(1)}/${(total / 1_000_000).toFixed(1)} MB)`
+          )
           lastLogged = received
         }
         this.push(Buffer.from(value))
-      } catch (err) { this.destroy(err) }
+      } catch (err) {
+        this.destroy(err)
+      }
     }
   })
   await pipeline(node, createWriteStream(dest))
@@ -89,7 +108,11 @@ function extractTarGz(archive, dest) {
   try {
     execFileSync('tar', ['-xzf', archiveName], { stdio: 'inherit', cwd: destAbs })
   } finally {
-    try { unlinkSync(stagedArchive) } catch { /* ignore */ }
+    try {
+      unlinkSync(stagedArchive)
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -111,9 +134,18 @@ function splitRequirements(text) {
     const t = line.trim()
     if (!t || t.startsWith('#')) return true
     const req = t.split('#')[0].trim()
-    if (req.startsWith('basic-pitch')) { basicPitch = req; return false }
-    if (req.startsWith('demucs==') || req === 'demucs') { demucs = req; return false }
-    if (req.startsWith('torch==') || req.startsWith('torchaudio==')) { torch.push(req); return false }
+    if (req.startsWith('basic-pitch')) {
+      basicPitch = req
+      return false
+    }
+    if (req.startsWith('demucs==') || req === 'demucs') {
+      demucs = req
+      return false
+    }
+    if (req.startsWith('torch==') || req.startsWith('torchaudio==')) {
+      torch.push(req)
+      return false
+    }
     return true
   })
   // Match runtimeBootstrap: rewrite tensorflow -> tensorflow-cpu on Linux.
@@ -131,7 +163,8 @@ function splitRequirements(text) {
 async function main() {
   const target = TARGETS[platformKey()]
   if (!target) throw new Error(`No target for ${platformKey()}`)
-  if (!existsSync(REQUIREMENTS_PATH)) throw new Error(`requirements.txt not found at ${REQUIREMENTS_PATH}`)
+  if (!existsSync(REQUIREMENTS_PATH))
+    throw new Error(`requirements.txt not found at ${REQUIREMENTS_PATH}`)
 
   const hash = shortHash(REQUIREMENTS_PATH)
   const fullHash = createHash('sha256').update(readFileSync(REQUIREMENTS_PATH)).digest('hex')
@@ -160,9 +193,15 @@ async function main() {
   const split = splitRequirements(readFileSync(REQUIREMENTS_PATH, 'utf-8'))
   if (split.torch.length > 0) {
     runPython(pythonExe, [
-      '-m', 'pip', 'install', '--upgrade', '--no-build-isolation',
-      '--index-url', 'https://download.pytorch.org/whl/cpu',
-      '--extra-index-url', 'https://pypi.org/simple',
+      '-m',
+      'pip',
+      'install',
+      '--upgrade',
+      '--no-build-isolation',
+      '--index-url',
+      'https://download.pytorch.org/whl/cpu',
+      '--extra-index-url',
+      'https://pypi.org/simple',
       ...split.torch
     ])
   }
@@ -180,20 +219,43 @@ async function main() {
   //    requires MSVC to build from sdist; demucs's runtime deps are listed
   //    explicitly in requirements.txt).
   if (split.demucs) {
-    runPython(pythonExe, ['-m', 'pip', 'install', '--upgrade', '--no-deps', '--prefer-binary', split.demucs])
+    runPython(pythonExe, [
+      '-m',
+      'pip',
+      'install',
+      '--upgrade',
+      '--no-deps',
+      '--prefer-binary',
+      split.demucs
+    ])
   }
 
   // 5. basic-pitch (--no-deps)
   if (split.basicPitch) {
-    runPython(pythonExe, ['-m', 'pip', 'install', '--upgrade', '--no-deps', '--prefer-binary', split.basicPitch])
+    runPython(pythonExe, [
+      '-m',
+      'pip',
+      'install',
+      '--upgrade',
+      '--no-deps',
+      '--prefer-binary',
+      split.basicPitch
+    ])
   }
 
   // 5. state file (matches runtimeBootstrap.writeState shape)
-  writeFileSync(join(RUNTIME_DIR, '.octave-bootstrap.json'), JSON.stringify({
-    pythonVersion: PYTHON_VERSION,
-    pythonBuildTag: PYTHON_BUILD_STANDALONE_TAG,
-    requirementsHash: fullHash
-  }, null, 2))
+  writeFileSync(
+    join(RUNTIME_DIR, '.octave-bootstrap.json'),
+    JSON.stringify(
+      {
+        pythonVersion: PYTHON_VERSION,
+        pythonBuildTag: PYTHON_BUILD_STANDALONE_TAG,
+        requirementsHash: fullHash
+      },
+      null,
+      2
+    )
+  )
 
   // 6. tarball
   log(`Tarballing -> ${assetName}`)
@@ -207,8 +269,14 @@ async function main() {
   log(`DONE: ${assetPath}`)
   // Surface to GitHub Actions via $GITHUB_OUTPUT.
   if (process.env.GITHUB_OUTPUT) {
-    require('node:fs').appendFileSync(process.env.GITHUB_OUTPUT, `asset_path=${assetPath}\nasset_name=${assetName}\nrequirements_hash=${hash}\n`)
+    require('node:fs').appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `asset_path=${assetPath}\nasset_name=${assetName}\nrequirements_hash=${hash}\n`
+    )
   }
 }
 
-main().catch((err) => { console.error(err); process.exit(1) })
+main().catch((err) => {
+  console.error(err)
+  process.exit(1)
+})

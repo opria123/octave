@@ -102,7 +102,7 @@ describe('sngPacker', () => {
 
     const count = fileBuf.readBigUInt64LE(cursor)
     expect(count).toBe(4n) // name, artist, charter, is_valid
-    
+
     const parsedMetadata: Record<string, string> = {}
     let metaOffset = cursor + 8
     for (let i = 0; i < Number(count); i++) {
@@ -148,8 +148,8 @@ describe('sngPacker', () => {
       indexEntries.push({ name, size, offset })
     }
 
-    expect(indexEntries.map(e => e.name)).toContain('notes.chart')
-    expect(indexEntries.map(e => e.name)).toContain('guitar.ogg')
+    expect(indexEntries.map((e) => e.name)).toContain('notes.chart')
+    expect(indexEntries.map((e) => e.name)).toContain('guitar.ogg')
 
     cursor += Number(fileIndexSecLen)
 
@@ -165,7 +165,7 @@ describe('sngPacker', () => {
       const start = Number(file.offset)
       const end = start + Number(file.size)
       const encryptedData = fileBuf.subarray(start, end)
-      
+
       const decryptedData = Buffer.from(encryptedData)
       for (let i = 0; i < decryptedData.length; i++) {
         decryptedData[i] ^= keystream[i % 256]
@@ -189,17 +189,21 @@ describe('sngPacker', () => {
     const badSongDir = join(testDir, 'bad_song_no_chart')
     await mkdir(badSongDir, { recursive: true })
     await writeFile(join(badSongDir, 'guitar.ogg'), 'OGG MOCK DATA')
-    
+
     const sngOutPath = join(testDir, 'should_fail.sng')
-    await expect(packSng(badSongDir, {}, sngOutPath)).rejects.toThrow('Song directory does not contain a notes.chart or notes.mid file.')
+    await expect(packSng(badSongDir, {}, sngOutPath)).rejects.toThrow(
+      'Song directory does not contain a notes.chart or notes.mid file.'
+    )
   })
 
   it('throws an error if a filename in the folder exceeds 255 bytes', async () => {
     const badSongDir = join(testDir, 'bad_song_long_name')
     await mkdir(badSongDir, { recursive: true })
     await writeFile(join(badSongDir, 'notes.chart'), 'MOCK CHART')
-    
+
     const sngOutPath = join(testDir, 'should_fail.sng')
-    await expect(packSng(badSongDir, {}, sngOutPath)).rejects.toThrow('Filename is too long for SNG format')
+    await expect(packSng(badSongDir, {}, sngOutPath)).rejects.toThrow(
+      'Filename is too long for SNG format'
+    )
   })
 })

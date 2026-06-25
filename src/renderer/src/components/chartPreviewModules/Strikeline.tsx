@@ -3,9 +3,17 @@ import { useMemo, useRef, useContext } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import {
-  TRACK_WIDTH, STRIKE_LINE_POS, COLORS, DRUM_KICK_COLOR,
-  DRUM_FRET_SCALE_X, GUITAR_FRET_SCALE_X, FRET_INACTIVE_COLOR,
-  getLaneConfig, getFretX, PRO_KEYS_COLOR, VOCAL_COLOR
+  TRACK_WIDTH,
+  STRIKE_LINE_POS,
+  COLORS,
+  DRUM_KICK_COLOR,
+  DRUM_FRET_SCALE_X,
+  GUITAR_FRET_SCALE_X,
+  FRET_INACTIVE_COLOR,
+  getLaneConfig,
+  getFretX,
+  PRO_KEYS_COLOR,
+  VOCAL_COLOR
 } from './constants'
 import type { InstrumentRenderType } from './constants'
 import { HighwayAssetsContext } from './AssetProvider'
@@ -117,7 +125,12 @@ function FretPad({
       {isPressed && (
         <mesh position={[0, 0.04, 0]}>
           <sphereGeometry args={[0.1, 12, 12]} />
-          <meshBasicMaterial color={color} transparent opacity={0.3 * pressBrightness} toneMapped={false} />
+          <meshBasicMaterial
+            color={color}
+            transparent
+            opacity={0.3 * pressBrightness}
+            toneMapped={false}
+          />
         </mesh>
       )}
     </group>
@@ -139,8 +152,10 @@ export function Strikeline({
   const profile = isProKeys
     ? { notes: [PRO_KEYS_COLOR], fretInner: ['#5B4A8A'] }
     : isVocals
-    ? { notes: [VOCAL_COLOR], fretInner: ['#9A4AAA'] }
-    : instrumentType === 'proGuitar' ? COLORS.proGuitar : COLORS[instrumentType]
+      ? { notes: [VOCAL_COLOR], fretInner: ['#9A4AAA'] }
+      : instrumentType === 'proGuitar'
+        ? COLORS.proGuitar
+        : COLORS[instrumentType]
   const { laneCount, laneWidth } = getLaneConfig(instrumentType)
   const isDrum = instrumentType === 'drums'
   const assets = useContext(HighwayAssetsContext)
@@ -170,35 +185,44 @@ export function Strikeline({
       </mesh>
 
       {/* Glow under pressed lanes */}
-      {!isProKeys && !isVocals && profile.notes.map((color, i) => {
-        const x = getFretX(i, laneCount)
-        const pressed = pressedLanes.find((p) => p.index === i)
-        const brightness = pressed?.brightness ?? 0
-        return brightness > 0 ? (
-          <mesh key={`glow-${i}`} position={[x, 0.002, STRIKE_LINE_POS]}>
-            <boxGeometry args={[laneWidth * 0.9, 0.003, 0.25]} />
-            <meshBasicMaterial color={color} transparent opacity={brightness * 0.4} toneMapped={false} />
-          </mesh>
-        ) : null
-      })}
+      {!isProKeys &&
+        !isVocals &&
+        profile.notes.map((color, i) => {
+          const x = getFretX(i, laneCount)
+          const pressed = pressedLanes.find((p) => p.index === i)
+          const brightness = pressed?.brightness ?? 0
+          return brightness > 0 ? (
+            <mesh key={`glow-${i}`} position={[x, 0.002, STRIKE_LINE_POS]}>
+              <boxGeometry args={[laneWidth * 0.9, 0.003, 0.25]} />
+              <meshBasicMaterial
+                color={color}
+                transparent
+                opacity={brightness * 0.4}
+                toneMapped={false}
+              />
+            </mesh>
+          ) : null
+        })}
 
       {/* Individual fret pads — not for proKeys/vocals (too many lanes) */}
-      {!isProKeys && !isVocals && profile.notes.map((color, i) => {
-        const x = getFretX(i, laneCount)
-        const pressed = pressedLanes.find((p) => p.index === i)
-        return (
-          <FretPad
-            key={i}
-            x={x}
-            color={color}
-            innerColor={profile.fretInner[i]}
-            isPressed={!!pressed}
-            pressBrightness={pressed?.brightness ?? 0}
-            isDrum={isDrum}
-            laneWidth={laneWidth}
-          />
-        )
-      })}
+      {!isProKeys &&
+        !isVocals &&
+        profile.notes.map((color, i) => {
+          const x = getFretX(i, laneCount)
+          const pressed = pressedLanes.find((p) => p.index === i)
+          return (
+            <FretPad
+              key={i}
+              x={x}
+              color={color}
+              innerColor={profile.fretInner[i]}
+              isPressed={!!pressed}
+              pressBrightness={pressed?.brightness ?? 0}
+              isDrum={isDrum}
+              laneWidth={laneWidth}
+            />
+          )
+        })}
 
       {/* ProKeys/Vocals: simplified strikeline glow bar instead of individual pads */}
       {(isProKeys || isVocals) && (
@@ -215,53 +239,70 @@ export function Strikeline({
         </mesh>
       )}
 
-      {isDrum && (() => {
-        const kickPress = pressedLanes.find((p) => p.index === -1)
-        const kickBrightness = kickPress?.brightness ?? 0
-        return (
-        <>
-          <mesh position={[0, 0.002, STRIKE_LINE_POS + 0.2]}>
-            <boxGeometry args={[TRACK_WIDTH * 0.95, 0.008, 0.08]} />
-            <meshStandardMaterial
-              color={DRUM_KICK_COLOR}
-              emissive={DRUM_KICK_COLOR}
-              emissiveIntensity={0.5 + kickBrightness * 1.5}
-              transparent
-              opacity={0.6 + kickBrightness * 0.4}
-              toneMapped={false}
-            />
-          </mesh>
-          {kickBrightness > 0 && (
-            <mesh position={[0, 0.003, STRIKE_LINE_POS + 0.2]}>
-              <boxGeometry args={[TRACK_WIDTH, 0.004, 0.16]} />
-              <meshBasicMaterial color={DRUM_KICK_COLOR} transparent opacity={kickBrightness * 0.5} depthWrite={false} toneMapped={false} />
-            </mesh>
-          )}
-          {[-1, 1].map((side) => (
-            <group key={side} position={[side * (TRACK_WIDTH / 2 + 0.0152), 0.01, STRIKE_LINE_POS]} scale={[side * 0.5442, 0.5442, 0.5442]} rotation={[-Math.PI / 2, 0, 0]}>
-              {assets?.kickFretMeshes?.map((m, i) => (
-                <mesh key={i} geometry={m.geometry}>
-                  <meshStandardMaterial
+      {isDrum &&
+        (() => {
+          const kickPress = pressedLanes.find((p) => p.index === -1)
+          const kickBrightness = kickPress?.brightness ?? 0
+          return (
+            <>
+              <mesh position={[0, 0.002, STRIKE_LINE_POS + 0.2]}>
+                <boxGeometry args={[TRACK_WIDTH * 0.95, 0.008, 0.08]} />
+                <meshStandardMaterial
+                  color={DRUM_KICK_COLOR}
+                  emissive={DRUM_KICK_COLOR}
+                  emissiveIntensity={0.5 + kickBrightness * 1.5}
+                  transparent
+                  opacity={0.6 + kickBrightness * 0.4}
+                  toneMapped={false}
+                />
+              </mesh>
+              {kickBrightness > 0 && (
+                <mesh position={[0, 0.003, STRIKE_LINE_POS + 0.2]}>
+                  <boxGeometry args={[TRACK_WIDTH, 0.004, 0.16]} />
+                  <meshBasicMaterial
                     color={DRUM_KICK_COLOR}
-                    emissive={DRUM_KICK_COLOR}
-                    emissiveIntensity={0.8 + kickBrightness * 1.2}
-                    map={assets?.kickFretMap ?? null}
-                    metalness={0.5}
-                    roughness={0.3}
+                    transparent
+                    opacity={kickBrightness * 0.5}
+                    depthWrite={false}
                     toneMapped={false}
                   />
                 </mesh>
+              )}
+              {[-1, 1].map((side) => (
+                <group
+                  key={side}
+                  position={[side * (TRACK_WIDTH / 2 + 0.0152), 0.01, STRIKE_LINE_POS]}
+                  scale={[side * 0.5442, 0.5442, 0.5442]}
+                  rotation={[-Math.PI / 2, 0, 0]}
+                >
+                  {assets?.kickFretMeshes?.map((m, i) => (
+                    <mesh key={i} geometry={m.geometry}>
+                      <meshStandardMaterial
+                        color={DRUM_KICK_COLOR}
+                        emissive={DRUM_KICK_COLOR}
+                        emissiveIntensity={0.8 + kickBrightness * 1.2}
+                        map={assets?.kickFretMap ?? null}
+                        metalness={0.5}
+                        roughness={0.3}
+                        toneMapped={false}
+                      />
+                    </mesh>
+                  ))}
+                </group>
               ))}
-            </group>
-          ))}
-        </>
-        )
-      })()}
+            </>
+          )
+        })()}
 
       {!isDrum && (
         <>
           {[-1, 1].map((side) => (
-            <group key={side} position={[side * (TRACK_WIDTH / 2 + 0.0152), 0.01, STRIKE_LINE_POS]} scale={[side * 0.5442, 0.5442, 0.5442]} rotation={[-Math.PI / 2, 0, 0]}>
+            <group
+              key={side}
+              position={[side * (TRACK_WIDTH / 2 + 0.0152), 0.01, STRIKE_LINE_POS]}
+              scale={[side * 0.5442, 0.5442, 0.5442]}
+              rotation={[-Math.PI / 2, 0, 0]}
+            >
               {assets?.kickFretMeshes?.map((m, i) => (
                 <mesh key={i} geometry={m.geometry}>
                   <meshStandardMaterial

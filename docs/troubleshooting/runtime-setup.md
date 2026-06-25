@@ -11,11 +11,11 @@ OCTAVE bundles a Python 3.11 runtime. The first time you click **Auto-Chart**, O
 
 These are cached locally and never re-downloaded:
 
-| Platform | Cache path |
-|----------|------------|
-| Windows | `%APPDATA%\octave\python-runtime\` |
-| macOS | `~/Library/Application Support/octave/python-runtime\` |
-| Linux | `~/.config/octave/python-runtime\` |
+| Platform | Cache path                                             |
+| -------- | ------------------------------------------------------ |
+| Windows  | `%APPDATA%\octave\python-runtime\`                     |
+| macOS    | `~/Library/Application Support/octave/python-runtime\` |
+| Linux    | `~/.config/octave/python-runtime\`                     |
 
 **To wipe the runtime** (e.g. corrupted download): delete that folder. OCTAVE re-downloads on next run.
 
@@ -42,7 +42,7 @@ Then just run `npm run dev` — OCTAVE picks up `.venv` automatically.
 
 ## Custom Python interpreter
 
-In *Settings → Auto-Chart → Custom Python interpreter*, point to any Python 3.11 binary that has `resources/strum/requirements.txt` installed. This sets `OCTAVE_STRUM_PYTHON` for you.
+In _Settings → Auto-Chart → Custom Python interpreter_, point to any Python 3.11 binary that has `resources/strum/requirements.txt` installed. This sets `OCTAVE_STRUM_PYTHON` for you.
 
 ## GPU acceleration
 
@@ -52,4 +52,4 @@ The bundled runtime detects:
 - **Metal** on macOS — used automatically.
 - **CPU fallback** — always available; slower but works on every machine.
 
-To force CPU even when a GPU is available, tick *Settings → Auto-Chart → Force CPU*.
+To force CPU even when a GPU is available, tick _Settings → Auto-Chart → Force CPU_.

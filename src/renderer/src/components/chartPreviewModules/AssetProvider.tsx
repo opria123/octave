@@ -23,8 +23,14 @@ export function AssetProvider({ children }: { children: React.ReactNode }): Reac
   const trackTrimFBX = useFBX('./highway-assets/models/TrackTrim.fbx')
 
   const [
-    noteMap, noteEmission, fretMap, fretShine, kickMap,
-    kickFretMap, trackTrimMap, sidePattern
+    noteMap,
+    noteEmission,
+    fretMap,
+    fretShine,
+    kickMap,
+    kickFretMap,
+    trackTrimMap,
+    sidePattern
   ] = useTexture([
     './highway-assets/textures/NormalNote.png',
     './highway-assets/textures/NormalNoteEmission.png',
@@ -68,10 +74,28 @@ export function AssetProvider({ children }: { children: React.ReactNode }): Reac
       trackTrimMap,
       sidePattern
     }
-  }, [normalFBX, hopoFBX, tapFBX, ghostFBX, accentFBX, cymbalFBX, fretFBX,
-      drumFretBaseFBX, drumFretTopFBX, kickFBX, kickFretFBX, trackTrimFBX,
-      noteMap, noteEmission, fretMap, fretShine, kickMap, kickFretMap,
-      trackTrimMap, sidePattern])
+  }, [
+    normalFBX,
+    hopoFBX,
+    tapFBX,
+    ghostFBX,
+    accentFBX,
+    cymbalFBX,
+    fretFBX,
+    drumFretBaseFBX,
+    drumFretTopFBX,
+    kickFBX,
+    kickFretFBX,
+    trackTrimFBX,
+    noteMap,
+    noteEmission,
+    fretMap,
+    fretShine,
+    kickMap,
+    kickFretMap,
+    trackTrimMap,
+    sidePattern
+  ])
 
   return <HighwayAssetsContext.Provider value={assets}>{children}</HighwayAssetsContext.Provider>
 }

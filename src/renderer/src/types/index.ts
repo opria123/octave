@@ -1,11 +1,27 @@
 // Chart Editor Type Definitions
 
 // Note types for different instruments
-export type Instrument = 'drums' | 'guitar' | 'bass' | 'vocals' | 'keys' | 'proKeys' | 'proGuitar' | 'proBass'
+export type Instrument =
+  | 'drums'
+  | 'guitar'
+  | 'bass'
+  | 'vocals'
+  | 'keys'
+  | 'proKeys'
+  | 'proGuitar'
+  | 'proBass'
 export type Difficulty = 'expert' | 'hard' | 'medium' | 'easy'
 
 // Drum pad lanes (Pro Drums)
-export type DrumLane = 'kick' | 'snare' | 'yellowTom' | 'yellowCymbal' | 'blueTom' | 'blueCymbal' | 'greenTom' | 'greenCymbal'
+export type DrumLane =
+  | 'kick'
+  | 'snare'
+  | 'yellowTom'
+  | 'yellowCymbal'
+  | 'blueTom'
+  | 'blueCymbal'
+  | 'greenTom'
+  | 'greenCymbal'
 
 // Guitar/Bass fret lanes (5-fret)
 export type GuitarLane = 'open' | 'green' | 'red' | 'yellow' | 'blue' | 'orange'
@@ -27,7 +43,7 @@ export interface Note {
   difficulty: Difficulty
   lane: DrumLane | GuitarLane | number // number for vocals pitch
   velocity: number // 0-127
-  flags?: NoteFlags  // Pro Guitar/Bass specific
+  flags?: NoteFlags // Pro Guitar/Bass specific
   string?: ProGuitarString // Which string (1=high E, 6=low E)
   fret?: ProGuitarFret // Which fret (0=open, 1-22)
 }
@@ -47,19 +63,19 @@ export type HarmonyPart = 0 | 1 | 2 | 3 // 0 = main (PART VOCALS), 1-3 = HARM1-3
 // Vocal-specific note with lyrics and pitch
 export interface VocalNote extends Note {
   instrument: 'vocals'
-  lyric?: string               // Lyric syllable text
-  harmonyPart: HarmonyPart     // Which vocal track (main or harmony 1-3)
-  isSlide?: boolean            // Pitch slide from previous note ('+' prefix in MIDI)
-  isPercussion?: boolean       // Non-pitched percussion hit (MIDI note 96-97)
-  isPitchless?: boolean        // Talky/unpitched section (note 2 or range indicator)
+  lyric?: string // Lyric syllable text
+  harmonyPart: HarmonyPart // Which vocal track (main or harmony 1-3)
+  isSlide?: boolean // Pitch slide from previous note ('+' prefix in MIDI)
+  isPercussion?: boolean // Non-pitched percussion hit (MIDI note 96-97)
+  isPitchless?: boolean // Talky/unpitched section (note 2 or range indicator)
 }
 
 // Vocal phrase - groups vocal notes into singable phrases
 export interface VocalPhrase {
   id: string
-  tick: number                 // Start tick of phrase
-  duration: number             // Duration in ticks
-  harmonyPart: HarmonyPart     // Which vocal track
+  tick: number // Start tick of phrase
+  duration: number // Duration in ticks
+  harmonyPart: HarmonyPart // Which vocal track
 }
 
 // Time signature event
@@ -101,7 +117,7 @@ export interface SongMetadata {
 // Video sync settings
 export interface VideoClip {
   id: string
-  startMs: number  // Position on the timeline (in ms from song start)
+  startMs: number // Position on the timeline (in ms from song start)
   sourceStartMs: number // Where in the source video this clip starts
   durationMs: number // Duration of this clip
 }
@@ -310,13 +326,13 @@ export type EditingTool = 'select' | 'place' | 'erase'
 
 // Toggle modifiers for note placement (sticky toggles, not held keys)
 export interface NoteModifiers {
-  cymbalOrTap: boolean   // Shift-equivalent: cymbal (drums) / tap (guitar)
-  ghostOrHopo: boolean   // Alt-equivalent: ghost (drums) / HOPO (guitar)
-  accent: boolean        // Accent for all instruments
-  openOrKick: boolean    // Open strum (guitar/bass) / kick (drums)
-  starPower: boolean     // Star Power phrase placement mode
-  solo: boolean           // Solo section placement mode
-  talkie: boolean        // Vocal talkie (pitchless/spoken note)
+  cymbalOrTap: boolean // Shift-equivalent: cymbal (drums) / tap (guitar)
+  ghostOrHopo: boolean // Alt-equivalent: ghost (drums) / HOPO (guitar)
+  accent: boolean // Accent for all instruments
+  openOrKick: boolean // Open strum (guitar/bass) / kick (drums)
+  starPower: boolean // Star Power phrase placement mode
+  solo: boolean // Solo section placement mode
+  talkie: boolean // Vocal talkie (pitchless/spoken note)
 }
 
 export interface UIState {
@@ -338,7 +354,10 @@ export interface UIState {
 }
 
 export interface SelectedVenueEventRef {
-  lane: keyof Pick<VenueTrackData, 'lighting' | 'postProcessing' | 'stage' | 'cameraCuts' | 'performer'>
+  lane: keyof Pick<
+    VenueTrackData,
+    'lighting' | 'postProcessing' | 'stage' | 'cameraCuts' | 'performer'
+  >
   id: string
 }
 

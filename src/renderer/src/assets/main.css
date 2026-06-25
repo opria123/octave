@@ -3,45 +3,45 @@
 /* CSS Variables - Dark Theme */
 :root {
   /* Background colors */
-    --bg-primary: #111315;
-    --bg-secondary: #171a1d;
-    --bg-tertiary: #1f2428;
-    --bg-hover: #283036;
-    --bg-active: #313b44;
+  --bg-primary: #111315;
+  --bg-secondary: #171a1d;
+  --bg-tertiary: #1f2428;
+  --bg-hover: #283036;
+  --bg-active: #313b44;
 
   /* Text colors */
-    --text-primary: #e7ecef;
-    --text-secondary: #afb8bf;
-    --text-muted: #78848d;
+  --text-primary: #e7ecef;
+  --text-secondary: #afb8bf;
+  --text-muted: #78848d;
 
   /* Border colors */
-    --border-color: #2c343b;
-    --border-color-hover: #3a454e;
+  --border-color: #2c343b;
+  --border-color-hover: #3a454e;
 
   /* Accent colors */
-    --accent-color: #f2a65a;
-    --accent-color-hover: #ffb56f;
-    --accent-color-transparent: rgba(242, 166, 90, 0.2);
-    --accent-secondary: #41c6b8;
-    --accent-secondary-transparent: rgba(65, 198, 184, 0.18);
+  --accent-color: #f2a65a;
+  --accent-color-hover: #ffb56f;
+  --accent-color-transparent: rgba(242, 166, 90, 0.2);
+  --accent-secondary: #41c6b8;
+  --accent-secondary-transparent: rgba(65, 198, 184, 0.18);
 
   /* Status colors */
-    --success-color: #49d17d;
-    --warning-color: #f2a65a;
-    --danger-color: #f06d6d;
-    --danger-color-hover: #ff8282;
+  --success-color: #49d17d;
+  --warning-color: #f2a65a;
+  --danger-color: #f06d6d;
+  --danger-color-hover: #ff8282;
 
   /* Scrollbar */
-    --scrollbar-thumb: #566470;
-    --scrollbar-thumb-hover: #6a7a88;
+  --scrollbar-thumb: #566470;
+  --scrollbar-thumb-hover: #6a7a88;
 
   /* Shadows */
-    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.28);
-    --shadow-md: 0 6px 14px rgba(0, 0, 0, 0.34);
-    --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.42);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 6px 14px rgba(0, 0, 0, 0.34);
+  --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.42);
 
-    --font-ui: 'Aptos', 'Segoe UI Variable', 'Segoe UI', 'Inter', 'Helvetica Neue', sans-serif;
-    --font-mono: 'Cascadia Code', 'IBM Plex Mono', 'Consolas', monospace;
+  --font-ui: 'Aptos', 'Segoe UI Variable', 'Segoe UI', 'Inter', 'Helvetica Neue', sans-serif;
+  --font-mono: 'Cascadia Code', 'IBM Plex Mono', 'Consolas', monospace;
 }
 
 /* Reset and base styles */
@@ -64,8 +64,7 @@ body {
   color: var(--text-primary);
   background:
     radial-gradient(circle at 20% -10%, rgba(242, 166, 90, 0.12), transparent 45%),
-    radial-gradient(circle at 100% 0%, rgba(65, 198, 184, 0.1), transparent 40%),
-    var(--bg-primary);
+    radial-gradient(circle at 100% 0%, rgba(65, 198, 184, 0.1), transparent 40%), var(--bg-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -157,4 +156,3 @@ a:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-

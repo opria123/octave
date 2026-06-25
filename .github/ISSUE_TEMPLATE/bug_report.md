@@ -1,7 +1,7 @@
 ---
 name: Bug Report
 about: Report a bug or unexpected behavior
-title: "[Bug] "
+title: '[Bug] '
 labels: bug
 assignees: ''
 ---
@@ -11,6 +11,7 @@ A clear and concise description of what the bug is.
 
 **To Reproduce**
 Steps to reproduce the behavior:
+
 1. Open '...'
 2. Click on '...'
 3. See error
@@ -22,6 +23,7 @@ What you expected to happen.
 If applicable, add screenshots to help explain the problem.
 
 **Environment:**
+
 - OS: [e.g. Windows 11, macOS 14, Ubuntu 24.04]
 - OCTAVE version: [e.g. v0.2.0]
 - File format: [.mid / .chart]

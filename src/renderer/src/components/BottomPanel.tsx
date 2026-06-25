@@ -4,11 +4,15 @@ import { MidiEditor } from './MidiEditor'
 import { VideoEditor } from './VideoEditor'
 import './BottomPanel.css'
 
-export function BottomPanel({ showMidi = true, showVideo = true }: { showMidi?: boolean; showVideo?: boolean }): React.JSX.Element {
+export function BottomPanel({
+  showMidi = true,
+  showVideo = true
+}: {
+  showMidi?: boolean
+  showVideo?: boolean
+}): React.JSX.Element {
   const { bottomPanelTab, setBottomPanelTab, setFocusedPanel } = useUIStore()
-  const effectiveTab = showMidi
-    ? (showVideo ? bottomPanelTab : 'midi')
-    : 'video'
+  const effectiveTab = showMidi ? (showVideo ? bottomPanelTab : 'midi') : 'video'
 
   if (!showMidi && !showVideo) {
     return (
@@ -16,7 +20,9 @@ export function BottomPanel({ showMidi = true, showVideo = true }: { showMidi?: 
         <div className="empty-state" style={{ height: '100%' }}>
           <div className="empty-state-icon">🧰</div>
           <div className="empty-state-title">Bottom Panels Hidden</div>
-          <div className="empty-state-description">Use View menu to re-enable Piano Roll or Timeline.</div>
+          <div className="empty-state-description">
+            Use View menu to re-enable Piano Roll or Timeline.
+          </div>
         </div>
       </div>
     )
@@ -45,10 +51,7 @@ export function BottomPanel({ showMidi = true, showVideo = true }: { showMidi?: 
       </div>
 
       {/* Tab content */}
-      <div
-        className="bottom-panel-content"
-        onFocus={() => setFocusedPanel(effectiveTab)}
-      >
+      <div className="bottom-panel-content" onFocus={() => setFocusedPanel(effectiveTab)}>
         {effectiveTab === 'midi' ? <MidiEditor /> : <VideoEditor />}
       </div>
     </div>

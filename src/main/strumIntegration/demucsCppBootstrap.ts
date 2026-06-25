@@ -39,8 +39,7 @@ const WEIGHTS_URL =
 // this platform, the bootstrap surfaces a clear error. The CI workflow
 // `.github/workflows/demucs-cpp-binaries.yml` is responsible for
 // publishing per-platform tarballs to this release.
-const BINARY_BASE_URL =
-  'https://github.com/opria123/octave/releases/download/demucs-cpp-cache'
+const BINARY_BASE_URL = 'https://github.com/opria123/octave/releases/download/demucs-cpp-cache'
 
 type BinaryTarget = {
   /** Tarball asset name on the demucs-cpp-cache release. */
@@ -98,8 +97,8 @@ function getTarget(): BinaryTarget {
   const target = TARGETS[`${process.platform}-${process.arch}`]
   if (!target) {
     throw new Error(
-      `OCTAVE does not yet ship a demucs.cpp binary for `
-        + `${process.platform}-${process.arch}. Supported: ${Object.keys(TARGETS).join(', ')}.`
+      `OCTAVE does not yet ship a demucs.cpp binary for ` +
+        `${process.platform}-${process.arch}. Supported: ${Object.keys(TARGETS).join(', ')}.`
     )
   }
   return target
@@ -201,11 +200,11 @@ export async function ensureDemucsCpp(
   const state = readState()
 
   if (
-    existsSync(binaryPath)
-    && existsSync(weightsPath)
-    && state
-    && state.binaryVersion === DEMUCS_CPP_BIN_VERSION
-    && state.weightsUrl === WEIGHTS_URL
+    existsSync(binaryPath) &&
+    existsSync(weightsPath) &&
+    state &&
+    state.binaryVersion === DEMUCS_CPP_BIN_VERSION &&
+    state.weightsUrl === WEIGHTS_URL
   ) {
     return { binaryPath, weightsPath }
   }
@@ -222,14 +221,18 @@ export async function ensureDemucsCpp(
         const target = getTarget()
         const archivePath = join(root, target.asset)
         const url = `${BINARY_BASE_URL}/${target.asset}`
-        emitProgress(runId, `Downloading demucs.cpp binary for ${process.platform}-${process.arch}...`, 5)
+        emitProgress(
+          runId,
+          `Downloading demucs.cpp binary for ${process.platform}-${process.arch}...`,
+          5
+        )
         try {
           await downloadFile(url, archivePath, runId, 'demucs.cpp binary')
         } catch (err) {
           throw new Error(
-            `Failed to download demucs.cpp binary from ${url}. `
-              + `The CI workflow may not have published a binary for this platform yet. `
-              + `Original error: ${err instanceof Error ? err.message : String(err)}`
+            `Failed to download demucs.cpp binary from ${url}. ` +
+              `The CI workflow may not have published a binary for this platform yet. ` +
+              `Original error: ${err instanceof Error ? err.message : String(err)}`
           )
         }
         emitProgress(runId, 'Extracting demucs.cpp binary...', 25)
@@ -239,7 +242,9 @@ export async function ensureDemucsCpp(
           await rm(archivePath, { force: true })
         }
         if (!existsSync(binaryPath)) {
-          throw new Error(`demucs.cpp tarball did not contain expected executable at ${target.executableRel}`)
+          throw new Error(
+            `demucs.cpp tarball did not contain expected executable at ${target.executableRel}`
+          )
         }
         if (process.platform !== 'win32') {
           await chmod(binaryPath, 0o755)
@@ -282,12 +287,14 @@ export function getDemucsCppStatus(): DemucsCppStatus {
   const weightsPath = supported ? getWeightsPath() : ''
   const state = readState()
   const ready = Boolean(
-    supported
-      && binaryPath && existsSync(binaryPath)
-      && weightsPath && existsSync(weightsPath)
-      && state
-      && state.binaryVersion === DEMUCS_CPP_BIN_VERSION
-      && state.weightsUrl === WEIGHTS_URL
+    supported &&
+    binaryPath &&
+    existsSync(binaryPath) &&
+    weightsPath &&
+    existsSync(weightsPath) &&
+    state &&
+    state.binaryVersion === DEMUCS_CPP_BIN_VERSION &&
+    state.weightsUrl === WEIGHTS_URL
   )
   return {
     binaryPath,

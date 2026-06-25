@@ -52,8 +52,12 @@ export function BeatGrid({
       {beatLines.map((line, i) => {
         const thickness = line.type === 'measure' ? 0.07 : line.type === 'strong' ? 0.05 : 0.03
         const alpha = line.type === 'measure' ? 0.6 : line.type === 'strong' ? 0.4 : 0.3
-        const color = line.type === 'measure' ? COLORS.beatlineMeasure
-          : line.type === 'strong' ? COLORS.beatlineStrong : COLORS.beatlineWeak
+        const color =
+          line.type === 'measure'
+            ? COLORS.beatlineMeasure
+            : line.type === 'strong'
+              ? COLORS.beatlineStrong
+              : COLORS.beatlineWeak
         return (
           <mesh key={i} position={[0, 0.001, line.z]}>
             <boxGeometry args={[TRACK_WIDTH, 0.003, thickness]} />

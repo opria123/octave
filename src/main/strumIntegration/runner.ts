@@ -8,7 +8,12 @@ import { ensureBootstrappedPython, isBootstrapTarget } from './runtimeBootstrap'
 import { ensureDemucsCpp } from './demucsCppBootstrap'
 import { ensureWhisperCpp } from './whisperCppBootstrap'
 import { detectAccelerator } from './runtimeBootstrap'
-import type { AutoChartProgressEvent, AutoChartRunOptions, AutoChartRunResult, AutoChartStage } from './types'
+import type {
+  AutoChartProgressEvent,
+  AutoChartRunOptions,
+  AutoChartRunResult,
+  AutoChartStage
+} from './types'
 
 const EVENT_PREFIX = '__OCTAVE_EVENT__'
 const PYTHON_CHECK_TIMEOUT_MS = 10_000
@@ -30,7 +35,10 @@ function resolveBundledFfmpegDir(): string | null {
     // unpacked path at runtime, so dirname() is enough.
     let resolved = ffmpegPath
     if (resolved.includes(`app.asar${require('path').sep}`)) {
-      resolved = resolved.replace(`app.asar${require('path').sep}`, `app.asar.unpacked${require('path').sep}`)
+      resolved = resolved.replace(
+        `app.asar${require('path').sep}`,
+        `app.asar.unpacked${require('path').sep}`
+      )
     }
     if (!existsSync(resolved)) return null
     return dirname(resolved)
@@ -145,7 +153,9 @@ function openRunLog(runId: string): WriteStream | null {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
     const file = join(dir, `${stamp}_${runId}.log`)
     const stream = createWriteStream(file, { flags: 'a' })
-    stream.write(`# STRUM run log\n# runId=${runId}\n# started=${new Date().toISOString()}\n# packaged=${app.isPackaged}\n# platform=${process.platform}-${process.arch}\n# logPath=${file}\n\n`)
+    stream.write(
+      `# STRUM run log\n# runId=${runId}\n# started=${new Date().toISOString()}\n# packaged=${app.isPackaged}\n# platform=${process.platform}-${process.arch}\n# logPath=${file}\n\n`
+    )
     return stream
   } catch (err) {
     console.warn('[STRUM] failed to open run log:', err)
@@ -205,9 +215,7 @@ function getBundledPythonEnv(): NodeJS.ProcessEnv {
   // ffmpeg without the user installing it system-wide.
   const ffmpegDir = resolveBundledFfmpegDir()
   const existingPath = process.env.PATH ?? process.env.Path ?? ''
-  const augmentedPath = ffmpegDir
-    ? `${ffmpegDir}${pathSeparator}${existingPath}`
-    : existingPath
+  const augmentedPath = ffmpegDir ? `${ffmpegDir}${pathSeparator}${existingPath}` : existingPath
 
   return {
     ...process.env,
@@ -219,9 +227,14 @@ function getBundledPythonEnv(): NodeJS.ProcessEnv {
 
 async function commandExists(candidate: PythonCommand): Promise<boolean> {
   return await new Promise<boolean>((resolve) => {
-    execFile(candidate.command, [...candidate.baseArgs, '--version'], { timeout: PYTHON_CHECK_TIMEOUT_MS }, (error) => {
-      resolve(!error)
-    })
+    execFile(
+      candidate.command,
+      [...candidate.baseArgs, '--version'],
+      { timeout: PYTHON_CHECK_TIMEOUT_MS },
+      (error) => {
+        resolve(!error)
+      }
+    )
   })
 }
 
@@ -245,9 +258,10 @@ async function findPythonCommand(runId?: string): Promise<PythonCommand> {
   // Prefer a workspace-local virtualenv when present so dev runs are isolated
   // from system per-user site-packages (avoids cross-version contamination
   // such as a 3.11 launcher loading wheels from %APPDATA%\Python\Python310).
-  const venvPython = process.platform === 'win32'
-    ? join(process.cwd(), '.venv', 'Scripts', 'python.exe')
-    : join(process.cwd(), '.venv', 'bin', 'python')
+  const venvPython =
+    process.platform === 'win32'
+      ? join(process.cwd(), '.venv', 'Scripts', 'python.exe')
+      : join(process.cwd(), '.venv', 'bin', 'python')
   if (existsSync(venvPython)) {
     candidates.push({ command: venvPython, baseArgs: [] })
   }
@@ -324,12 +338,14 @@ function handleStructuredEvent(
       const inferred = message ? parseAutoChartProgressLine(runId, message) : null
       const percentFromPayload = typeof payload.percent === 'number' ? payload.percent : undefined
       const payloadStage = String(payload.stage ?? '') as AutoChartStage
-      const stage = payloadStage === 'bootstrap' && inferred?.stage && inferred.stage !== 'bootstrap'
-        ? inferred.stage
-        : (payloadStage || inferred?.stage || 'bootstrap') as AutoChartStage
-      const percent = typeof percentFromPayload === 'number'
-        ? normalizeGlobalPercent(stage, percentFromPayload)
-        : (inferred?.percent ?? getFallbackPercent(stage))
+      const stage =
+        payloadStage === 'bootstrap' && inferred?.stage && inferred.stage !== 'bootstrap'
+          ? inferred.stage
+          : ((payloadStage || inferred?.stage || 'bootstrap') as AutoChartStage)
+      const percent =
+        typeof percentFromPayload === 'number'
+          ? normalizeGlobalPercent(stage, percentFromPayload)
+          : (inferred?.percent ?? getFallbackPercent(stage))
 
       const progressEvent = {
         ...payload,
@@ -384,7 +400,9 @@ function handlePlainLine(runId: string, line: string): void {
   }
 }
 
-export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'>): Promise<AutoChartRunResult> {
+export async function runAutoChart(
+  options: Omit<AutoChartRunOptions, 'cacheDir'>
+): Promise<AutoChartRunResult> {
   const python = await findPythonCommand(options.runId)
   const runId = options.runId
   const cacheDir = join(app.getPath('userData'), 'cache', 'strum')
@@ -419,9 +437,13 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
   // the worker uses Python `demucs -d cuda`, which is dramatically
   // faster than the CPU-only demucs.cpp binary.
   const accelerator = detectAccelerator()
-  let demucsCppEnv: { OCTAVE_DEMUCS_CPP_BIN: string; OCTAVE_DEMUCS_CPP_WEIGHTS: string } | null = null
+  let demucsCppEnv: { OCTAVE_DEMUCS_CPP_BIN: string; OCTAVE_DEMUCS_CPP_WEIGHTS: string } | null =
+    null
   if (accelerator === 'cuda') {
-    logStrum(runId, 'CUDA detected; routing demucs separation through Python (torch) instead of demucs.cpp.')
+    logStrum(
+      runId,
+      'CUDA detected; routing demucs separation through Python (torch) instead of demucs.cpp.'
+    )
   } else {
     try {
       const { binaryPath, weightsPath } = await ensureDemucsCpp(runId)
@@ -440,7 +462,8 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
   // package for vocals transcription. Only relevant when the user
   // actually charts vocals; the bootstrap is cheap to skip if the model
   // is already on disk.
-  let whisperCppEnv: { OCTAVE_WHISPER_CPP_BIN: string; OCTAVE_WHISPER_CPP_MODEL: string } | null = null
+  let whisperCppEnv: { OCTAVE_WHISPER_CPP_BIN: string; OCTAVE_WHISPER_CPP_MODEL: string } | null =
+    null
   try {
     const { binaryPath, modelPath } = await ensureWhisperCpp(runId)
     whisperCppEnv = {
@@ -493,7 +516,13 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
       {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: app.isPackaged
-          ? { ...getBundledPythonEnv(), ...(demucsCppEnv ?? {}), ...(whisperCppEnv ?? {}), ...offlineEnv, ...harmoniesEnv }
+          ? {
+              ...getBundledPythonEnv(),
+              ...(demucsCppEnv ?? {}),
+              ...(whisperCppEnv ?? {}),
+              ...offlineEnv,
+              ...harmoniesEnv
+            }
           : devEnv
       }
     )
@@ -504,7 +533,11 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
     const runLog = openRunLog(runId)
     const writeLog = (line: string): void => {
       if (!runLog) return
-      try { runLog.write(line.endsWith('\n') ? line : `${line}\n`) } catch { /* noop */ }
+      try {
+        runLog.write(line.endsWith('\n') ? line : `${line}\n`)
+      } catch {
+        /* noop */
+      }
     }
     if (runLog) {
       writeLog(`# python=${python.command} args=${JSON.stringify(python.baseArgs)}`)
@@ -513,7 +546,10 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
       writeLog(`# outputDir=${options.outputDir}`)
       writeLog(`# pid=${child.pid ?? 'unknown'}`)
       writeLog('')
-      logStrum(runId, `Run log: ${(runLog as unknown as { path?: string }).path ?? getStrumLogsDir()}`)
+      logStrum(
+        runId,
+        `Run log: ${(runLog as unknown as { path?: string }).path ?? getStrumLogsDir()}`
+      )
     }
 
     let stdoutRemainder = ''
@@ -537,7 +573,10 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
       }
 
       const silenceSec = Math.floor(silenceMs / 1000)
-      warnStrum(runId, `No worker output for ${silenceSec}s (stage=${lastProgressStage}, percent=${lastProgressPercent}%)`)
+      warnStrum(
+        runId,
+        `No worker output for ${silenceSec}s (stage=${lastProgressStage}, percent=${lastProgressPercent}%)`
+      )
       broadcast('strum:progress', {
         runId,
         stage: lastProgressStage,
@@ -552,7 +591,11 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
       // Always tee raw output to the per-run log file so packaged builds
       // can be debugged without devtools.
       if (runLog) {
-        try { runLog.write(text) } catch { /* noop */ }
+        try {
+          runLog.write(text)
+        } catch {
+          /* noop */
+        }
       }
       const split = splitLines(text, stream === 'stdout' ? stdoutRemainder : stderrRemainder)
       if (stream === 'stdout') {
@@ -566,34 +609,44 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
           logStrum(runId, `${stream}> ${line}`)
         }
 
-        if (!handleStructuredEvent(line, completion, (event) => {
-          const incomingRank = getStageRank(event.stage)
-          const currentRank = getStageRank(lastProgressStage)
+        if (
+          !handleStructuredEvent(line, completion, (event) => {
+            const incomingRank = getStageRank(event.stage)
+            const currentRank = getStageRank(lastProgressStage)
 
-          if (event.stage !== 'error' && event.stage !== 'complete' && incomingRank < currentRank) {
-            return
-          }
+            if (
+              event.stage !== 'error' &&
+              event.stage !== 'complete' &&
+              incomingRank < currentRank
+            ) {
+              return
+            }
 
-          if (incomingRank > currentRank) {
+            if (incomingRank > currentRank) {
+              lastProgressStage = event.stage
+              if (typeof event.percent === 'number') {
+                lastProgressPercent = event.percent
+              } else {
+                lastProgressPercent = getFallbackPercent(event.stage) ?? lastProgressPercent
+              }
+              return
+            }
+
             lastProgressStage = event.stage
             if (typeof event.percent === 'number') {
-              lastProgressPercent = event.percent
-            } else {
-              lastProgressPercent = getFallbackPercent(event.stage) ?? lastProgressPercent
+              lastProgressPercent = Math.max(lastProgressPercent, event.percent)
             }
-            return
-          }
-
-          lastProgressStage = event.stage
-          if (typeof event.percent === 'number') {
-            lastProgressPercent = Math.max(lastProgressPercent, event.percent)
-          }
-        })) {
+          })
+        ) {
           const parsed = parseAutoChartProgressLine(runId, line)
           if (parsed) {
             const incomingRank = getStageRank(parsed.stage)
             const currentRank = getStageRank(lastProgressStage)
-            if (parsed.stage !== 'error' && parsed.stage !== 'complete' && incomingRank < currentRank) {
+            if (
+              parsed.stage !== 'error' &&
+              parsed.stage !== 'complete' &&
+              incomingRank < currentRank
+            ) {
               continue
             }
 
@@ -625,7 +678,13 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
       clearInterval(heartbeat)
       warnStrum(runId, 'Worker process error', error)
       writeLog(`# WORKER ERROR: ${error.message}`)
-      if (runLog) { try { runLog.end() } catch { /* noop */ } }
+      if (runLog) {
+        try {
+          runLog.end()
+        } catch {
+          /* noop */
+        }
+      }
       runningJobs.delete(runId)
       try {
         await unlink(payloadPath)
@@ -638,8 +697,16 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
     child.on('close', async (code, signal) => {
       clearInterval(heartbeat)
       logStrum(runId, `Worker closed (code=${code ?? 'null'}, signal=${signal ?? 'null'})`)
-      writeLog(`# WORKER CLOSED code=${code ?? 'null'} signal=${signal ?? 'null'} at=${new Date().toISOString()}`)
-      if (runLog) { try { runLog.end() } catch { /* noop */ } }
+      writeLog(
+        `# WORKER CLOSED code=${code ?? 'null'} signal=${signal ?? 'null'} at=${new Date().toISOString()}`
+      )
+      if (runLog) {
+        try {
+          runLog.end()
+        } catch {
+          /* noop */
+        }
+      }
       runningJobs.delete(runId)
       try {
         await unlink(payloadPath)
@@ -651,13 +718,15 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
         if (verboseDebug) {
           logStrum(runId, `stdout(remainder)> ${stdoutRemainder}`)
         }
-        handleStructuredEvent(stdoutRemainder, completion) || handlePlainLine(runId, stdoutRemainder)
+        handleStructuredEvent(stdoutRemainder, completion) ||
+          handlePlainLine(runId, stdoutRemainder)
       }
       if (stderrRemainder) {
         if (verboseDebug) {
           logStrum(runId, `stderr(remainder)> ${stderrRemainder}`)
         }
-        handleStructuredEvent(stderrRemainder, completion) || handlePlainLine(runId, stderrRemainder)
+        handleStructuredEvent(stderrRemainder, completion) ||
+          handlePlainLine(runId, stderrRemainder)
       }
 
       if (signal === 'SIGTERM') {

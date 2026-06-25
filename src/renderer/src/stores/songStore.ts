@@ -34,7 +34,12 @@ interface SongStoreState extends SongEditorState {
   updateNote: (noteId: string, updates: Partial<Note>) => void
   deleteNote: (noteId: string) => void
   deleteSelectedNotes: () => void
-  swapLanes: (instrument: Instrument, laneA: string, laneB: string, difficulty?: Difficulty | 'all') => void
+  swapLanes: (
+    instrument: Instrument,
+    laneA: string,
+    laneB: string,
+    difficulty?: Difficulty | 'all'
+  ) => void
   snapNotesToGrid: (division?: number) => void
 
   // Selection actions
@@ -162,7 +167,16 @@ const createDefaultSong = (id: string, folderPath: string): SongData => ({
   sourceFormat: 'midi'
 })
 
-const ALL_INSTRUMENTS: Instrument[] = ['drums', 'guitar', 'bass', 'vocals', 'keys', 'proKeys', 'proGuitar', 'proBass']
+const ALL_INSTRUMENTS: Instrument[] = [
+  'drums',
+  'guitar',
+  'bass',
+  'vocals',
+  'keys',
+  'proKeys',
+  'proGuitar',
+  'proBass'
+]
 
 // Derive which instruments should be visible: only ones the song actually has notes for.
 // Falls back to all instruments when the song is empty (e.g. brand-new untitled song).
@@ -424,26 +438,29 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
       }),
 
     // Playback actions
-    setCurrentTick: (tick) => set((state) => {
-      // Clamp to [0, maxTick]. Max = last note/vocal end + buffer, or song_length from metadata
-      const noteMax = state.song.notes.reduce(
-        (max, n) => Math.max(max, n.tick + n.duration), 0
-      )
-      const vocalMax = state.song.vocalNotes.reduce(
-        (max, n) => Math.max(max, n.tick + n.duration), 0
-      )
-      const bufferTicks = 9600
-      // Use song_length from metadata (in ms) to estimate ticks at average tempo
-      // Use a generous minimum of 600 seconds (~10 min) worth of ticks to avoid cutting off songs
-      const avgBpm = state.song.tempoEvents.length > 0 ? state.song.tempoEvents[0].bpm : 120
-      const songLengthMs = state.song.metadata.song_length
-      const songLengthTicks = songLengthMs
-        ? (songLengthMs / 1000) * (avgBpm / 60) * 480
-        : 0
-      const tenMinTicks = 600 * (avgBpm / 60) * 480 // 10-minute fallback
-      const maxTick = Math.max(tenMinTicks, noteMax + bufferTicks, vocalMax + bufferTicks, songLengthTicks + bufferTicks)
-      return { currentTick: Math.max(0, Math.min(tick, maxTick)) }
-    }),
+    setCurrentTick: (tick) =>
+      set((state) => {
+        // Clamp to [0, maxTick]. Max = last note/vocal end + buffer, or song_length from metadata
+        const noteMax = state.song.notes.reduce((max, n) => Math.max(max, n.tick + n.duration), 0)
+        const vocalMax = state.song.vocalNotes.reduce(
+          (max, n) => Math.max(max, n.tick + n.duration),
+          0
+        )
+        const bufferTicks = 9600
+        // Use song_length from metadata (in ms) to estimate ticks at average tempo
+        // Use a generous minimum of 600 seconds (~10 min) worth of ticks to avoid cutting off songs
+        const avgBpm = state.song.tempoEvents.length > 0 ? state.song.tempoEvents[0].bpm : 120
+        const songLengthMs = state.song.metadata.song_length
+        const songLengthTicks = songLengthMs ? (songLengthMs / 1000) * (avgBpm / 60) * 480 : 0
+        const tenMinTicks = 600 * (avgBpm / 60) * 480 // 10-minute fallback
+        const maxTick = Math.max(
+          tenMinTicks,
+          noteMax + bufferTicks,
+          vocalMax + bufferTicks,
+          songLengthTicks + bufferTicks
+        )
+        return { currentTick: Math.max(0, Math.min(tick, maxTick)) }
+      }),
 
     setIsPlaying: (isPlaying) => set({ isPlaying }),
 
@@ -531,7 +548,8 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
         // tempo edits keep notes locked to audio time, not to beat numbers.
         const TPB = 480
         const tickToTime = (t: number, events: TempoEvent[]): number => {
-          let sec = 0, prev = 0
+          let sec = 0,
+            prev = 0
           let curBpm = events[0]?.bpm ?? 120
           for (const ev of events) {
             if (ev.tick >= t) break
@@ -543,7 +561,8 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
           return sec
         }
         const timeToTick = (sec: number, events: TempoEvent[]): number => {
-          let acc = 0, prev = 0
+          let acc = 0,
+            prev = 0
           let curBpm = events[0]?.bpm ?? 120
           for (const ev of events) {
             const segSec = (ev.tick - prev) / ((TPB * curBpm) / 60)
@@ -578,20 +597,43 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
         newEvents.sort((a, b) => a.tick - b.tick)
 
         const remap = (t: number): number => timeToTick(tickToTime(t, oldEvents), newEvents)
-        const remapDur = (t: number, d: number): number =>
-          Math.max(0, remap(t + d) - remap(t))
+        const remapDur = (t: number, d: number): number => Math.max(0, remap(t + d) - remap(t))
 
         const song = state.song
         return {
           song: {
             ...song,
             tempoEvents: newEvents,
-            notes: song.notes.map((n) => ({ ...n, tick: remap(n.tick), duration: remapDur(n.tick, n.duration) })),
-            vocalNotes: song.vocalNotes.map((n) => ({ ...n, tick: remap(n.tick), duration: remapDur(n.tick, n.duration) })),
-            vocalPhrases: song.vocalPhrases.map((p) => ({ ...p, tick: remap(p.tick), duration: remapDur(p.tick, p.duration) })),
-            starPowerPhrases: song.starPowerPhrases.map((p) => ({ ...p, tick: remap(p.tick), duration: remapDur(p.tick, p.duration) })),
-            soloSections: song.soloSections.map((s) => ({ ...s, tick: remap(s.tick), duration: remapDur(s.tick, s.duration) })),
-            laneMarkers: song.laneMarkers.map((m) => ({ ...m, tick: remap(m.tick), duration: remapDur(m.tick, m.duration) })),
+            notes: song.notes.map((n) => ({
+              ...n,
+              tick: remap(n.tick),
+              duration: remapDur(n.tick, n.duration)
+            })),
+            vocalNotes: song.vocalNotes.map((n) => ({
+              ...n,
+              tick: remap(n.tick),
+              duration: remapDur(n.tick, n.duration)
+            })),
+            vocalPhrases: song.vocalPhrases.map((p) => ({
+              ...p,
+              tick: remap(p.tick),
+              duration: remapDur(p.tick, p.duration)
+            })),
+            starPowerPhrases: song.starPowerPhrases.map((p) => ({
+              ...p,
+              tick: remap(p.tick),
+              duration: remapDur(p.tick, p.duration)
+            })),
+            soloSections: song.soloSections.map((s) => ({
+              ...s,
+              tick: remap(s.tick),
+              duration: remapDur(s.tick, s.duration)
+            })),
+            laneMarkers: song.laneMarkers.map((m) => ({
+              ...m,
+              tick: remap(m.tick),
+              duration: remapDur(m.tick, m.duration)
+            })),
             songSections: song.songSections.map((s) => ({ ...s, tick: remap(s.tick) })),
             timeSignatures: song.timeSignatures.map((ts) =>
               ts.tick === 0 ? ts : { ...ts, tick: remap(ts.tick) }
@@ -628,9 +670,7 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
     // Time signature actions
     addTimeSignature: (event) =>
       set((state) => {
-        const existingIndex = state.song.timeSignatures.findIndex(
-          (e) => e.tick === event.tick
-        )
+        const existingIndex = state.song.timeSignatures.findIndex((e) => e.tick === event.tick)
         const newEvents =
           existingIndex >= 0
             ? state.song.timeSignatures.map((e, i) => (i === existingIndex ? event : e))
@@ -671,7 +711,9 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
         return {
           song: {
             ...state.song,
-            starPowerPhrases: [...state.song.starPowerPhrases, phrase].sort((a, b) => a.tick - b.tick)
+            starPowerPhrases: [...state.song.starPowerPhrases, phrase].sort(
+              (a, b) => a.tick - b.tick
+            )
           },
           isDirty: true
         }
@@ -716,7 +758,9 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
         return {
           song: {
             ...state.song,
-            starPowerPhrases: [...state.song.starPowerPhrases, phrase].sort((a, b) => a.tick - b.tick)
+            starPowerPhrases: [...state.song.starPowerPhrases, phrase].sort(
+              (a, b) => a.tick - b.tick
+            )
           },
           isDirty: true
         }
@@ -849,7 +893,8 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
       set((state) => ({
         song: {
           ...state.song,
-          laneMarkers: state.song.laneMarkers.map((m) => m.id === id ? { ...m, ...updates } : m)
+          laneMarkers: state.song.laneMarkers
+            .map((m) => (m.id === id ? { ...m, ...updates } : m))
             .sort((a, b) => a.tick - b.tick)
         },
         isDirty: true
@@ -937,7 +982,8 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
           ...state.song,
           vocalPhrases: state.song.vocalPhrases.filter((p) => p.id !== id)
         },
-        selectedVocalPhraseId: state.selectedVocalPhraseId === id ? null : state.selectedVocalPhraseId,
+        selectedVocalPhraseId:
+          state.selectedVocalPhraseId === id ? null : state.selectedVocalPhraseId,
         isDirty: true
       })),
 
@@ -951,26 +997,20 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
           : [id]
       })),
 
-    selectVocalNotes: (ids) =>
-      set({ selectedVocalNoteIds: ids }),
+    selectVocalNotes: (ids) => set({ selectedVocalNoteIds: ids }),
 
-    clearVocalSelection: () =>
-      set({ selectedVocalNoteIds: [], selectedVocalPhraseId: null }),
+    clearVocalSelection: () => set({ selectedVocalNoteIds: [], selectedVocalPhraseId: null }),
 
-    selectVocalPhrase: (id) =>
-      set({ selectedVocalPhraseId: id }),
+    selectVocalPhrase: (id) => set({ selectedVocalPhraseId: id }),
 
-    setActiveHarmonyPart: (part) =>
-      set({ activeHarmonyPart: part }),
+    setActiveHarmonyPart: (part) => set({ activeHarmonyPart: part }),
 
     selectAllVocalInRange: (startTick, endTick) =>
       set((state) => {
         const ids = state.song.vocalNotes
           .filter(
             (n) =>
-              n.harmonyPart === state.activeHarmonyPart &&
-              n.tick >= startTick &&
-              n.tick <= endTick
+              n.harmonyPart === state.activeHarmonyPart && n.tick >= startTick && n.tick <= endTick
           )
           .map((n) => n.id)
         return { selectedVocalNoteIds: ids }
@@ -988,7 +1028,8 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
             vocalPhrases: state.song.vocalPhrases.filter((p) => p.harmonyPart !== part)
           },
           selectedVocalNoteIds: state.selectedVocalNoteIds.filter((id) => !removedIds.has(id)),
-          activeHarmonyPart: part === state.activeHarmonyPart ? 0 as HarmonyPart : state.activeHarmonyPart,
+          activeHarmonyPart:
+            part === state.activeHarmonyPart ? (0 as HarmonyPart) : state.activeHarmonyPart,
           isDirty: true
         }
       }),
@@ -1025,8 +1066,7 @@ function createSongStore(_songId: string) {
       limit: 100,
       // Equality check to avoid duplicate history entries
       // Reference equality works because Zustand uses immutable updates
-      equality: (pastState, currentState) =>
-        pastState.song === currentState.song
+      equality: (pastState, currentState) => pastState.song === currentState.song
     })
   )
 }

@@ -8,19 +8,33 @@ import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { useProjectStore, useUIStore, getSongStore } from '../stores'
 import { tickToSeconds } from '../services/audioService'
-import type { Instrument, Difficulty, EditingTool, VideoSync, TempoEvent, VenueTrackData } from '../types'
-import {
-  CAMERA_HEIGHT, CAMERA_DISTANCE, CAMERA_FOV, STRIKE_LINE_POS
-} from './chartPreviewModules'
+import type {
+  Instrument,
+  Difficulty,
+  EditingTool,
+  VideoSync,
+  TempoEvent,
+  VenueTrackData
+} from '../types'
+import { CAMERA_HEIGHT, CAMERA_DISTANCE, CAMERA_FOV, STRIKE_LINE_POS } from './chartPreviewModules'
 import { AssetProvider } from './chartPreviewModules/AssetProvider'
 import { AnimatedHighwayScene } from './chartPreviewModules/AnimatedHighwayScene'
 import {
-  InstrumentToggles, DifficultySelector, TimelineScrubber,
-  VocalTrackOverlay, EditToolSelector, NoteModifierToggles, ShortcutHelpButton,
+  InstrumentToggles,
+  DifficultySelector,
+  TimelineScrubber,
+  VocalTrackOverlay,
+  EditToolSelector,
+  NoteModifierToggles,
+  ShortcutHelpButton,
   SnapSelector
 } from './chartPreviewModules/UIOverlays'
 import './ChartPreview.css'
-import { resolveVenuePlaybackState, resolveVenueVisualState, type VenueVisualState } from './chartPreviewModules/venuePlayback'
+import {
+  resolveVenuePlaybackState,
+  resolveVenueVisualState,
+  type VenueVisualState
+} from './chartPreviewModules/venuePlayback'
 
 // Error boundary scoped to the 3D preview — prevents asset loading failures from crashing the entire app
 class PreviewErrorBoundary extends Component<
@@ -50,7 +64,15 @@ class PreviewErrorBoundary extends Component<
             {this.state.error?.message || 'Failed to render 3D preview'}
           </div>
           <button
-            style={{ marginTop: 12, padding: '6px 16px', cursor: 'pointer', background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: 4 }}
+            style={{
+              marginTop: 12,
+              padding: '6px 16px',
+              cursor: 'pointer',
+              background: '#333',
+              color: '#ccc',
+              border: '1px solid #555',
+              borderRadius: 4
+            }}
             onClick={() => this.setState({ hasError: false, error: null })}
           >
             Retry
@@ -94,7 +116,8 @@ function VenueCameraController({
   // must not move, lift, or zoom the highway camera.
   useFrame(() => {
     const baseHeight = CAMERA_HEIGHT + (hasVocalOverlay ? 0.06 : 0)
-    const baseDistance = CAMERA_DISTANCE + 0.75 + (hasVocalOverlay ? 0.22 : 0) + (visibleTrackCount >= 4 ? 0.18 : 0)
+    const baseDistance =
+      CAMERA_DISTANCE + 0.75 + (hasVocalOverlay ? 0.22 : 0) + (visibleTrackCount >= 4 ? 0.18 : 0)
 
     desiredPos.current.set(0, baseHeight, STRIKE_LINE_POS + baseDistance)
     camera.position.lerp(desiredPos.current, 0.18)
@@ -113,9 +136,20 @@ function VenueCameraController({
 }
 
 // -- Background Video (plays behind 3D highway like in the games) -----
-function BackgroundVideo({ songId, cssFilter = 'none' }: { songId: string; cssFilter?: string }): React.JSX.Element | null {
+function BackgroundVideo({
+  songId,
+  cssFilter = 'none'
+}: {
+  songId: string
+  cssFilter?: string
+}): React.JSX.Element | null {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const [videoSync, setVideoSync] = useState<VideoSync>({ clips: [], offsetMs: 0, trimStartMs: 0, trimEndMs: 0 })
+  const [videoSync, setVideoSync] = useState<VideoSync>({
+    clips: [],
+    offsetMs: 0,
+    trimStartMs: 0,
+    trimEndMs: 0
+  })
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTick, setCurrentTick] = useState(0)
   const [tempoEvents, setTempoEvents] = useState<TempoEvent[]>([{ tick: 0, bpm: 120 }])
@@ -155,7 +189,9 @@ function BackgroundVideo({ songId, cssFilter = 'none' }: { songId: string; cssFi
           video.currentTime = Math.max(0, videoTime)
         }
         if (video.paused) {
-          video.play().catch(() => {/* autoplay blocked */})
+          video.play().catch(() => {
+            /* autoplay blocked */
+          })
         }
       } else {
         video.pause()
@@ -174,8 +210,14 @@ function BackgroundVideo({ songId, cssFilter = 'none' }: { songId: string; cssFi
   // Create a blob URL for local video files (song-file:// works with fetch but not <video src>)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   useEffect(() => {
-    if (!videoSync.videoPath) { setBlobUrl(null); return }
-    if (videoSync.videoPath.startsWith('http')) { setBlobUrl(videoSync.videoPath); return }
+    if (!videoSync.videoPath) {
+      setBlobUrl(null)
+      return
+    }
+    if (videoSync.videoPath.startsWith('http')) {
+      setBlobUrl(videoSync.videoPath)
+      return
+    }
 
     let revoked = false
     const protocolUrl = `song-file://${encodeURIComponent(videoSync.videoPath)}`
@@ -190,7 +232,10 @@ function BackgroundVideo({ songId, cssFilter = 'none' }: { songId: string; cssFi
 
     return () => {
       revoked = true
-      setBlobUrl((prev) => { if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev); return null })
+      setBlobUrl((prev) => {
+        if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev)
+        return null
+      })
     }
   }, [videoSync.videoPath])
 
@@ -228,7 +273,9 @@ function BackgroundVideo({ songId, cssFilter = 'none' }: { songId: string; cssFi
       }
     }
 
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [blobUrl, videoSync.clips.length, songId])
 
   if (!videoSync.videoPath || !blobUrl) return null
@@ -269,29 +316,45 @@ function HighwayWrapper({
     return store.subscribe((state, prev) => {
       if (state.visibleInstruments !== prev.visibleInstruments)
         setVisibleInstruments(new Set(state.visibleInstruments))
-      if (state.activeDifficulty !== prev.activeDifficulty) setActiveDifficulty(state.activeDifficulty)
+      if (state.activeDifficulty !== prev.activeDifficulty)
+        setActiveDifficulty(state.activeDifficulty)
       if (state.song.videoSync.videoPath !== prev.song.videoSync.videoPath)
         setHasVideo(!!state.song.videoSync.videoPath)
     })
   }, [songId])
 
-  const visibleTrackCount = Array.from(visibleInstruments).filter((inst) => inst !== 'vocals').length
+  const visibleTrackCount = Array.from(visibleInstruments).filter(
+    (inst) => inst !== 'vocals'
+  ).length
   const hasVocalOverlay = visibleInstruments.has('vocals')
 
   // When video is loaded, make canvas transparent so video shows behind
   const glProps = hasVideo
-    ? { antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0, alpha: true }
+    ? {
+        antialias: true,
+        toneMapping: THREE.ACESFilmicToneMapping,
+        toneMappingExposure: 1.0,
+        alpha: true
+      }
     : { antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }
 
   // Ensure WebGL clears to transparent when video is behind the highway
-  const handleCreated = useCallback(({ gl }: { gl: THREE.WebGLRenderer }) => {
-    if (hasVideo) {
-      gl.setClearColor(0x000000, 0)
-    }
-  }, [hasVideo])
+  const handleCreated = useCallback(
+    ({ gl }: { gl: THREE.WebGLRenderer }) => {
+      if (hasVideo) {
+        gl.setClearColor(0x000000, 0)
+      }
+    },
+    [hasVideo]
+  )
 
   return (
-    <Canvas shadows gl={glProps} style={hasVideo ? { background: 'transparent' } : undefined} onCreated={handleCreated}>
+    <Canvas
+      shadows
+      gl={glProps}
+      style={hasVideo ? { background: 'transparent' } : undefined}
+      onCreated={handleCreated}
+    >
       {/* PerspectiveCamera — VenueCameraController takes over position/fov each frame */}
       <PerspectiveCamera
         makeDefault
@@ -313,9 +376,24 @@ function HighwayWrapper({
           readable. */}
       <ambientLight intensity={0.55} color="#FFFFFF" />
       <directionalLight position={[0, 10, 5]} intensity={0.6} color="#FFFFFF" castShadow />
-      <pointLight position={[-3, 5, STRIKE_LINE_POS - 2]} intensity={0.55} color="#9FB8E8" distance={12} />
-      <pointLight position={[3, 5, STRIKE_LINE_POS - 2]} intensity={0.55} color="#9FB8E8" distance={12} />
-      <pointLight position={[0, 2, STRIKE_LINE_POS + 0.5]} intensity={0.35} color="#FFFFFF" distance={6} />
+      <pointLight
+        position={[-3, 5, STRIKE_LINE_POS - 2]}
+        intensity={0.55}
+        color="#9FB8E8"
+        distance={12}
+      />
+      <pointLight
+        position={[3, 5, STRIKE_LINE_POS - 2]}
+        intensity={0.55}
+        color="#9FB8E8"
+        distance={12}
+      />
+      <pointLight
+        position={[0, 2, STRIKE_LINE_POS + 0.5]}
+        intensity={0.35}
+        color="#FFFFFF"
+        distance={6}
+      />
 
       <Suspense fallback={null}>
         <AssetProvider>
@@ -403,7 +481,10 @@ export function ChartPreview(): React.JSX.Element {
     const store = getSongStore(activeSongId)
     const sync = (): void => {
       const state = store.getState()
-      const playback = resolveVenuePlaybackState(state.song.venueTrack as VenueTrackData, state.currentTick)
+      const playback = resolveVenuePlaybackState(
+        state.song.venueTrack as VenueTrackData,
+        state.currentTick
+      )
       setVenueVisual(resolveVenueVisualState(playback))
     }
     sync()
@@ -433,8 +514,13 @@ export function ChartPreview(): React.JSX.Element {
             title={isPreviewFullscreen ? 'Exit Fullscreen (Esc)' : 'Fullscreen Preview'}
             onClick={togglePreviewFullscreen}
             style={{
-              background: 'none', border: '1px solid #555', borderRadius: 4,
-              color: '#ccc', cursor: 'pointer', padding: '2px 6px', fontSize: 14,
+              background: 'none',
+              border: '1px solid #555',
+              borderRadius: 4,
+              color: '#ccc',
+              cursor: 'pointer',
+              padding: '2px 6px',
+              fontSize: 14,
               lineHeight: 1
             }}
           >
@@ -442,10 +528,7 @@ export function ChartPreview(): React.JSX.Element {
           </button>
         </div>
       </div>
-      <div
-        className="chart-preview-canvas"
-        onWheel={handlePreviewWheel}
-      >
+      <div className="chart-preview-canvas" onWheel={handlePreviewWheel}>
         {activeSongId ? (
           <PreviewErrorBoundary>
             <BackgroundVideo songId={activeSongId} cssFilter={venueVisual.cssFilter} />

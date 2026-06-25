@@ -82,12 +82,7 @@ export async function cleanupFixture(root) {
 export async function launchOctave({ userData, recordVideo }) {
   /** @type {Parameters<typeof electron.launch>[0]} */
   const launchOpts = {
-    args: [
-      MAIN_ENTRY,
-      `--user-data-dir=${userData}`,
-      '--no-sandbox',
-      '--disable-gpu-sandbox'
-    ],
+    args: [MAIN_ENTRY, `--user-data-dir=${userData}`, '--no-sandbox', '--disable-gpu-sandbox'],
     env: {
       ...process.env,
       OCTAVE_SCREENSHOT_MODE: '1',

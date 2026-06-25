@@ -36,7 +36,9 @@ export function extractBakedGeometry(
   const sizeZ = box.max.z - box.min.z
 
   if (debugLabel) {
-    console.log(`[FBX] ${debugLabel}: size X=${sizeX.toFixed(3)} Y=${sizeY.toFixed(3)} Z=${sizeZ.toFixed(3)}`)
+    console.log(
+      `[FBX] ${debugLabel}: size X=${sizeX.toFixed(3)} Y=${sizeY.toFixed(3)} Z=${sizeZ.toFixed(3)}`
+    )
   }
 
   if (sizeY > sizeX * 1.5 && sizeY > sizeZ * 1.5) {
@@ -63,10 +65,7 @@ export function extractBakedGroup(scene: THREE.Group): THREE.Group {
 
 // Extracts ALL meshes from an FBX, bakes world transforms, applies Unity 0.01 scale,
 // and centers them together around a common origin.
-export function extractAllMeshes(
-  scene: THREE.Group,
-  debugLabel?: string
-): ExtractedMesh[] {
+export function extractAllMeshes(scene: THREE.Group, debugLabel?: string): ExtractedMesh[] {
   scene.updateWorldMatrix(true, true)
 
   const meshes: ExtractedMesh[] = []
@@ -79,9 +78,14 @@ export function extractAllMeshes(
       cloned.computeBoundingBox()
 
       const matCount = Array.isArray(mesh.material) ? mesh.material.length : 1
-      const groups = cloned.groups?.length > 0
-        ? cloned.groups.map((g) => ({ start: g.start, count: g.count, materialIndex: g.materialIndex ?? 0 }))
-        : []
+      const groups =
+        cloned.groups?.length > 0
+          ? cloned.groups.map((g) => ({
+              start: g.start,
+              count: g.count,
+              materialIndex: g.materialIndex ?? 0
+            }))
+          : []
 
       meshes.push({
         geometry: cloned,
@@ -106,7 +110,9 @@ export function extractAllMeshes(
   const needsRotation = sizeY > sizeX * 1.5 && sizeY > sizeZ * 1.5
 
   if (debugLabel) {
-    console.log(`[FBX-multi] ${debugLabel}: ${meshes.length} meshes, combined size X=${sizeX.toFixed(3)} Y=${sizeY.toFixed(3)} Z=${sizeZ.toFixed(3)} rotate=${needsRotation}`)
+    console.log(
+      `[FBX-multi] ${debugLabel}: ${meshes.length} meshes, combined size X=${sizeX.toFixed(3)} Y=${sizeY.toFixed(3)} Z=${sizeZ.toFixed(3)} rotate=${needsRotation}`
+    )
   }
 
   if (needsRotation) {

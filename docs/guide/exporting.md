@@ -15,17 +15,17 @@ If [Autosave](/guide/project-explorer#autosave) is enabled, manual save is rarel
 
 ## Save As
 
-*File → Save As…* writes the song to a new folder, leaving the original untouched. Useful for branching ideas without risking your main version.
+_File → Save As…_ writes the song to a new folder, leaving the original untouched. Useful for branching ideas without risking your main version.
 
 ## Export
 
-*File → Export* offers format-specific exports:
+_File → Export_ offers format-specific exports:
 
-| Format | Notes |
-|--------|-------|
-| **MIDI (.mid)** | Just the notes file, no `song.ini` or stems |
-| **Chart (.chart)** | Clone Hero plain-text chart format |
-| **YARG ZIP** | A self-contained folder zipped for easy sharing |
+| Format             | Notes                                           |
+| ------------------ | ----------------------------------------------- |
+| **MIDI (.mid)**    | Just the notes file, no `song.ini` or stems     |
+| **Chart (.chart)** | Clone Hero plain-text chart format              |
+| **YARG ZIP**       | A self-contained folder zipped for easy sharing |
 
 ## What gets written
 

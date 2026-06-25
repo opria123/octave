@@ -31,8 +31,18 @@ describe('resolveTorchDevice', () => {
 
   it('falls back to CPU when probes throw', () => {
     const device = resolveTorchDevice({
-      cuda: { is_available: () => { throw new Error('cuda unavailable') } },
-      backends: { mps: { is_available: () => { throw new Error('mps unavailable') } } }
+      cuda: {
+        is_available: () => {
+          throw new Error('cuda unavailable')
+        }
+      },
+      backends: {
+        mps: {
+          is_available: () => {
+            throw new Error('mps unavailable')
+          }
+        }
+      }
     })
 
     expect(device).toBe('cpu')

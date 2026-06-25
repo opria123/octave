@@ -138,6 +138,37 @@ export function onAudioLoaded(songId: string, cb: (duration: number) => void): (
   return () => audioLoadListeners.get(songId)?.delete(cb)
 }
 
+function downmixToStereo(buffer: AudioBuffer, ctx: BaseAudioContext): AudioBuffer {
+  const numChannels = buffer.numberOfChannels
+  const length = buffer.length
+  const sampleRate = buffer.sampleRate
+
+  const stereoBuffer = ctx.createBuffer(2, length, sampleRate)
+  const left = stereoBuffer.getChannelData(0)
+  const right = stereoBuffer.getChannelData(1)
+
+  const channelData: Float32Array[] = []
+  for (let c = 0; c < numChannels; c++) {
+    channelData.push(buffer.getChannelData(c))
+  }
+
+  for (let i = 0; i < length; i++) {
+    let sumL = 0
+    let sumR = 0
+    for (let c = 0; c < numChannels; c++) {
+      if (c % 2 === 0) {
+        sumL += channelData[c][i]
+      } else {
+        sumR += channelData[c][i]
+      }
+    }
+    left[i] = Math.max(-1.0, Math.min(1.0, sumL))
+    right[i] = Math.max(-1.0, Math.min(1.0, sumR))
+  }
+
+  return stereoBuffer
+}
+
 // Load audio for a song via song-file:// custom protocol (no base64 encoding)
 // Supports multiple stems - all audio files in the folder are loaded and mixed
 export async function loadAudio(songId: string, songPath: string): Promise<boolean> {
@@ -169,23 +200,39 @@ export async function loadAudio(songId: string, songPath: string): Promise<boole
       state.gainNode.connect(ctx.destination)
     }
 
-    console.log(`[Audio] Loading ${audioFiles.length} audio stem(s) for ${songId}:`, audioFiles.map(f => f.filename))
+    console.log(
+      `[Audio] Loading ${audioFiles.length} audio stem(s) for ${songId}:`,
+      audioFiles.map((f) => f.filename)
+    )
 
     // Load all stems in parallel
     const loadPromises = audioFiles.map(async (audioFile) => {
       const protocolUrl = `song-file://${encodeURIComponent(audioFile.filePath)}`
       const response = await fetch(protocolUrl)
       if (!response.ok) {
-        throw new Error(`Protocol fetch failed for ${audioFile.filename}: ${response.status} ${response.statusText}`)
+        throw new Error(
+          `Protocol fetch failed for ${audioFile.filename}: ${response.status} ${response.statusText}`
+        )
       }
       const arrayBuffer = await response.arrayBuffer()
       console.log(`[Audio] Fetched ${audioFile.filename}: ${arrayBuffer.byteLength} bytes`)
       const buffer = await ctx.decodeAudioData(arrayBuffer)
-      console.log(`[Audio] Decoded ${audioFile.filename}: ${buffer.duration.toFixed(2)}s, ${buffer.numberOfChannels}ch, ${buffer.sampleRate}Hz`)
+      console.log(
+        `[Audio] Decoded ${audioFile.filename}: ${buffer.duration.toFixed(2)}s, ${buffer.numberOfChannels}ch, ${buffer.sampleRate}Hz`
+      )
+
+      let finalBuffer = buffer
+      if (buffer.numberOfChannels > 2) {
+        console.log(
+          `[Audio] Downmixing ${audioFile.filename} from ${buffer.numberOfChannels} channels to stereo`
+        )
+        finalBuffer = downmixToStereo(buffer, ctx)
+      }
+
       return {
         filePath: audioFile.filePath,
         filename: audioFile.filename,
-        buffer
+        buffer: finalBuffer
       }
     })
 
@@ -204,8 +251,10 @@ export async function loadAudio(songId: string, songPath: string): Promise<boole
     state.isLoaded = true
     state.duration = Math.max(...sources.map((source) => source.buffer.duration))
 
-    console.log(`[Audio] Loaded ${songId}: ${sources.length} source(s), max duration ${state.duration.toFixed(2)}s`)
-    audioLoadListeners.get(songId)?.forEach(cb => cb(state.duration))
+    console.log(
+      `[Audio] Loaded ${songId}: ${sources.length} source(s), max duration ${state.duration.toFixed(2)}s`
+    )
+    audioLoadListeners.get(songId)?.forEach((cb) => cb(state.duration))
     return true
   } catch (error) {
     console.error('[Audio] Error loading audio:', error)
@@ -250,8 +299,10 @@ function getEffectiveAudioClips(state: AudioState, audioSync?: AudioSync): Audio
 }
 
 function findSourceForClip(state: AudioState, clip: AudioClip): DecodedAudioSource | undefined {
-  return state.sources.find((source) => source.filePath === clip.filePath)
-    ?? state.sources.find((source) => source.filename === clip.filename)
+  return (
+    state.sources.find((source) => source.filePath === clip.filePath) ??
+    state.sources.find((source) => source.filename === clip.filename)
+  )
 }
 
 function scheduleClipSources(
@@ -361,7 +412,9 @@ export async function play(
   state.startTimestamp = ctx.currentTime
   state.speed = speed
 
-  console.log(`[Audio] Playing ${songId} (${sourceNodes.length} scheduled clip(s)) at timeline ${timelineStartSec.toFixed(2)}s (tick ${currentTick})`)
+  console.log(
+    `[Audio] Playing ${songId} (${sourceNodes.length} scheduled clip(s)) at timeline ${timelineStartSec.toFixed(2)}s (tick ${currentTick})`
+  )
 
   let pendingNodes = sourceNodes.length
   for (const source of sourceNodes) {
@@ -451,7 +504,12 @@ export function pause(songId: string): void {
 }
 
 // Seek to a position
-export function seek(songId: string, tick: number, tempoEvents: TempoEvent[], audioSync?: AudioSync): void {
+export function seek(
+  songId: string,
+  tick: number,
+  tempoEvents: TempoEvent[],
+  audioSync?: AudioSync
+): void {
   const state = audioRegistry.get(songId)
   if (!state || !state.isLoaded || state.buffers.length === 0) return
 
@@ -464,10 +522,18 @@ export function seek(songId: string, tick: number, tempoEvents: TempoEvent[], au
     try {
       source.stop()
       source.disconnect()
-    } catch { /* already stopped */ }
+    } catch {
+      /* already stopped */
+    }
   }
 
-  const newSources = scheduleClipSources(ctx, state, getEffectiveAudioClips(state, audioSync), timelineSeekSec, state.speed)
+  const newSources = scheduleClipSources(
+    ctx,
+    state,
+    getEffectiveAudioClips(state, audioSync),
+    timelineSeekSec,
+    state.speed
+  )
   state.sourceNodes = newSources
   state.startOffset = timelineSeekSec
   state.startTimestamp = ctx.currentTime
@@ -582,7 +648,10 @@ export function getAudioDuration(songId: string, audioSync?: AudioSync): number 
   if (!state) return 0
   const clips = getEffectiveAudioClips(state, audioSync)
   if (clips.length === 0) return state.duration ?? 0
-  return Math.max(...clips.map((clip) => (clip.startMs + clip.durationMs) / 1000), state.duration ?? 0)
+  return Math.max(
+    ...clips.map((clip) => (clip.startMs + clip.durationMs) / 1000),
+    state.duration ?? 0
+  )
 }
 
 // Get decoded audio buffers for waveform rendering
@@ -590,21 +659,25 @@ export function getAudioBuffers(songId: string): AudioBuffer[] {
   return audioRegistry.get(songId)?.buffers ?? []
 }
 
-export function getAudioSources(songId: string): Array<{ filePath: string; filename: string; duration: number }> {
+export function getAudioSources(
+  songId: string
+): Array<{ filePath: string; filename: string; duration: number }> {
   const state = audioRegistry.get(songId)
   if (!state) return []
   return state.sources.map((source) => ({
     filePath: source.filePath,
     filename: source.filename,
     duration: source.buffer.duration
-  }))}
+  }))
+}
 
 // Get the decoded AudioBuffer for a specific source file (waveform rendering).
 export function getAudioBufferForPath(songId: string, filePath: string): AudioBuffer | null {
   const state = audioRegistry.get(songId)
   if (!state) return null
-  const source = state.sources.find((entry) => entry.filePath === filePath)
-    ?? state.sources.find((entry) => entry.filename === filePath)
+  const source =
+    state.sources.find((entry) => entry.filePath === filePath) ??
+    state.sources.find((entry) => entry.filename === filePath)
   return source?.buffer ?? null
 }
 
@@ -614,7 +687,11 @@ export function unloadAudio(songId: string): void {
   if (state) {
     stopInternal(state)
     for (const gain of state.stemGains.values()) {
-      try { gain.disconnect() } catch { /* noop */ }
+      try {
+        gain.disconnect()
+      } catch {
+        /* noop */
+      }
     }
     state.stemGains.clear()
     audioRegistry.delete(songId)
@@ -701,9 +778,17 @@ export function stopPitchPreview(): void {
     const osc = previewOsc
     const gain = previewGain
     setTimeout(() => {
-      try { osc.stop(); osc.disconnect(); gain.disconnect() } catch { /* already stopped */ }
+      try {
+        osc.stop()
+        osc.disconnect()
+        gain.disconnect()
+      } catch {
+        /* already stopped */
+      }
     }, 100)
-  } catch { /* context closed */ }
+  } catch {
+    /* context closed */
+  }
 
   previewOsc = null
   previewGain = null
@@ -744,7 +829,12 @@ export function playVocalTone(midiNote: number, durationSec: number): void {
   activeVocalTones.add(entry)
   osc.onended = (): void => {
     activeVocalTones.delete(entry)
-    try { osc.disconnect(); gain.disconnect() } catch { /* already disconnected */ }
+    try {
+      osc.disconnect()
+      gain.disconnect()
+    } catch {
+      /* already disconnected */
+    }
   }
 }
 
@@ -759,7 +849,9 @@ export function stopAllVocalTones(): void {
       gain.gain.setValueAtTime(gain.gain.value, now)
       gain.gain.linearRampToValueAtTime(0, now + 0.04)
       osc.stop(now + 0.05)
-    } catch { /* already stopped */ }
+    } catch {
+      /* already stopped */
+    }
   }
   activeVocalTones.clear()
 }

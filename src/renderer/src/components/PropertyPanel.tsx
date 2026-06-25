@@ -22,54 +22,146 @@ import './PropertyPanel.css'
 const VENUE_MIN_DURATION_TICKS = 60
 
 const LIGHTING_PRESETS = [
-  'verse', 'chorus', 'dischord', 'manual_cool', 'manual_warm', 'stomp',
-  'blackout_fast', 'blackout_slow', 'blackout_spot', 'bre',
-  'flare_fast', 'flare_slow', 'frenzy', 'harmony', 'intro',
-  'loop_cool', 'loop_warm', 'searchlights',
-  'silhouettes', 'silhouettes_spot',
-  'strobe_fast', 'strobe_slow', 'sweep'
+  'verse',
+  'chorus',
+  'dischord',
+  'manual_cool',
+  'manual_warm',
+  'stomp',
+  'blackout_fast',
+  'blackout_slow',
+  'blackout_spot',
+  'bre',
+  'flare_fast',
+  'flare_slow',
+  'frenzy',
+  'harmony',
+  'intro',
+  'loop_cool',
+  'loop_warm',
+  'searchlights',
+  'silhouettes',
+  'silhouettes_spot',
+  'strobe_fast',
+  'strobe_slow',
+  'sweep'
 ]
 
 const POST_PROCESSING_PRESETS = [
-  'ProFilm_a.pp', 'ProFilm_b.pp', 'ProFilm_mirror_a.pp', 'ProFilm_psychedelic_blue_red.pp',
-  'bloom.pp', 'bright.pp',
-  'clean_trails.pp', 'video_trails.pp', 'flicker_trails.pp', 'desat_posterize_trails.pp', 'space_woosh.pp',
-  'contrast_a.pp', 'desat_blue.pp',
-  'film_16mm.pp', 'film_b+w.pp', 'film_blue_filter.pp',
-  'film_contrast.pp', 'film_contrast_blue.pp', 'film_contrast_green.pp', 'film_contrast_red.pp',
-  'film_sepia_ink.pp', 'film_silvertone.pp',
-  'horror_movie_special.pp', 'photo_negative.pp', 'photocopy.pp', 'posterize.pp',
+  'ProFilm_a.pp',
+  'ProFilm_b.pp',
+  'ProFilm_mirror_a.pp',
+  'ProFilm_psychedelic_blue_red.pp',
+  'bloom.pp',
+  'bright.pp',
+  'clean_trails.pp',
+  'video_trails.pp',
+  'flicker_trails.pp',
+  'desat_posterize_trails.pp',
+  'space_woosh.pp',
+  'contrast_a.pp',
+  'desat_blue.pp',
+  'film_16mm.pp',
+  'film_b+w.pp',
+  'film_blue_filter.pp',
+  'film_contrast.pp',
+  'film_contrast_blue.pp',
+  'film_contrast_green.pp',
+  'film_contrast_red.pp',
+  'film_sepia_ink.pp',
+  'film_silvertone.pp',
+  'horror_movie_special.pp',
+  'photo_negative.pp',
+  'photocopy.pp',
+  'posterize.pp',
   'shitty_tv.pp',
-  'video_a.pp', 'video_bw.pp', 'video_security.pp'
+  'video_a.pp',
+  'video_bw.pp',
+  'video_security.pp'
 ]
 
 const STAGE_PRESETS = ['FogOn', 'FogOff', 'bonusfx', 'bonusfx_optional', 'first', 'next', 'prev']
 
 const CAMERA_CUT_PRESETS = [
-  'coop_g_behind', 'coop_g_near', 'coop_g_closeup_hand', 'coop_g_closeup_head',
-  'coop_b_behind', 'coop_b_near', 'coop_b_closeup_hand', 'coop_b_closeup_head',
-  'coop_d_behind', 'coop_d_near', 'coop_d_closeup_hand', 'coop_d_closeup_head',
-  'coop_v_behind', 'coop_v_near', 'coop_v_closeup',
-  'coop_k_behind', 'coop_k_near', 'coop_k_closeup_hand', 'coop_k_closeup_head',
-  'coop_gv_behind', 'coop_gv_near', 'coop_gk_behind', 'coop_gk_near',
-  'coop_bg_behind', 'coop_bg_near', 'coop_bd_near',
-  'coop_bv_behind', 'coop_bv_near', 'coop_bk_behind', 'coop_bk_near',
-  'coop_dg_near', 'coop_dv_near',
-  'coop_kv_behind', 'coop_kv_near',
-  'coop_front_behind', 'coop_front_near',
-  'coop_all_behind', 'coop_all_far', 'coop_all_near',
-  'directed_all', 'directed_all_cam', 'directed_all_lt', 'directed_all_yeah',
-  'directed_bre', 'directed_brej', 'directed_crowd',
-  'directed_guitar', 'directed_guitar_np', 'directed_guitar_cls',
-  'directed_guitar_cam_pr', 'directed_guitar_cam_pt', 'directed_crowd_g',
-  'directed_bass', 'directed_bass_np', 'directed_bass_cam', 'directed_bass_cls', 'directed_crowd_b',
-  'directed_drums', 'directed_drums_lt', 'directed_drums_np', 'directed_drums_pnt', 'directed_drums_kd',
-  'directed_vocals', 'directed_vocals_np', 'directed_vocals_cls',
-  'directed_vocals_cam_pr', 'directed_vocals_cam_pt',
-  'directed_stagedive', 'directed_crowdsurf',
-  'directed_keys', 'directed_keys_np', 'directed_keys_cam',
-  'directed_duo_guitar', 'directed_duo_bass', 'directed_duo_drums', 'directed_duo_kv',
-  'directed_duo_gb', 'directed_duo_kg', 'directed_duo_kb'
+  'coop_g_behind',
+  'coop_g_near',
+  'coop_g_closeup_hand',
+  'coop_g_closeup_head',
+  'coop_b_behind',
+  'coop_b_near',
+  'coop_b_closeup_hand',
+  'coop_b_closeup_head',
+  'coop_d_behind',
+  'coop_d_near',
+  'coop_d_closeup_hand',
+  'coop_d_closeup_head',
+  'coop_v_behind',
+  'coop_v_near',
+  'coop_v_closeup',
+  'coop_k_behind',
+  'coop_k_near',
+  'coop_k_closeup_hand',
+  'coop_k_closeup_head',
+  'coop_gv_behind',
+  'coop_gv_near',
+  'coop_gk_behind',
+  'coop_gk_near',
+  'coop_bg_behind',
+  'coop_bg_near',
+  'coop_bd_near',
+  'coop_bv_behind',
+  'coop_bv_near',
+  'coop_bk_behind',
+  'coop_bk_near',
+  'coop_dg_near',
+  'coop_dv_near',
+  'coop_kv_behind',
+  'coop_kv_near',
+  'coop_front_behind',
+  'coop_front_near',
+  'coop_all_behind',
+  'coop_all_far',
+  'coop_all_near',
+  'directed_all',
+  'directed_all_cam',
+  'directed_all_lt',
+  'directed_all_yeah',
+  'directed_bre',
+  'directed_brej',
+  'directed_crowd',
+  'directed_guitar',
+  'directed_guitar_np',
+  'directed_guitar_cls',
+  'directed_guitar_cam_pr',
+  'directed_guitar_cam_pt',
+  'directed_crowd_g',
+  'directed_bass',
+  'directed_bass_np',
+  'directed_bass_cam',
+  'directed_bass_cls',
+  'directed_crowd_b',
+  'directed_drums',
+  'directed_drums_lt',
+  'directed_drums_np',
+  'directed_drums_pnt',
+  'directed_drums_kd',
+  'directed_vocals',
+  'directed_vocals_np',
+  'directed_vocals_cls',
+  'directed_vocals_cam_pr',
+  'directed_vocals_cam_pt',
+  'directed_stagedive',
+  'directed_crowdsurf',
+  'directed_keys',
+  'directed_keys_np',
+  'directed_keys_cam',
+  'directed_duo_guitar',
+  'directed_duo_bass',
+  'directed_duo_drums',
+  'directed_duo_kv',
+  'directed_duo_gb',
+  'directed_duo_kg',
+  'directed_duo_kb'
 ]
 
 const PERFORMER_TYPE_PRESETS = ['spotlight', 'singalong']
@@ -90,12 +182,18 @@ function formatVenueLabel(value: string): string {
 
 function getVenueLaneLabel(lane: SelectedVenueEventRef['lane']): string {
   switch (lane) {
-    case 'lighting': return 'Lighting'
-    case 'postProcessing': return 'Post FX'
-    case 'stage': return 'Stage FX'
-    case 'cameraCuts': return 'Camera Cut'
-    case 'performer': return 'Performer'
-    default: return lane
+    case 'lighting':
+      return 'Lighting'
+    case 'postProcessing':
+      return 'Post FX'
+    case 'stage':
+      return 'Stage FX'
+    case 'cameraCuts':
+      return 'Camera Cut'
+    case 'performer':
+      return 'Performer'
+    default:
+      return lane
   }
 }
 
@@ -106,8 +204,21 @@ function VenueEventEditor({
   onDelete
 }: {
   selectedRef: SelectedVenueEventRef
-  eventData: VenueLightingEvent | VenuePostProcessingEvent | VenueStageEvent | VenueCameraCutEvent | VenuePerformerEvent
-  onUpdate: (updates: Partial<VenueLightingEvent | VenuePostProcessingEvent | VenueStageEvent | VenueCameraCutEvent | VenuePerformerEvent>) => void
+  eventData:
+    | VenueLightingEvent
+    | VenuePostProcessingEvent
+    | VenueStageEvent
+    | VenueCameraCutEvent
+    | VenuePerformerEvent
+  onUpdate: (
+    updates: Partial<
+      | VenueLightingEvent
+      | VenuePostProcessingEvent
+      | VenueStageEvent
+      | VenueCameraCutEvent
+      | VenuePerformerEvent
+    >
+  ) => void
   onDelete: () => void
 }): React.JSX.Element {
   const laneLabel = getVenueLaneLabel(selectedRef.lane)
@@ -141,9 +252,13 @@ function VenueEventEditor({
               value={(eventData as VenueLightingEvent).type}
               onChange={(e) => onUpdate({ type: e.target.value })}
             >
-              {uniqueOptions(LIGHTING_PRESETS, (eventData as VenueLightingEvent).type).map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
+              {uniqueOptions(LIGHTING_PRESETS, (eventData as VenueLightingEvent).type).map(
+                (option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                )
+              )}
             </select>
           </div>
         )}
@@ -156,8 +271,13 @@ function VenueEventEditor({
               value={(eventData as VenuePostProcessingEvent).type}
               onChange={(e) => onUpdate({ type: e.target.value })}
             >
-              {uniqueOptions(POST_PROCESSING_PRESETS, (eventData as VenuePostProcessingEvent).type).map((option) => (
-                <option key={option} value={option}>{option}</option>
+              {uniqueOptions(
+                POST_PROCESSING_PRESETS,
+                (eventData as VenuePostProcessingEvent).type
+              ).map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
               ))}
             </select>
           </div>
@@ -172,9 +292,13 @@ function VenueEventEditor({
                 value={(eventData as VenueStageEvent).effect}
                 onChange={(e) => onUpdate({ effect: e.target.value })}
               >
-                {uniqueOptions(STAGE_PRESETS, (eventData as VenueStageEvent).effect).map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
+                {uniqueOptions(STAGE_PRESETS, (eventData as VenueStageEvent).effect).map(
+                  (option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  )
+                )}
               </select>
             </div>
             <div className="property-group">
@@ -184,7 +308,14 @@ function VenueEventEditor({
                 className="property-input"
                 value={(eventData as VenueStageEvent).duration ?? 0}
                 min={VENUE_MIN_DURATION_TICKS}
-                onChange={(e) => onUpdate({ duration: Math.max(VENUE_MIN_DURATION_TICKS, Number(e.target.value) || VENUE_MIN_DURATION_TICKS) })}
+                onChange={(e) =>
+                  onUpdate({
+                    duration: Math.max(
+                      VENUE_MIN_DURATION_TICKS,
+                      Number(e.target.value) || VENUE_MIN_DURATION_TICKS
+                    )
+                  })
+                }
               />
             </div>
           </>
@@ -198,9 +329,13 @@ function VenueEventEditor({
               value={(eventData as VenueCameraCutEvent).subject}
               onChange={(e) => onUpdate({ subject: e.target.value })}
             >
-              {uniqueOptions(CAMERA_CUT_PRESETS, (eventData as VenueCameraCutEvent).subject).map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
+              {uniqueOptions(CAMERA_CUT_PRESETS, (eventData as VenueCameraCutEvent).subject).map(
+                (option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                )
+              )}
             </select>
           </div>
         )}
@@ -214,9 +349,13 @@ function VenueEventEditor({
                 value={(eventData as VenuePerformerEvent).type}
                 onChange={(e) => onUpdate({ type: e.target.value })}
               >
-                {uniqueOptions(PERFORMER_TYPE_PRESETS, (eventData as VenuePerformerEvent).type).map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
+                {uniqueOptions(PERFORMER_TYPE_PRESETS, (eventData as VenuePerformerEvent).type).map(
+                  (option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  )
+                )}
               </select>
             </div>
             <div className="property-group">
@@ -226,8 +365,13 @@ function VenueEventEditor({
                 value={(eventData as VenuePerformerEvent).performer ?? ''}
                 onChange={(e) => onUpdate({ performer: e.target.value })}
               >
-                {uniqueOptions(PERFORMER_TARGET_PRESETS, (eventData as VenuePerformerEvent).performer).map((option) => (
-                  <option key={option} value={option}>{option}</option>
+                {uniqueOptions(
+                  PERFORMER_TARGET_PRESETS,
+                  (eventData as VenuePerformerEvent).performer
+                ).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
                 ))}
               </select>
             </div>
@@ -238,7 +382,14 @@ function VenueEventEditor({
                 className="property-input"
                 value={(eventData as VenuePerformerEvent).duration}
                 min={VENUE_MIN_DURATION_TICKS}
-                onChange={(e) => onUpdate({ duration: Math.max(VENUE_MIN_DURATION_TICKS, Number(e.target.value) || VENUE_MIN_DURATION_TICKS) })}
+                onChange={(e) =>
+                  onUpdate({
+                    duration: Math.max(
+                      VENUE_MIN_DURATION_TICKS,
+                      Number(e.target.value) || VENUE_MIN_DURATION_TICKS
+                    )
+                  })
+                }
               />
             </div>
           </>
@@ -246,17 +397,21 @@ function VenueEventEditor({
 
         <div className="property-group">
           <label className="property-label">Preview</label>
-          <input className="property-input" readOnly value={formatVenueLabel(
-            selectedRef.lane === 'lighting'
-              ? (eventData as VenueLightingEvent).type
-              : selectedRef.lane === 'postProcessing'
-                ? (eventData as VenuePostProcessingEvent).type
-                : selectedRef.lane === 'stage'
-                  ? (eventData as VenueStageEvent).effect
-                  : selectedRef.lane === 'cameraCuts'
-                    ? (eventData as VenueCameraCutEvent).subject
-                    : `${(eventData as VenuePerformerEvent).type} ${(eventData as VenuePerformerEvent).performer ?? ''}`
-          )} />
+          <input
+            className="property-input"
+            readOnly
+            value={formatVenueLabel(
+              selectedRef.lane === 'lighting'
+                ? (eventData as VenueLightingEvent).type
+                : selectedRef.lane === 'postProcessing'
+                  ? (eventData as VenuePostProcessingEvent).type
+                  : selectedRef.lane === 'stage'
+                    ? (eventData as VenueStageEvent).effect
+                    : selectedRef.lane === 'cameraCuts'
+                      ? (eventData as VenueCameraCutEvent).subject
+                      : `${(eventData as VenuePerformerEvent).type} ${(eventData as VenuePerformerEvent).performer ?? ''}`
+            )}
+          />
         </div>
       </div>
 
@@ -467,9 +622,7 @@ function NoteEditor({
                 <input
                   type="checkbox"
                   checked={note.flags?.isHOPO || false}
-                  onChange={(e) =>
-                    onUpdate({ flags: { ...note.flags, isHOPO: e.target.checked } })
-                  }
+                  onChange={(e) => onUpdate({ flags: { ...note.flags, isHOPO: e.target.checked } })}
                 />
                 <span>HOPO</span>
               </label>
@@ -477,9 +630,7 @@ function NoteEditor({
                 <input
                   type="checkbox"
                   checked={note.flags?.isTap || false}
-                  onChange={(e) =>
-                    onUpdate({ flags: { ...note.flags, isTap: e.target.checked } })
-                  }
+                  onChange={(e) => onUpdate({ flags: { ...note.flags, isTap: e.target.checked } })}
                 />
                 <span>Tap</span>
               </label>
@@ -584,13 +735,13 @@ function MultiNoteEditor({
   const hasKickDrums = kickDrumNotes.length > 0
   const doubleBassState = hasKickDrums
     ? (() => {
-      const values = kickDrumNotes.map((n) => n.flags?.isDoubleKick === true)
-      const allTrue = values.every((v) => v === true)
-      const allFalse = values.every((v) => v === false)
-      if (allTrue) return true
-      if (allFalse) return false
-      return null
-    })()
+        const values = kickDrumNotes.map((n) => n.flags?.isDoubleKick === true)
+        const allTrue = values.every((v) => v === true)
+        const allFalse = values.every((v) => v === false)
+        if (allTrue) return true
+        if (allFalse) return false
+        return null
+      })()
     : null
   const hopoState = hasGuitarBass ? flagState((n) => n.flags?.isHOPO) : null
   const tapState = hasGuitarBass ? flagState((n) => n.flags?.isTap) : null
@@ -610,7 +761,9 @@ function MultiNoteEditor({
               <input
                 type="checkbox"
                 checked={doubleBassState === true}
-                ref={(el) => { if (el) el.indeterminate = doubleBassState === null }}
+                ref={(el) => {
+                  if (el) el.indeterminate = doubleBassState === null
+                }}
                 onChange={(e) => onUpdateAll({ flags: { isDoubleKick: e.target.checked } })}
               />
               <span>Double Bass (2x)</span>
@@ -621,7 +774,9 @@ function MultiNoteEditor({
               <input
                 type="checkbox"
                 checked={cymbalState === true}
-                ref={(el) => { if (el) el.indeterminate = cymbalState === null }}
+                ref={(el) => {
+                  if (el) el.indeterminate = cymbalState === null
+                }}
                 onChange={(e) => onUpdateAll({ flags: { isCymbal: e.target.checked } })}
               />
               <span>Cymbal</span>
@@ -633,7 +788,9 @@ function MultiNoteEditor({
                 <input
                   type="checkbox"
                   checked={hopoState === true}
-                  ref={(el) => { if (el) el.indeterminate = hopoState === null }}
+                  ref={(el) => {
+                    if (el) el.indeterminate = hopoState === null
+                  }}
                   onChange={(e) => onUpdateAll({ flags: { isHOPO: e.target.checked } })}
                 />
                 <span>HOPO</span>
@@ -642,7 +799,9 @@ function MultiNoteEditor({
                 <input
                   type="checkbox"
                   checked={tapState === true}
-                  ref={(el) => { if (el) el.indeterminate = tapState === null }}
+                  ref={(el) => {
+                    if (el) el.indeterminate = tapState === null
+                  }}
                   onChange={(e) => onUpdateAll({ flags: { isTap: e.target.checked } })}
                 />
                 <span>Tap</span>
@@ -653,7 +812,9 @@ function MultiNoteEditor({
             <input
               type="checkbox"
               checked={accentState === true}
-              ref={(el) => { if (el) el.indeterminate = accentState === null }}
+              ref={(el) => {
+                if (el) el.indeterminate = accentState === null
+              }}
               onChange={(e) => onUpdateAll({ flags: { isAccent: e.target.checked } })}
             />
             <span>Accent</span>
@@ -663,7 +824,9 @@ function MultiNoteEditor({
               <input
                 type="checkbox"
                 checked={ghostState === true}
-                ref={(el) => { if (el) el.indeterminate = ghostState === null }}
+                ref={(el) => {
+                  if (el) el.indeterminate = ghostState === null
+                }}
                 onChange={(e) => onUpdateAll({ flags: { isGhost: e.target.checked } })}
               />
               <span>Ghost</span>
@@ -748,7 +911,11 @@ function VocalNoteEditor({
               // On blur, ensure we have a valid value
               const parsed = parseInt(e.target.value)
               if (isNaN(parsed) || parsed < 36 || parsed > 84) {
-                onUpdate({ lane: (typeof note.lane === 'number' ? note.lane : 60) as unknown as VocalNote['lane'] })
+                onUpdate({
+                  lane: (typeof note.lane === 'number'
+                    ? note.lane
+                    : 60) as unknown as VocalNote['lane']
+                })
               }
             }}
             min={36}
@@ -761,7 +928,9 @@ function VocalNoteEditor({
           <select
             className="property-select"
             value={note.harmonyPart}
-            onChange={(e) => onUpdate({ harmonyPart: parseInt(e.target.value) as VocalNote['harmonyPart'] })}
+            onChange={(e) =>
+              onUpdate({ harmonyPart: parseInt(e.target.value) as VocalNote['harmonyPart'] })
+            }
           >
             <option value={0}>Main Vocals</option>
             <option value={1}>Harmony 1</option>
@@ -827,7 +996,9 @@ function TempoChangeRow({
   const [draftTick, setDraftTick] = useState<string>(String(event.tick))
 
   // Keep draft in sync if external change moves this event
-  useEffect(() => { setDraftTick(String(event.tick)) }, [event.tick])
+  useEffect(() => {
+    setDraftTick(String(event.tick))
+  }, [event.tick])
 
   const commitTick = (): void => {
     const parsed = parseInt(draftTick)
@@ -846,66 +1017,132 @@ function TempoChangeRow({
   const timeStr = `${mins}:${remSecs < 10 ? '0' : ''}${remSecs.toFixed(1)}`
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '52px 44px 1fr 34px 22px 22px 18px',
-      alignItems: 'center', gap: 4, padding: '3px 6px',
-      borderBottom: '1px solid #2a2a3e', fontSize: 12
-    }}>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '52px 44px 1fr 34px 22px 22px 18px',
+        alignItems: 'center',
+        gap: 4,
+        padding: '3px 6px',
+        borderBottom: '1px solid #2a2a3e',
+        fontSize: 12
+      }}
+    >
       {/* Tick input */}
       <input
         type="number"
         style={{
-          background: '#1a1a2e', border: '1px solid #555', borderRadius: 3,
-          color: '#FF8C00', padding: '2px 4px', fontSize: 11,
-          fontFamily: 'monospace', fontWeight: 600, width: '100%', minWidth: 0
+          background: '#1a1a2e',
+          border: '1px solid #555',
+          borderRadius: 3,
+          color: '#FF8C00',
+          padding: '2px 4px',
+          fontSize: 11,
+          fontFamily: 'monospace',
+          fontWeight: 600,
+          width: '100%',
+          minWidth: 0
         }}
         title="Tick position — edit to move this tempo change"
         value={draftTick}
         min={1}
         onChange={(e) => setDraftTick(e.target.value)}
         onBlur={commitTick}
-        onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur() } else if (e.key === 'Escape') { setDraftTick(String(event.tick)); e.currentTarget.blur() } }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.currentTarget.blur()
+          } else if (e.key === 'Escape') {
+            setDraftTick(String(event.tick))
+            e.currentTarget.blur()
+          }
+        }}
       />
       {/* Time display */}
-      <span style={{ color: '#999', fontSize: 10, fontFamily: 'monospace', textAlign: 'right' }}
-        title={`Measure ${measure}, Beat ${beat}`}>
+      <span
+        style={{ color: '#999', fontSize: 10, fontFamily: 'monospace', textAlign: 'right' }}
+        title={`Measure ${measure}, Beat ${beat}`}
+      >
         {timeStr}
       </span>
       {/* BPM input */}
       <input
         type="number"
         style={{
-          background: '#1a1a2e', border: '1px solid #444', borderRadius: 3,
-          color: '#eee', padding: '2px 4px', fontSize: 12, width: '100%', minWidth: 0
+          background: '#1a1a2e',
+          border: '1px solid #444',
+          borderRadius: 3,
+          color: '#eee',
+          padding: '2px 4px',
+          fontSize: 12,
+          width: '100%',
+          minWidth: 0
         }}
         value={event.bpm}
         onChange={(e) => {
           const v = parseFloat(e.target.value)
           if (v > 0 && v <= 999) onUpdateBpm(event.tick, v)
         }}
-        min={1} max={999} step={0.01}
+        min={1}
+        max={999}
+        step={0.01}
       />
       <span style={{ color: '#888', fontSize: 11 }}>BPM</span>
       {/* ± BPM nudge buttons — click = ±1, Ctrl+click = ±0.1 */}
       <button
         title="Decrease BPM (Ctrl: -0.1)"
-        style={{ background: '#2a2a3e', border: '1px solid #444', borderRadius: 3, color: '#ccc', cursor: 'pointer', fontSize: 12, padding: '0 5px', lineHeight: '18px' }}
-        onClick={(e) => { const delta = e.ctrlKey || e.metaKey ? 0.1 : 1; const v = Math.max(1, Math.round((event.bpm - delta) * 100) / 100); onUpdateBpm(event.tick, v) }}
-      >-</button>
+        style={{
+          background: '#2a2a3e',
+          border: '1px solid #444',
+          borderRadius: 3,
+          color: '#ccc',
+          cursor: 'pointer',
+          fontSize: 12,
+          padding: '0 5px',
+          lineHeight: '18px'
+        }}
+        onClick={(e) => {
+          const delta = e.ctrlKey || e.metaKey ? 0.1 : 1
+          const v = Math.max(1, Math.round((event.bpm - delta) * 100) / 100)
+          onUpdateBpm(event.tick, v)
+        }}
+      >
+        -
+      </button>
       <button
         title="Increase BPM (Ctrl: +0.1)"
-        style={{ background: '#2a2a3e', border: '1px solid #444', borderRadius: 3, color: '#ccc', cursor: 'pointer', fontSize: 12, padding: '0 5px', lineHeight: '18px' }}
-        onClick={(e) => { const delta = e.ctrlKey || e.metaKey ? 0.1 : 1; const v = Math.min(999, Math.round((event.bpm + delta) * 100) / 100); onUpdateBpm(event.tick, v) }}
-      >+</button>
+        style={{
+          background: '#2a2a3e',
+          border: '1px solid #444',
+          borderRadius: 3,
+          color: '#ccc',
+          cursor: 'pointer',
+          fontSize: 12,
+          padding: '0 5px',
+          lineHeight: '18px'
+        }}
+        onClick={(e) => {
+          const delta = e.ctrlKey || e.metaKey ? 0.1 : 1
+          const v = Math.min(999, Math.round((event.bpm + delta) * 100) / 100)
+          onUpdateBpm(event.tick, v)
+        }}
+      >
+        +
+      </button>
       <button
         style={{
-          background: 'none', border: 'none', color: '#f66', cursor: 'pointer',
-          fontSize: 14, padding: '0 2px', lineHeight: 1
+          background: 'none',
+          border: 'none',
+          color: '#f66',
+          cursor: 'pointer',
+          fontSize: 14,
+          padding: '0 2px',
+          lineHeight: 1
         }}
         title="Delete tempo change"
         onClick={() => onDelete(event.tick)}
-      >✕</button>
+      >
+        ✕
+      </button>
     </div>
   )
 }
@@ -926,7 +1163,9 @@ function TimeSignatureRow({
 }): React.JSX.Element {
   const [draftTick, setDraftTick] = useState<string>(String(event.tick))
 
-  useEffect(() => { setDraftTick(String(event.tick)) }, [event.tick])
+  useEffect(() => {
+    setDraftTick(String(event.tick))
+  }, [event.tick])
 
   const commitTick = (): void => {
     const parsed = parseInt(draftTick)
@@ -945,21 +1184,30 @@ function TimeSignatureRow({
   const timeStr = `${mins}:${remSecs < 10 ? '0' : ''}${remSecs.toFixed(1)}`
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '52px 44px 36px 18px 36px 18px',
-      alignItems: 'center',
-      gap: 4,
-      padding: '3px 6px',
-      borderBottom: '1px solid #2a2a3e',
-      fontSize: 12
-    }}>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '52px 44px 36px 18px 36px 18px',
+        alignItems: 'center',
+        gap: 4,
+        padding: '3px 6px',
+        borderBottom: '1px solid #2a2a3e',
+        fontSize: 12
+      }}
+    >
       <input
         type="number"
         style={{
-          background: '#1a1a2e', border: '1px solid #555', borderRadius: 3,
-          color: '#8dd0ff', padding: '2px 4px', fontSize: 11,
-          fontFamily: 'monospace', fontWeight: 600, width: '100%', minWidth: 0
+          background: '#1a1a2e',
+          border: '1px solid #555',
+          borderRadius: 3,
+          color: '#8dd0ff',
+          padding: '2px 4px',
+          fontSize: 11,
+          fontFamily: 'monospace',
+          fontWeight: 600,
+          width: '100%',
+          minWidth: 0
         }}
         title="Tick position — edit to move this time signature change"
         value={draftTick}
@@ -968,18 +1216,29 @@ function TimeSignatureRow({
         onBlur={commitTick}
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur()
-          else if (e.key === 'Escape') { setDraftTick(String(event.tick)); e.currentTarget.blur() }
+          else if (e.key === 'Escape') {
+            setDraftTick(String(event.tick))
+            e.currentTarget.blur()
+          }
         }}
       />
-      <span style={{ color: '#999', fontSize: 10, fontFamily: 'monospace', textAlign: 'right' }}
-        title={`Measure ${measure}, Beat ${beat}`}>
+      <span
+        style={{ color: '#999', fontSize: 10, fontFamily: 'monospace', textAlign: 'right' }}
+        title={`Measure ${measure}, Beat ${beat}`}
+      >
         {timeStr}
       </span>
       <input
         type="number"
         style={{
-          background: '#1a1a2e', border: '1px solid #444', borderRadius: 3,
-          color: '#eee', padding: '2px 4px', fontSize: 12, width: '100%', minWidth: 0
+          background: '#1a1a2e',
+          border: '1px solid #444',
+          borderRadius: 3,
+          color: '#eee',
+          padding: '2px 4px',
+          fontSize: 12,
+          width: '100%',
+          minWidth: 0
         }}
         value={event.numerator}
         min={1}
@@ -993,8 +1252,14 @@ function TimeSignatureRow({
       <input
         type="number"
         style={{
-          background: '#1a1a2e', border: '1px solid #444', borderRadius: 3,
-          color: '#eee', padding: '2px 4px', fontSize: 12, width: '100%', minWidth: 0
+          background: '#1a1a2e',
+          border: '1px solid #444',
+          borderRadius: 3,
+          color: '#eee',
+          padding: '2px 4px',
+          fontSize: 12,
+          width: '100%',
+          minWidth: 0
         }}
         value={event.denominator}
         min={1}
@@ -1007,12 +1272,19 @@ function TimeSignatureRow({
       />
       <button
         style={{
-          background: 'none', border: 'none', color: '#f66', cursor: 'pointer',
-          fontSize: 14, padding: '0 2px', lineHeight: 1
+          background: 'none',
+          border: 'none',
+          color: '#f66',
+          cursor: 'pointer',
+          fontSize: 14,
+          padding: '0 2px',
+          lineHeight: 1
         }}
         title="Delete time signature change"
         onClick={() => onDelete(event.tick)}
-      >✕</button>
+      >
+        ✕
+      </button>
     </div>
   )
 }
@@ -1144,7 +1416,7 @@ function MetadataEditor({
 
       <div className="property-section">
         <div className="property-section-title">Tempo</div>
-        
+
         <div className="property-group">
           <label className="property-label">Initial BPM</label>
           <input
@@ -1166,8 +1438,17 @@ function MetadataEditor({
         {/* Tempo changes list */}
         {tempoEvents.length > 1 && (
           <div style={{ marginTop: 8, marginBottom: 8 }}>
-            <label className="property-label" style={{ marginBottom: 4, display: 'block' }}>Tempo Changes</label>
-            <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid #333', borderRadius: 4 }}>
+            <label className="property-label" style={{ marginBottom: 4, display: 'block' }}>
+              Tempo Changes
+            </label>
+            <div
+              style={{
+                maxHeight: 160,
+                overflowY: 'auto',
+                border: '1px solid #333',
+                borderRadius: 4
+              }}
+            >
               {tempoEvents.slice(1).map((te) => (
                 <TempoChangeRow
                   key={te.tick}
@@ -1188,17 +1469,31 @@ function MetadataEditor({
             type="number"
             placeholder="BPM"
             style={{
-              flex: 1, background: '#1a1a2e', border: '1px solid #444', borderRadius: 4,
-              color: '#eee', padding: '4px 6px', fontSize: 12
+              flex: 1,
+              background: '#1a1a2e',
+              border: '1px solid #444',
+              borderRadius: 4,
+              color: '#eee',
+              padding: '4px 6px',
+              fontSize: 12
             }}
             value={newTempoBpm}
             onChange={(e) => setNewTempoBpm(e.target.value)}
-            min={1} max={999} step={0.01}
+            min={1}
+            max={999}
+            step={0.01}
           />
           <button
             style={{
-              background: '#FF8C00', border: 'none', borderRadius: 4, color: '#000',
-              padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap'
+              background: '#FF8C00',
+              border: 'none',
+              borderRadius: 4,
+              color: '#000',
+              padding: '4px 8px',
+              cursor: 'pointer',
+              fontSize: 11,
+              fontWeight: 600,
+              whiteSpace: 'nowrap'
             }}
             title={`Add tempo change at current playhead position (tick ${currentTick})`}
             onClick={() => {
@@ -1208,7 +1503,9 @@ function MetadataEditor({
                 setNewTempoBpm('')
               }
             }}
-          >+ At Playhead</button>
+          >
+            + At Playhead
+          </button>
         </div>
         <div className="difficulty-hint">Add tempo changes at the current playhead position</div>
       </div>
@@ -1249,8 +1546,17 @@ function MetadataEditor({
 
         {timeSignatures.length > 1 && (
           <div style={{ marginTop: 8, marginBottom: 8 }}>
-            <label className="property-label" style={{ marginBottom: 4, display: 'block' }}>Signature Changes</label>
-            <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid #333', borderRadius: 4 }}>
+            <label className="property-label" style={{ marginBottom: 4, display: 'block' }}>
+              Signature Changes
+            </label>
+            <div
+              style={{
+                maxHeight: 160,
+                overflowY: 'auto',
+                border: '1px solid #333',
+                borderRadius: 4
+              }}
+            >
               {timeSignatures.slice(1).map((ts) => (
                 <TimeSignatureRow
                   key={ts.tick}
@@ -1270,8 +1576,13 @@ function MetadataEditor({
             type="number"
             placeholder="Num"
             style={{
-              width: 70, background: '#1a1a2e', border: '1px solid #444', borderRadius: 4,
-              color: '#eee', padding: '4px 6px', fontSize: 12
+              width: 70,
+              background: '#1a1a2e',
+              border: '1px solid #444',
+              borderRadius: 4,
+              color: '#eee',
+              padding: '4px 6px',
+              fontSize: 12
             }}
             value={newTimeSigNum}
             onChange={(e) => setNewTimeSigNum(e.target.value)}
@@ -1283,8 +1594,13 @@ function MetadataEditor({
             type="number"
             placeholder="Den"
             style={{
-              width: 70, background: '#1a1a2e', border: '1px solid #444', borderRadius: 4,
-              color: '#eee', padding: '4px 6px', fontSize: 12
+              width: 70,
+              background: '#1a1a2e',
+              border: '1px solid #444',
+              borderRadius: 4,
+              color: '#eee',
+              padding: '4px 6px',
+              fontSize: 12
             }}
             value={newTimeSigDen}
             onChange={(e) => setNewTimeSigDen(e.target.value)}
@@ -1293,27 +1609,48 @@ function MetadataEditor({
           />
           <button
             style={{
-              background: '#8dd0ff', border: 'none', borderRadius: 4, color: '#081018',
-              padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap'
+              background: '#8dd0ff',
+              border: 'none',
+              borderRadius: 4,
+              color: '#081018',
+              padding: '4px 8px',
+              cursor: 'pointer',
+              fontSize: 11,
+              fontWeight: 600,
+              whiteSpace: 'nowrap'
             }}
             title={`Add time signature change at current playhead position (tick ${currentTick})`}
             onClick={() => {
               const num = parseInt(newTimeSigNum)
               const den = parseInt(newTimeSigDen)
-              if (!isNaN(num) && !isNaN(den) && num >= 1 && num <= 32 && den >= 1 && den <= 32 && currentTick > 0) {
+              if (
+                !isNaN(num) &&
+                !isNaN(den) &&
+                num >= 1 &&
+                num <= 32 &&
+                den >= 1 &&
+                den <= 32 &&
+                currentTick > 0
+              ) {
                 onAddTimeSignature({ tick: currentTick, numerator: num, denominator: den })
               }
             }}
-          >+ At Playhead</button>
+          >
+            + At Playhead
+          </button>
         </div>
-        <div className="difficulty-hint">Add time signature changes at the current playhead position</div>
+        <div className="difficulty-hint">
+          Add time signature changes at the current playhead position
+        </div>
       </div>
 
       <div className="property-section">
         <div className="property-section-title">Song Sections</div>
 
         {songSections.length > 0 ? (
-          <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #333', borderRadius: 4 }}>
+          <div
+            style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #333', borderRadius: 4 }}
+          >
             {songSections.map((section) => (
               <div
                 key={section.id}
@@ -1331,9 +1668,14 @@ function MetadataEditor({
                   value={section.tick}
                   min={0}
                   style={{
-                    background: '#1a1a2e', border: '1px solid #555', borderRadius: 3,
-                    color: '#9cd89a', padding: '2px 4px', fontSize: 11,
-                    fontFamily: 'monospace', fontWeight: 600
+                    background: '#1a1a2e',
+                    border: '1px solid #555',
+                    borderRadius: 3,
+                    color: '#9cd89a',
+                    padding: '2px 4px',
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                    fontWeight: 600
                   }}
                   onChange={(e) => {
                     const v = parseInt(e.target.value)
@@ -1350,12 +1692,19 @@ function MetadataEditor({
                 />
                 <button
                   style={{
-                    background: 'none', border: 'none', color: '#f66', cursor: 'pointer',
-                    fontSize: 14, padding: '0 2px', lineHeight: 1
+                    background: 'none',
+                    border: 'none',
+                    color: '#f66',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                    padding: '0 2px',
+                    lineHeight: 1
                   }}
                   title="Delete section"
                   onClick={() => onDeleteSongSection(section.id)}
-                >x</button>
+                >
+                  x
+                </button>
               </div>
             ))}
           </div>
@@ -1366,12 +1715,20 @@ function MetadataEditor({
         <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 8 }}>
           <button
             style={{
-              background: '#9cd89a', border: 'none', borderRadius: 4, color: '#071008',
-              padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600
+              background: '#9cd89a',
+              border: 'none',
+              borderRadius: 4,
+              color: '#071008',
+              padding: '4px 8px',
+              cursor: 'pointer',
+              fontSize: 11,
+              fontWeight: 600
             }}
             title={`Add section at current playhead position (tick ${currentTick})`}
             onClick={() => onAddSongSection({ tick: currentTick, name: 'section' })}
-          >+ At Playhead</button>
+          >
+            + At Playhead
+          </button>
         </div>
         <div className="difficulty-hint">Use labels like intro, verse, chorus, solo, outro</div>
       </div>
@@ -1510,13 +1867,16 @@ export function PropertyPanel(): React.JSX.Element {
 
     const unsub = songStore.subscribe((state, prev) => {
       if (state.selectedNoteIds !== prev.selectedNoteIds) setSelectedNoteIds(state.selectedNoteIds)
-      if (state.selectedVocalNoteIds !== prev.selectedVocalNoteIds) setSelectedVocalNoteIds(state.selectedVocalNoteIds || [])
+      if (state.selectedVocalNoteIds !== prev.selectedVocalNoteIds)
+        setSelectedVocalNoteIds(state.selectedVocalNoteIds || [])
       if (state.song.notes !== prev.song.notes) setNotes(state.song.notes)
       if (state.song.vocalNotes !== prev.song.vocalNotes) setVocalNotes(state.song.vocalNotes || [])
       if (state.song.metadata !== prev.song.metadata) setMetadata(state.song.metadata)
       if (state.song.tempoEvents !== prev.song.tempoEvents) setTempoEvents(state.song.tempoEvents)
-      if (state.song.timeSignatures !== prev.song.timeSignatures) setTimeSignatures(state.song.timeSignatures || [{ tick: 0, numerator: 4, denominator: 4 }])
-      if (state.song.songSections !== prev.song.songSections) setSongSections(state.song.songSections || [])
+      if (state.song.timeSignatures !== prev.song.timeSignatures)
+        setTimeSignatures(state.song.timeSignatures || [{ tick: 0, numerator: 4, denominator: 4 }])
+      if (state.song.songSections !== prev.song.songSections)
+        setSongSections(state.song.songSections || [])
       if (state.song.venueTrack !== prev.song.venueTrack) setVenueTrack(state.song.venueTrack)
       if (state.song.folderPath !== prev.song.folderPath) setFolderPath(state.song.folderPath)
       if (state.currentTick !== prev.currentTick) setCurrentTick(state.currentTick)
@@ -1574,7 +1934,10 @@ export function PropertyPanel(): React.JSX.Element {
 
   const handleBulkFlagUpdate = (updates: Partial<Note>): void => {
     const store = songStore.getState()
-    const hasDoubleKickChange = Object.prototype.hasOwnProperty.call(updates.flags || {}, 'isDoubleKick')
+    const hasDoubleKickChange = Object.prototype.hasOwnProperty.call(
+      updates.flags || {},
+      'isDoubleKick'
+    )
     for (const noteId of selectedNoteIds) {
       const note = store.song.notes.find((n) => n.id === noteId)
       if (note && updates.flags) {
@@ -1602,10 +1965,24 @@ export function PropertyPanel(): React.JSX.Element {
     songStore.getState().updateMetadata(updates)
   }
 
-  const handleVenueUpdate = (updates: Partial<VenueLightingEvent | VenuePostProcessingEvent | VenueStageEvent | VenueCameraCutEvent | VenuePerformerEvent>): void => {
+  const handleVenueUpdate = (
+    updates: Partial<
+      | VenueLightingEvent
+      | VenuePostProcessingEvent
+      | VenueStageEvent
+      | VenueCameraCutEvent
+      | VenuePerformerEvent
+    >
+  ): void => {
     if (!selectedVenueEvent) return
     const lane = selectedVenueEvent.lane
-    const laneEvents = songStore.getState().song.venueTrack[lane] as Array<VenueLightingEvent | VenuePostProcessingEvent | VenueStageEvent | VenueCameraCutEvent | VenuePerformerEvent>
+    const laneEvents = songStore.getState().song.venueTrack[lane] as Array<
+      | VenueLightingEvent
+      | VenuePostProcessingEvent
+      | VenueStageEvent
+      | VenueCameraCutEvent
+      | VenuePerformerEvent
+    >
     const nextLane = laneEvents
       .map((event) => (event.id === selectedVenueEvent.id ? { ...event, ...updates } : event))
       .sort((a, b) => a.tick - b.tick)
@@ -1615,7 +1992,13 @@ export function PropertyPanel(): React.JSX.Element {
   const handleVenueDelete = (): void => {
     if (!selectedVenueEvent) return
     const lane = selectedVenueEvent.lane
-    const laneEvents = songStore.getState().song.venueTrack[lane] as Array<VenueLightingEvent | VenuePostProcessingEvent | VenueStageEvent | VenueCameraCutEvent | VenuePerformerEvent>
+    const laneEvents = songStore.getState().song.venueTrack[lane] as Array<
+      | VenueLightingEvent
+      | VenuePostProcessingEvent
+      | VenueStageEvent
+      | VenueCameraCutEvent
+      | VenuePerformerEvent
+    >
     const nextLane = laneEvents.filter((event) => event.id !== selectedVenueEvent.id)
     songStore.getState().updateVenueTrack({ [lane]: nextLane } as Partial<VenueTrackData>)
     setSelectedVenueEvent(null)
@@ -1628,7 +2011,7 @@ export function PropertyPanel(): React.JSX.Element {
   // Get selected notes
   const selectedNotes = notes.filter((note) => selectedNoteIds.includes(note.id))
   const selectedVocalNotes = vocalNotes.filter((n) => selectedVocalNoteIds.includes(n.id))
-  
+
   // Get initial BPM from tempo events
   const bpm = tempoEvents[0]?.bpm ?? 120
 
@@ -1669,7 +2052,10 @@ export function PropertyPanel(): React.JSX.Element {
               <span className="multi-note-label">vocal notes selected</span>
             </div>
             <div className="property-actions">
-              <button className="property-button property-button-danger" onClick={() => songStore.getState().deleteSelectedVocalNotes()}>
+              <button
+                className="property-button property-button-danger"
+                onClick={() => songStore.getState().deleteSelectedVocalNotes()}
+              >
                 Delete All Selected
               </button>
             </div>
@@ -1686,11 +2072,15 @@ export function PropertyPanel(): React.JSX.Element {
             tempoEvents={tempoEvents}
             onAddTempoEvent={(tick, bpm) => songStore.getState().addTempoEvent({ tick, bpm })}
             onUpdateTempoEvent={(tick, bpm) => songStore.getState().updateTempoEvent(tick, bpm)}
-            onMoveTempoEvent={(oldTick, newTick, bpm) => songStore.getState().moveTempoEvent(oldTick, newTick, bpm)}
+            onMoveTempoEvent={(oldTick, newTick, bpm) =>
+              songStore.getState().moveTempoEvent(oldTick, newTick, bpm)
+            }
             onDeleteTempoEvent={(tick) => songStore.getState().deleteTempoEvent(tick)}
             timeSignatures={timeSignatures}
             onAddTimeSignature={(event) => songStore.getState().addTimeSignature(event)}
-            onUpdateTimeSignature={(tick, updates) => songStore.getState().updateTimeSignature(tick, updates)}
+            onUpdateTimeSignature={(tick, updates) =>
+              songStore.getState().updateTimeSignature(tick, updates)
+            }
             onMoveTimeSignature={(oldTick, newTick, event) => {
               if (oldTick === 0) return
               songStore.getState().deleteTimeSignature(oldTick)
@@ -1699,7 +2089,9 @@ export function PropertyPanel(): React.JSX.Element {
             onDeleteTimeSignature={(tick) => songStore.getState().deleteTimeSignature(tick)}
             songSections={songSections}
             onAddSongSection={(section) => songStore.getState().addSongSection(section)}
-            onUpdateSongSection={(id, updates) => songStore.getState().updateSongSection(id, updates)}
+            onUpdateSongSection={(id, updates) =>
+              songStore.getState().updateSongSection(id, updates)
+            }
             onMoveSongSection={(id, newTick) => songStore.getState().moveSongSection(id, newTick)}
             onDeleteSongSection={(id) => songStore.getState().deleteSongSection(id)}
             currentTick={currentTick}

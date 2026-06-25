@@ -42,13 +42,11 @@ type BinaryVariant = 'cuda' | 'cpu'
 // medium/small) for transcription quality; q5_0 keeps the disk footprint
 // reasonable (~547 MB vs ~3 GB for fp16).
 const MODEL_FILENAME = 'ggml-large-v3-q5_0.bin'
-const MODEL_URL =
-  `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${MODEL_FILENAME}`
+const MODEL_URL = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${MODEL_FILENAME}`
 
 // Per-platform binary tarballs are published to this persistent release
 // by .github/workflows/whisper-cpp-binaries.yml.
-const BINARY_BASE_URL =
-  'https://github.com/opria123/octave/releases/download/whisper-cpp-cache'
+const BINARY_BASE_URL = 'https://github.com/opria123/octave/releases/download/whisper-cpp-cache'
 
 type BinaryTarget = {
   /** Tarball asset name on the whisper-cpp-cache release. */
@@ -71,7 +69,11 @@ function makeAsset(platform: string, arch: string, variant: BinaryVariant): stri
   return `whisper-cpp-bin-${platform}-${arch}-${variant}-v${WHISPER_CPP_BIN_VERSION}.tar.gz`
 }
 
-function getTargetForVariant(platform: string, arch: string, variant: BinaryVariant): BinaryTarget | null {
+function getTargetForVariant(
+  platform: string,
+  arch: string,
+  variant: BinaryVariant
+): BinaryTarget | null {
   const key = `${platform}-${arch}`
   const exe = platform === 'win32' ? 'whisper-cli.exe' : 'whisper-cli'
   const supported: Record<string, true> = {
@@ -122,8 +124,8 @@ function getTarget(variant: BinaryVariant): BinaryTarget {
   const target = getTargetForVariant(process.platform, process.arch, variant)
   if (!target) {
     throw new Error(
-      `OCTAVE does not yet ship a whisper.cpp binary for `
-        + `${process.platform}-${process.arch} (${variant}).`
+      `OCTAVE does not yet ship a whisper.cpp binary for ` +
+        `${process.platform}-${process.arch} (${variant}).`
     )
   }
   return target
@@ -227,12 +229,12 @@ export async function ensureWhisperCpp(
   const state = readState()
 
   if (
-    existsSync(binaryPath)
-    && existsSync(modelPath)
-    && state
-    && state.binaryVersion === WHISPER_CPP_BIN_VERSION
-    && state.binaryVariant === variant
-    && state.modelUrl === MODEL_URL
+    existsSync(binaryPath) &&
+    existsSync(modelPath) &&
+    state &&
+    state.binaryVersion === WHISPER_CPP_BIN_VERSION &&
+    state.binaryVariant === variant &&
+    state.modelUrl === MODEL_URL
   ) {
     return { binaryPath, modelPath }
   }
@@ -246,9 +248,9 @@ export async function ensureWhisperCpp(
 
       // Binary first (small; bails fast if the platform isn't supported).
       if (
-        !existsSync(binaryPath)
-        || state?.binaryVersion !== WHISPER_CPP_BIN_VERSION
-        || state?.binaryVariant !== variant
+        !existsSync(binaryPath) ||
+        state?.binaryVersion !== WHISPER_CPP_BIN_VERSION ||
+        state?.binaryVariant !== variant
       ) {
         const target = getTarget(variant)
         const archivePath = join(root, target.asset)
@@ -280,7 +282,9 @@ export async function ensureWhisperCpp(
             }
             const cpuBinPath = join(root, cpuTarget.executableRel)
             if (!existsSync(cpuBinPath)) {
-              throw new Error(`whisper.cpp tarball did not contain expected executable at ${cpuTarget.executableRel}`)
+              throw new Error(
+                `whisper.cpp tarball did not contain expected executable at ${cpuTarget.executableRel}`
+              )
             }
             if (process.platform !== 'win32') {
               await chmod(cpuBinPath, 0o755)
@@ -291,14 +295,18 @@ export async function ensureWhisperCpp(
               emitProgress(runId, 'Downloading ggml-large-v3-q5_0 model (~547 MB, one-time)...', 10)
               await downloadFile(MODEL_URL, modelPath, runId, 'whisper large-v3 model')
             }
-            await writeState({ binaryVersion: WHISPER_CPP_BIN_VERSION, binaryVariant: 'cpu', modelUrl: MODEL_URL })
+            await writeState({
+              binaryVersion: WHISPER_CPP_BIN_VERSION,
+              binaryVariant: 'cpu',
+              modelUrl: MODEL_URL
+            })
             emitProgress(runId, 'whisper.cpp ready (CPU fallback).', 100)
             return { binaryPath: cpuBinPath, modelPath }
           }
           throw new Error(
-            `Failed to download whisper.cpp binary from ${url}. `
-              + `The CI workflow may not have published a binary for this platform yet. `
-              + `Original error: ${err instanceof Error ? err.message : String(err)}`
+            `Failed to download whisper.cpp binary from ${url}. ` +
+              `The CI workflow may not have published a binary for this platform yet. ` +
+              `Original error: ${err instanceof Error ? err.message : String(err)}`
           )
         }
         emitProgress(runId, 'Extracting whisper.cpp binary...', 5)
@@ -308,7 +316,9 @@ export async function ensureWhisperCpp(
           await rm(archivePath, { force: true })
         }
         if (!existsSync(binaryPath)) {
-          throw new Error(`whisper.cpp tarball did not contain expected executable at ${target.executableRel}`)
+          throw new Error(
+            `whisper.cpp tarball did not contain expected executable at ${target.executableRel}`
+          )
         }
         if (process.platform !== 'win32') {
           await chmod(binaryPath, 0o755)
@@ -321,7 +331,11 @@ export async function ensureWhisperCpp(
         await downloadFile(MODEL_URL, modelPath, runId, 'whisper large-v3 model')
       }
 
-      await writeState({ binaryVersion: WHISPER_CPP_BIN_VERSION, binaryVariant: variant, modelUrl: MODEL_URL })
+      await writeState({
+        binaryVersion: WHISPER_CPP_BIN_VERSION,
+        binaryVariant: variant,
+        modelUrl: MODEL_URL
+      })
       emitProgress(runId, `whisper.cpp ready (${variant.toUpperCase()}).`, 100)
       return { binaryPath, modelPath }
     } finally {
@@ -347,19 +361,22 @@ export type WhisperCppStatus = {
  */
 export function getWhisperCppStatus(): WhisperCppStatus {
   const variant = resolveVariant()
-  const supported = getTargetForVariant(process.platform, process.arch, variant) !== null
-    || getTargetForVariant(process.platform, process.arch, 'cpu') !== null
+  const supported =
+    getTargetForVariant(process.platform, process.arch, variant) !== null ||
+    getTargetForVariant(process.platform, process.arch, 'cpu') !== null
   const binaryPath = supported ? getBinaryPath(variant) : ''
   const modelPath = supported ? getModelPath() : ''
   const state = readState()
   const ready = Boolean(
-    supported
-      && binaryPath && existsSync(binaryPath)
-      && modelPath && existsSync(modelPath)
-      && state
-      && state.binaryVersion === WHISPER_CPP_BIN_VERSION
-      && state.binaryVariant === variant
-      && state.modelUrl === MODEL_URL
+    supported &&
+    binaryPath &&
+    existsSync(binaryPath) &&
+    modelPath &&
+    existsSync(modelPath) &&
+    state &&
+    state.binaryVersion === WHISPER_CPP_BIN_VERSION &&
+    state.binaryVariant === variant &&
+    state.modelUrl === MODEL_URL
   )
   return {
     binaryPath,

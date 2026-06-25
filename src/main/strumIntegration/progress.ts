@@ -8,10 +8,17 @@ const STAGE_PATTERNS: Array<{ stage: AutoChartStage; pattern: RegExp }> = [
   { stage: 'bass', pattern: /transcribing bass|loading bass/i },
   { stage: 'vocals', pattern: /transcribing vocals|loading vocals charter|whisper/i },
   { stage: 'keys', pattern: /transcribing keys|loading keys charter/i },
-  { stage: 'merge', pattern: /creating combined chart|chart enhancement|creating song\.ini|fetch album art/i },
+  {
+    stage: 'merge',
+    pattern: /creating combined chart|chart enhancement|creating song\.ini|fetch album art/i
+  },
   // Keep complete inference strict; broad matches like "successfully" can cause
   // premature 100% progress while the pipeline is still running.
-  { stage: 'complete', pattern: /\b(complete:|finished processing|all done|auto-chart complete|pipeline complete|successfully processed)\b/i },
+  {
+    stage: 'complete',
+    pattern:
+      /\b(complete:|finished processing|all done|auto-chart complete|pipeline complete|successfully processed)\b/i
+  },
   { stage: 'error', pattern: /traceback|\bfailed\b|\bexception\b|\berror:\b|^error\b/i }
 ]
 
@@ -53,7 +60,10 @@ function getStagePercent(stage: AutoChartStage): number | undefined {
   return Math.round((index / (STAGE_ORDER.length - 1)) * 100)
 }
 
-export function parseAutoChartProgressLine(runId: string, line: string): AutoChartProgressEvent | null {
+export function parseAutoChartProgressLine(
+  runId: string,
+  line: string
+): AutoChartProgressEvent | null {
   const trimmed = line.trim()
   if (!trimmed) return null
 
