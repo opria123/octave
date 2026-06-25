@@ -3,6 +3,7 @@ import { ElectronAPI } from '@electron-toolkit/preload'
 interface ChartEditorAPI {
   // Dialog APIs
   openFolder: () => Promise<string | null>
+  importSongPackage: () => Promise<string | null>
 
   // Folder APIs
   scanFolder: (folderPath: string) => Promise<Array<{ id: string; path: string; name: string }>>
@@ -29,6 +30,17 @@ interface ChartEditorAPI {
     metadata: Record<string, unknown>,
     outputPath: string
   ) => Promise<{ success: boolean; error?: string }>
+  exportCon: (
+    songPath: string,
+    metadata: Record<string, unknown>,
+    outputPath: string
+  ) => Promise<{ success: boolean; error?: string }>
+  importSng: (
+    sngFilePath: string
+  ) => Promise<{ success: boolean; targetDir?: string; error?: string }>
+  importCon: (
+    conFilePath: string
+  ) => Promise<{ success: boolean; targetDirs?: string[]; error?: string }>
   fileExists: (filePath: string) => Promise<boolean>
 
   // Album art APIs

@@ -51,6 +51,7 @@ export function Toolbar(): React.JSX.Element {
     updateSettings
   } = useSettingsStore()
   const [isAudioLoaded, setIsAudioLoaded] = useState(false)
+  const [showOpenDropdown, setShowOpenDropdown] = useState(false)
   const [isAutoChartModalOpen, setIsAutoChartModalOpen] = useState(false)
   const [autoChartFiles, setAutoChartFiles] = useState<string[]>([])
   const [autoChartFolders, setAutoChartFolders] = useState<string[]>([])
@@ -159,12 +160,15 @@ export function Toolbar(): React.JSX.Element {
 
   // Reactively subscribe to song store state so UI updates when isPlaying/folderPath changes
   const [isPlaying, setIsPlaying] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_folderPath, setFolderPath] = useState<string | null>(null)
   const [songName, setSongName] = useState('')
   const [songArtist, setSongArtist] = useState('')
   const [isDirty, setIsDirty] = useState(false)
   const [validationIssues, setValidationIssues] = useState<ValidationIssue[] | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_snapDivision, setSnapDivision] = useState(4)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_currentBpm, setCurrentBpm] = useState(120)
 
   useEffect(() => {
@@ -363,6 +367,16 @@ export function Toolbar(): React.JSX.Element {
       await loadProjectFolder(folderPath)
     } catch (error) {
       console.error('Failed to open folder:', error)
+    }
+  }
+
+  const handleImportPackage = async (): Promise<void> => {
+    try {
+      const folderPath = await window.api.importSongPackage()
+      if (!folderPath) return
+      await loadProjectFolder(folderPath)
+    } catch (error) {
+      console.error('Failed to import song package:', error)
     }
   }
 
@@ -773,10 +787,41 @@ export function Toolbar(): React.JSX.Element {
     <div className="toolbar">
       {/* File actions */}
       <div className="toolbar-group">
-        <button className="toolbar-button" onClick={handleOpenFolder} title="Open Folder">
+        <button
+          className={`toolbar-button ${showOpenDropdown ? 'active' : ''}`}
+          onClick={() => setShowOpenDropdown(!showOpenDropdown)}
+          title="Open Library / Import Package"
+        >
           <span className="toolbar-icon">📁</span>
           <span className="toolbar-label">Open</span>
         </button>
+        {showOpenDropdown && (
+          <>
+            <div className="toolbar-dropdown-backdrop" onClick={() => setShowOpenDropdown(false)} />
+            <div className="toolbar-dropdown-menu">
+              <button
+                className="toolbar-dropdown-item"
+                onClick={async () => {
+                  setShowOpenDropdown(false)
+                  await handleOpenFolder()
+                }}
+              >
+                <span className="dropdown-icon">📂</span>
+                <span className="dropdown-label">Open Song Library Folder</span>
+              </button>
+              <button
+                className="toolbar-dropdown-item"
+                onClick={async () => {
+                  setShowOpenDropdown(false)
+                  await handleImportPackage()
+                }}
+              >
+                <span className="dropdown-icon">📦</span>
+                <span className="dropdown-label">Import Song Package (.sng / CON)</span>
+              </button>
+            </div>
+          </>
+        )}
         <button
           className="toolbar-button"
           onClick={handleSave}
@@ -1749,6 +1794,7 @@ function StemMixerButton({ activeSongId }: { activeSongId: string | null }): Rea
 
   useEffect(() => {
     if (!activeSongId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStems([])
       return
     }
