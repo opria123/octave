@@ -29,6 +29,7 @@ function useAlbumArt(folderPath: string): string | null {
   useEffect(() => {
     // Check cache first
     if (albumArtCache.has(folderPath)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setArtUrl(albumArtCache.get(folderPath) ?? null)
       return
     }
@@ -130,6 +131,7 @@ export function ProjectExplorer(): React.JSX.Element {
   const [newSongName, setNewSongName] = useState('')
   const [newSongAudioPath, setNewSongAudioPath] = useState<string | null>(null)
   // For future folder tree expansion feature
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_expandedFolders, _setExpandedFolders] = useState<Set<string>>(new Set())
 
   // Load a folder's songs (shared between initial load and handleOpenFolder)
@@ -426,6 +428,11 @@ export function ProjectExplorer(): React.JSX.Element {
         return
       }
 
+      // Clean up existing song stores
+      for (const id of songIds) {
+        removeSongStore(id)
+      }
+
       // 2. Save as last opened folder
       updateSettings({ lastOpenedFolder: folderPath })
 
@@ -433,6 +440,24 @@ export function ProjectExplorer(): React.JSX.Element {
       await loadFolder(folderPath)
     } catch (error) {
       console.error('Failed to open folder:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleRefresh = async (): Promise<void> => {
+    if (!loadedFolderPath) return
+    try {
+      setIsLoading(true)
+
+      // Clean up existing song stores
+      for (const id of songIds) {
+        removeSongStore(id)
+      }
+
+      await loadFolder(loadedFolderPath)
+    } catch (error) {
+      console.error('Failed to refresh folder:', error)
     } finally {
       setIsLoading(false)
     }
@@ -578,10 +603,31 @@ export function ProjectExplorer(): React.JSX.Element {
           <>
             {/* Folder path display */}
             <div className="explorer-folder-path" title={loadedFolderPath}>
-              <span className="folder-icon">📂</span>
-              <span className="folder-name">
-                {loadedFolderPath.split(/[\\/]/).pop() || loadedFolderPath}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                <span className="folder-icon">📂</span>
+                <span className="folder-name">
+                  {loadedFolderPath.split(/[\\/]/).pop() || loadedFolderPath}
+                </span>
+              </div>
+              <button
+                className={`icon-button explorer-refresh-button ${isLoading ? 'spinning' : ''}`}
+                onClick={handleRefresh}
+                title="Refresh Folder"
+                disabled={isLoading}
+                style={{ marginLeft: 'auto', flexShrink: 0 }}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  style={{ width: '14px', height: '14px' }}
+                >
+                  <path
+                    d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
             </div>
 
             {/* Song list */}
