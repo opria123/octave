@@ -124,7 +124,16 @@ jobs:
           git add package.json package-lock.json
           git commit -m "release: ${{ steps.bump.outputs.tag }}" || true
           git tag ${{ steps.bump.outputs.tag }}
-          git push origin master --tags
+          # `master` is a protected branch (changes must go through a PR), so we
+          # push ONLY the tag — never the branch. The version-bump commit is the
+          # tag's target, which is exactly what the build job checks out
+          # (`ref: ${{ steps.bump.outputs.tag }}`), so the packaged app still
+          # reports the right version. Pushing `master --tags` here used to be
+          # rejected by branch protection ("Changes must be made through a pull
+          # request"), which aborted the release after the tag was created but
+          # before any installers / latest.yml were published — leaving a
+          # phantom tag with no assets that broke auto-update for everyone.
+          git push origin "${{ steps.bump.outputs.tag }}"
 
   build:
     needs: tag
