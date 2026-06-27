@@ -2,6 +2,11 @@
 import { create, StateCreator } from 'zustand'
 import { temporal, TemporalState } from 'zundo'
 import { v4 as uuidv4 } from 'uuid'
+import {
+  gridTicksForDivision,
+  snapEntriesToGrid,
+  SNAP_TO_GRID_TOLERANCE_FRACTION
+} from '../utils/snapToGrid'
 import type {
   SongData,
   SongEditorState,
@@ -35,7 +40,7 @@ interface SongStoreState extends SongEditorState {
   deleteNote: (noteId: string) => void
   deleteSelectedNotes: () => void
   swapLanes: (instrument: Instrument, laneA: string, laneB: string, difficulty?: Difficulty | 'all') => void
-  snapNotesToGrid: (division?: number) => void
+  snapNotesToGrid: (division?: number, toleranceTicks?: number) => void
 
   // Selection actions
   selectNote: (noteId: string, addToSelection?: boolean) => void
@@ -274,48 +279,47 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
     // therefore tempo-independent: a note at tick T moves to the nearest multiple
     // of (480 / division) ticks. Sustained notes keep their end aligned to the
     // grid as well so durations stay clean.
-    snapNotesToGrid: (division) =>
+    //
+    // Two behaviours (issue #22) keep snapping non-destructive:
+    //   1. Tolerance — a note is only moved when it already lies within
+    //      `toleranceTicks` of a grid line, so correctly-placed finer-subdivision
+    //      notes (syncopation, fills) are left untouched instead of being dragged
+    //      onto a coarser beat. Defaults to a fraction of the grid spacing.
+    //   2. De-duplication — notes that collapse onto the same
+    //      instrument|difficulty|lane|tick (or vocal part|tick) are merged,
+    //      keeping the longest sustain, so snapping never silently stacks notes
+    //      on top of each other (which the validator flags and which makes notes
+    //      "disappear" in game).
+    snapNotesToGrid: (division, toleranceTicks) =>
       set((state) => {
         const div = division ?? state.snapDivision
         if (!div || div <= 0) return {}
-        const snapTicks = 480 / div
-        const snap = (t: number): number => Math.round(t / snapTicks) * snapTicks
+        const gridTicks = gridTicksForDivision(div)
+        const tolerance = toleranceTicks ?? gridTicks * SNAP_TO_GRID_TOLERANCE_FRACTION
 
         const selectedNotes = new Set(state.selectedNoteIds)
         const selectedVocals = new Set(state.selectedVocalNoteIds)
         const hasSelection = selectedNotes.size > 0 || selectedVocals.size > 0
 
-        const snapEntry = <T extends { tick: number; duration: number }>(n: T): T => {
-          const newTick = snap(n.tick)
-          let newDuration = n.duration
-          if (n.duration > 0) {
-            newDuration = Math.max(0, snap(n.tick + n.duration) - newTick)
-          }
-          if (newTick === n.tick && newDuration === n.duration) return n
-          return { ...n, tick: newTick, duration: newDuration }
-        }
-
-        let changed = false
-
-        const notes = state.song.notes.map((n) => {
-          if (hasSelection && !selectedNotes.has(n.id)) return n
-          const snapped = snapEntry(n)
-          if (snapped !== n) changed = true
-          return snapped
+        const noteResult = snapEntriesToGrid(state.song.notes, {
+          gridTicks,
+          toleranceTicks: tolerance,
+          isEligible: (n) => !hasSelection || selectedNotes.has(n.id),
+          keyOf: (n) => `${n.instrument}|${n.difficulty}|${n.lane}|${n.tick}`
         })
 
-        const vocalNotes = state.song.vocalNotes.map((n) => {
-          if (hasSelection && !selectedVocals.has(n.id)) return n
-          const snapped = snapEntry(n)
-          if (snapped !== n) changed = true
-          return snapped
+        const vocalResult = snapEntriesToGrid(state.song.vocalNotes, {
+          gridTicks,
+          toleranceTicks: tolerance,
+          isEligible: (n) => !hasSelection || selectedVocals.has(n.id),
+          keyOf: (n) => `${n.harmonyPart}|${n.tick}`
         })
 
-        if (!changed) return {}
+        if (!noteResult.changed && !vocalResult.changed) return {}
 
         // Preserve the tick-sorted invariant after snapping.
-        notes.sort((a, b) => a.tick - b.tick)
-        vocalNotes.sort((a, b) => a.tick - b.tick)
+        const notes = [...noteResult.entries].sort((a, b) => a.tick - b.tick)
+        const vocalNotes = [...vocalResult.entries].sort((a, b) => a.tick - b.tick)
 
         return {
           song: { ...state.song, notes, vocalNotes },
