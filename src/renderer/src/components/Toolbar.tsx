@@ -3,11 +3,17 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useProjectStore, useSettingsStore, getSongStore, useUIStore } from '../stores'
 import * as audioService from '../services/audioService'
 import * as playbackController from '../services/playbackController'
-import { parseMidiBase64, parseChartFile, serializeMidiBase64, serializeChartFile } from '../utils/midiParser'
-import { validateChart, type ValidationIssue } from '../utils/chartValidation'
+import {
+  parseMidiBase64,
+  parseChartFile,
+  serializeMidiBase64,
+  serializeChartFile
+} from '../utils/midiParser'
+import { validateChartAsync } from '../utils/chartValidation'
 import type { SongMetadata } from '../types'
 import { SettingsModal } from './SettingsModal'
 import { ExportModal } from './ExportModal'
+import { ValidationPreviewCard } from './ValidationPreviewCard'
 import './Toolbar.css'
 
 type AutoChartProgressState = {
@@ -41,6 +47,8 @@ export function Toolbar(): React.JSX.Element {
   const { activeSongId, setLoadedFolder, addSong, setActiveSong } = useProjectStore()
   const isExportModalOpen = useUIStore((s) => s.isExportModalOpen)
   const setExportModalOpen = useUIStore((s) => s.setExportModalOpen)
+  const validationIssues = useUIStore((s) => s.validationIssues)
+  const setValidationIssues = useUIStore((s) => s.setValidationIssues)
   const {
     autosaveEnabled,
     highwaySpeed,
@@ -56,17 +64,37 @@ export function Toolbar(): React.JSX.Element {
   const [autoChartFolders, setAutoChartFolders] = useState<string[]>([])
   const [autoChartStemFolders, setAutoChartStemFolders] = useState<string[]>([])
   const [autoChartInputTab, setAutoChartInputTab] = useState<'mix' | 'stems'>('mix')
-  const [autoChartFullMixSubTab, setAutoChartFullMixSubTab] = useState<'files' | 'folders' | 'urls'>('files')
+  const [autoChartFullMixSubTab, setAutoChartFullMixSubTab] = useState<
+    'files' | 'folders' | 'urls'
+  >('files')
   type StemSong = {
     id: string
     name: string
-    stems: { drums: string; bass: string; vocals: string; guitar: string; piano: string; vocalsHarm2: string; vocalsHarm3: string; crowd: string }
+    stems: {
+      drums: string
+      bass: string
+      vocals: string
+      guitar: string
+      piano: string
+      vocalsHarm2: string
+      vocalsHarm3: string
+      crowd: string
+    }
     extras: string[]
   }
   const makeEmptyStemSong = (): StemSong => ({
     id: `stem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name: '',
-    stems: { drums: '', bass: '', vocals: '', guitar: '', piano: '', vocalsHarm2: '', vocalsHarm3: '', crowd: '' },
+    stems: {
+      drums: '',
+      bass: '',
+      vocals: '',
+      guitar: '',
+      piano: '',
+      vocalsHarm2: '',
+      vocalsHarm3: '',
+      crowd: ''
+    },
     extras: []
   })
   const [autoChartStemSongs, setAutoChartStemSongs] = useState<StemSong[]>([makeEmptyStemSong()])
@@ -82,7 +110,9 @@ export function Toolbar(): React.JSX.Element {
   const [autoChartAdvancedOpen, setAutoChartAdvancedOpen] = useState(false)
   // Optional user-supplied tempo map. Empty = use STRUM's auto-detection.
   // First entry's BPM (sorted by timeSec) overrides initial detected tempo.
-  const [autoChartTempoEvents, setAutoChartTempoEvents] = useState<Array<{ timeSec: string; bpm: string }>>([])
+  const [autoChartTempoEvents, setAutoChartTempoEvents] = useState<
+    Array<{ timeSec: string; bpm: string }>
+  >([])
   const [autoChartEnabledTracks, setAutoChartEnabledTracks] = useState<{
     drums: boolean
     guitar: boolean
@@ -91,7 +121,15 @@ export function Toolbar(): React.JSX.Element {
     harmonies: boolean
     keys: boolean
     proKeys: boolean
-  }>({ drums: true, guitar: true, bass: true, vocals: true, harmonies: true, keys: true, proKeys: true })
+  }>({
+    drums: true,
+    guitar: true,
+    bass: true,
+    vocals: true,
+    harmonies: true,
+    keys: true,
+    proKeys: true
+  })
   const [autoChartCloseCountdown, setAutoChartCloseCountdown] = useState<number | null>(null)
   const [defaultAutoChartOutputDir, setDefaultAutoChartOutputDir] = useState('')
   const [autoChartErrorCopied, setAutoChartErrorCopied] = useState(false)
@@ -159,13 +197,50 @@ export function Toolbar(): React.JSX.Element {
 
   // Reactively subscribe to song store state so UI updates when isPlaying/folderPath changes
   const [isPlaying, setIsPlaying] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_folderPath, setFolderPath] = useState<string | null>(null)
   const [songName, setSongName] = useState('')
   const [songArtist, setSongArtist] = useState('')
   const [isDirty, setIsDirty] = useState(false)
-  const [validationIssues, setValidationIssues] = useState<ValidationIssue[] | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_snapDivision, setSnapDivision] = useState(4)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_currentBpm, setCurrentBpm] = useState(120)
+  const [isValidating, setIsValidating] = useState(false)
+
+  const cleanupAllDuplicates = async (): Promise<void> => {
+    if (!activeSongId) return
+    const store = getSongStore(activeSongId)
+    const currentSong = store.getState().song
+    const notes = currentSong.notes || []
+
+    const seen = new Set<string>()
+    const duplicatesToRemove: string[] = []
+
+    for (const note of notes) {
+      const key = `${note.instrument}|${note.difficulty}|${note.lane}|${note.tick}`
+      if (seen.has(key)) {
+        duplicatesToRemove.push(note.id)
+      } else {
+        seen.add(key)
+      }
+    }
+
+    if (duplicatesToRemove.length === 0) return
+
+    for (const id of duplicatesToRemove) {
+      store.getState().deleteNote(id)
+    }
+
+    try {
+      const updatedState = store.getState()
+      const settings = useSettingsStore.getState()
+      const newIssues = await validateChartAsync(updatedState.song, settings)
+      setValidationIssues(newIssues)
+    } catch (err) {
+      console.error('[cleanupAllDuplicates validation failed]', err)
+    }
+  }
 
   useEffect(() => {
     if (!songStore) {
@@ -176,6 +251,8 @@ export function Toolbar(): React.JSX.Element {
       setIsDirty(false)
       return
     }
+
+    let lastValidationId = 0
 
     // Seed on mount
     const s = songStore.getState()
@@ -190,11 +267,32 @@ export function Toolbar(): React.JSX.Element {
     return songStore.subscribe((state, prev) => {
       if (state.isPlaying !== prev.isPlaying) setIsPlaying(state.isPlaying)
       if (state.song.folderPath !== prev.song.folderPath) setFolderPath(state.song.folderPath)
-      if (state.song.metadata.name !== prev.song.metadata.name) setSongName(state.song.metadata.name)
-      if (state.song.metadata.artist !== prev.song.metadata.artist) setSongArtist(state.song.metadata.artist)
+      if (state.song.metadata.name !== prev.song.metadata.name)
+        setSongName(state.song.metadata.name)
+      if (state.song.metadata.artist !== prev.song.metadata.artist)
+        setSongArtist(state.song.metadata.artist)
       if (state.isDirty !== prev.isDirty) setIsDirty(state.isDirty)
       if (state.snapDivision !== prev.snapDivision) setSnapDivision(state.snapDivision)
-      if (state.song.tempoEvents !== prev.song.tempoEvents) setCurrentBpm(state.song.tempoEvents[0]?.bpm ?? 120)
+      if (state.song.tempoEvents !== prev.song.tempoEvents)
+        setCurrentBpm(state.song.tempoEvents[0]?.bpm ?? 120)
+      if (state.song.notes !== prev.song.notes || state.song.vocalNotes !== prev.song.vocalNotes) {
+        const currentIssues = useUIStore.getState().validationIssues
+        if (currentIssues !== null) {
+          const validationId = ++lastValidationId
+          const settings = useSettingsStore.getState()
+          validateChartAsync(state.song, settings)
+            .then((newIssues) => {
+              if (validationId === lastValidationId) {
+                useUIStore.getState().setValidationIssues(newIssues)
+              }
+            })
+            .catch((err) => {
+              if (validationId === lastValidationId) {
+                console.error('[Validation Subscription Error]', err)
+              }
+            })
+        }
+      }
     })
   }, [songStore])
 
@@ -225,7 +323,7 @@ export function Toolbar(): React.JSX.Element {
 
     const newStore = getSongStore(activeSongId)
     const newFolderPath = newStore.getState().song.folderPath
-    
+
     if (!newFolderPath) {
       setIsAudioLoaded(false)
       return
@@ -294,67 +392,80 @@ export function Toolbar(): React.JSX.Element {
     }
   }, [updateSettings])
 
-  const loadProjectFolder = useCallback(async (folderPath: string): Promise<void> => {
-    setLoadedFolder(folderPath)
-    const songFolders = await window.api.scanFolder(folderPath)
+  const loadProjectFolder = useCallback(
+    async (folderPath: string): Promise<void> => {
+      setLoadedFolder(folderPath)
+      const songFolders = await window.api.scanFolder(folderPath)
 
-    for (const songFolder of songFolders) {
-      try {
-        const iniData = await window.api.readSongIni(songFolder.path)
+      for (const songFolder of songFolders) {
+        try {
+          const iniData = await window.api.readSongIni(songFolder.path)
 
-        const metadata: SongMetadata = {
-          ...(iniData ?? {}),
-          name: (iniData?.name as string) || (iniData?.title as string) || songFolder.name,
-          artist: (iniData?.artist as string) || 'Unknown Artist',
-          album: iniData?.album as string,
-          genre: iniData?.genre as string,
-          year: iniData?.year !== undefined ? String(iniData.year) : undefined,
-          charter: iniData?.charter as string,
-          song_length: iniData?.song_length as number,
-          preview_start_time: iniData?.preview_start_time as number
+          const metadata: SongMetadata = {
+            ...(iniData ?? {}),
+            name: (iniData?.name as string) || (iniData?.title as string) || songFolder.name,
+            artist: (iniData?.artist as string) || 'Unknown Artist',
+            album: iniData?.album as string,
+            genre: iniData?.genre as string,
+            year: iniData?.year !== undefined ? String(iniData.year) : undefined,
+            charter: iniData?.charter as string,
+            song_length: iniData?.song_length as number,
+            preview_start_time: iniData?.preview_start_time as number
+          }
+
+          let parsedData: ReturnType<typeof parseMidiBase64> | null = null
+          let sourceFormat: 'midi' | 'chart' = 'midi'
+
+          const midiResult = await window.api.readSongMidi(songFolder.path)
+          if (midiResult) {
+            parsedData =
+              midiResult.type === 'chart'
+                ? parseChartFile(midiResult.data)
+                : parseMidiBase64(midiResult.data)
+            sourceFormat = midiResult.type === 'chart' ? 'chart' : 'midi'
+          }
+
+          const store = getSongStore(songFolder.id)
+          store.getState().loadSong({
+            id: songFolder.id,
+            folderPath: songFolder.path,
+            metadata,
+            notes: parsedData?.notes ?? [],
+            vocalNotes: parsedData?.vocalNotes ?? [],
+            vocalPhrases: parsedData?.vocalPhrases ?? [],
+            starPowerPhrases: parsedData?.starPowerPhrases ?? [],
+            soloSections: parsedData?.soloSections ?? [],
+            laneMarkers: parsedData?.laneMarkers ?? [],
+            songSections: parsedData?.songSections ?? [],
+            tempoEvents: parsedData?.tempoEvents ?? [{ tick: 0, bpm: 120 }],
+            timeSignatures: parsedData?.timeSignatures ?? [
+              { tick: 0, numerator: 4, denominator: 4 }
+            ],
+            videoSync: { clips: [], offsetMs: 0, trimStartMs: 0, trimEndMs: 0 },
+            audioSync: { clips: [] },
+            venueTrack: parsedData?.venueTrack ?? {
+              autoGenerated: false,
+              lighting: [],
+              postProcessing: [],
+              stage: [],
+              performer: [],
+              cameraCuts: []
+            },
+            sourceFormat
+          })
+
+          addSong(songFolder.id)
+        } catch (error) {
+          console.error(`Failed to load song ${songFolder.name}:`, error)
         }
-
-        let parsedData: ReturnType<typeof parseMidiBase64> | null = null
-        let sourceFormat: 'midi' | 'chart' = 'midi'
-
-        const midiResult = await window.api.readSongMidi(songFolder.path)
-        if (midiResult) {
-          parsedData = midiResult.type === 'chart'
-            ? parseChartFile(midiResult.data)
-            : parseMidiBase64(midiResult.data)
-          sourceFormat = midiResult.type === 'chart' ? 'chart' : 'midi'
-        }
-
-        const store = getSongStore(songFolder.id)
-        store.getState().loadSong({
-          id: songFolder.id,
-          folderPath: songFolder.path,
-          metadata,
-          notes: parsedData?.notes ?? [],
-          vocalNotes: parsedData?.vocalNotes ?? [],
-          vocalPhrases: parsedData?.vocalPhrases ?? [],
-          starPowerPhrases: parsedData?.starPowerPhrases ?? [],
-          soloSections: parsedData?.soloSections ?? [],
-          laneMarkers: parsedData?.laneMarkers ?? [],
-          songSections: parsedData?.songSections ?? [],
-          tempoEvents: parsedData?.tempoEvents ?? [{ tick: 0, bpm: 120 }],
-          timeSignatures: parsedData?.timeSignatures ?? [{ tick: 0, numerator: 4, denominator: 4 }],
-          videoSync: { clips: [], offsetMs: 0, trimStartMs: 0, trimEndMs: 0 },
-          audioSync: { clips: [] },
-          venueTrack: parsedData?.venueTrack ?? { autoGenerated: false, lighting: [], postProcessing: [], stage: [], performer: [], cameraCuts: [] },
-          sourceFormat
-        })
-
-        addSong(songFolder.id)
-      } catch (error) {
-        console.error(`Failed to load song ${songFolder.name}:`, error)
       }
-    }
 
-    if (songFolders.length > 0) {
-      setActiveSong(songFolders[0].id)
-    }
-  }, [addSong, setActiveSong, setLoadedFolder])
+      if (songFolders.length > 0) {
+        setActiveSong(songFolders[0].id)
+      }
+    },
+    [addSong, setActiveSong, setLoadedFolder]
+  )
 
   const handleOpenFolder = async (): Promise<void> => {
     try {
@@ -382,9 +493,8 @@ export function Toolbar(): React.JSX.Element {
         }
 
         const incomingPercent = event.percent ?? prev.percent
-        const nextPercent = incomingRank === currentRank
-          ? Math.max(prev.percent, incomingPercent)
-          : incomingPercent
+        const nextPercent =
+          incomingRank === currentRank ? Math.max(prev.percent, incomingPercent) : incomingPercent
 
         return {
           ...prev,
@@ -410,7 +520,9 @@ export function Toolbar(): React.JSX.Element {
           isRunning: false,
           percent: 100,
           stage: 'complete',
-          message: event.success ? 'Auto-chart complete.' : 'Auto-chart finished with no successful songs.',
+          message: event.success
+            ? 'Auto-chart complete.'
+            : 'Auto-chart finished with no successful songs.',
           warnings: event.errors
         }
       })
@@ -486,7 +598,9 @@ export function Toolbar(): React.JSX.Element {
   }, [])
 
   const handleUpdateAutoChartUrl = useCallback((index: number, value: string): void => {
-    setAutoChartUrls((prev) => prev.map((entry, entryIndex) => (entryIndex === index ? value : entry)))
+    setAutoChartUrls((prev) =>
+      prev.map((entry, entryIndex) => (entryIndex === index ? value : entry))
+    )
   }, [])
 
   const handleRemoveAutoChartUrl = useCallback((index: number): void => {
@@ -540,7 +654,10 @@ export function Toolbar(): React.JSX.Element {
     }
 
     if (!outputDir) {
-      setAutoChartProgress((prev) => ({ ...prev, error: 'Choose an output folder before starting.' }))
+      setAutoChartProgress((prev) => ({
+        ...prev,
+        error: 'Choose an output folder before starting.'
+      }))
       return
     }
 
@@ -551,7 +668,10 @@ export function Toolbar(): React.JSX.Element {
       stemSongs.length === 0 &&
       urls.length === 0
     ) {
-      setAutoChartProgress((prev) => ({ ...prev, error: 'Add at least one audio file, folder, URL, or stem song.' }))
+      setAutoChartProgress((prev) => ({
+        ...prev,
+        error: 'Add at least one audio file, folder, URL, or stem song.'
+      }))
       return
     }
 
@@ -562,9 +682,21 @@ export function Toolbar(): React.JSX.Element {
         setAutoChartProgress((prev) => ({ ...prev, error: 'Every stem song needs a name.' }))
         return
       }
-      const hasInstrument = ['drums', 'bass', 'vocals', 'guitar', 'piano', 'vocalsHarm2', 'vocalsHarm3', 'crowd'].some((k) => song.stems[k])
+      const hasInstrument = [
+        'drums',
+        'bass',
+        'vocals',
+        'guitar',
+        'piano',
+        'vocalsHarm2',
+        'vocalsHarm3',
+        'crowd'
+      ].some((k) => song.stems[k])
       if (!hasInstrument && song.extras.length === 0) {
-        setAutoChartProgress((prev) => ({ ...prev, error: `Stem song "${song.name}" has no stems selected.` }))
+        setAutoChartProgress((prev) => ({
+          ...prev,
+          error: `Stem song "${song.name}" has no stems selected.`
+        }))
         return
       }
     }
@@ -602,7 +734,10 @@ export function Toolbar(): React.JSX.Element {
         tempoMap: (() => {
           const parsed = autoChartTempoEvents
             .map((e) => ({ timeSec: parseFloat(e.timeSec), bpm: parseFloat(e.bpm) }))
-            .filter((e) => Number.isFinite(e.timeSec) && Number.isFinite(e.bpm) && e.bpm > 0 && e.timeSec >= 0)
+            .filter(
+              (e) =>
+                Number.isFinite(e.timeSec) && Number.isFinite(e.bpm) && e.bpm > 0 && e.timeSec >= 0
+            )
             .sort((a, b) => a.timeSec - b.timeSec)
           return parsed.length > 0 ? parsed : undefined
         })()
@@ -615,7 +750,23 @@ export function Toolbar(): React.JSX.Element {
         error: error instanceof Error ? error.message : String(error)
       }))
     }
-  }, [autoChartDisableOnlineLookup, autoChartEnabledTracks, autoChartFiles, autoChartFolders, autoChartImproveTempo, autoChartKeepStems, autoChartSnapDrums, autoChartStemFolders, autoChartStemSongs, autoChartProgress.outputDir, autoChartTempoEvents, autoChartManualBpm, autoChartUrls, runtimeStatus, updateSettings])
+  }, [
+    autoChartDisableOnlineLookup,
+    autoChartEnabledTracks,
+    autoChartFiles,
+    autoChartFolders,
+    autoChartImproveTempo,
+    autoChartKeepStems,
+    autoChartSnapDrums,
+    autoChartStemFolders,
+    autoChartStemSongs,
+    autoChartProgress.outputDir,
+    autoChartTempoEvents,
+    autoChartManualBpm,
+    autoChartUrls,
+    runtimeStatus,
+    updateSettings
+  ])
 
   const handleCancelAutoChart = useCallback(async (): Promise<void> => {
     if (!autoChartProgress.runId) return
@@ -684,12 +835,12 @@ export function Toolbar(): React.JSX.Element {
 
       const venueTrack = state.song.venueTrack
       if (
-        venueTrack.autoGenerated
-        || venueTrack.lighting.length > 0
-        || venueTrack.postProcessing.length > 0
-        || venueTrack.stage.length > 0
-        || venueTrack.performer.length > 0
-        || venueTrack.cameraCuts.length > 0
+        venueTrack.autoGenerated ||
+        venueTrack.lighting.length > 0 ||
+        venueTrack.postProcessing.length > 0 ||
+        venueTrack.stage.length > 0 ||
+        venueTrack.performer.length > 0 ||
+        venueTrack.cameraCuts.length > 0
       ) {
         await window.api.writeVenueJson(state.song.folderPath, venueTrack)
       }
@@ -717,7 +868,14 @@ export function Toolbar(): React.JSX.Element {
 
   // Updater state
   type UpdaterStatusState = {
-    state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error'
+    state:
+      | 'idle'
+      | 'checking'
+      | 'available'
+      | 'downloading'
+      | 'downloaded'
+      | 'not-available'
+      | 'error'
     version?: string
     percent?: number
     message?: string
@@ -827,7 +985,7 @@ export function Toolbar(): React.JSX.Element {
           className="toolbar-button toolbar-button-play"
           onClick={handlePlayPause}
           disabled={!activeSongId}
-          title={isAudioLoaded ? "Play/Pause (Space)" : "Play/Pause (no audio)"}
+          title={isAudioLoaded ? 'Play/Pause (Space)' : 'Play/Pause (no audio)'}
         >
           <span className="toolbar-icon">{isPlaying ? '⏸' : '▶'}</span>
         </button>
@@ -900,11 +1058,15 @@ export function Toolbar(): React.JSX.Element {
             <span className="toolbar-updater-label">Up to date</span>
           )}
           {updaterStatus.state === 'available' && (
-            <span className="toolbar-updater-label">⬇ Update v{updaterStatus.version} available…</span>
+            <span className="toolbar-updater-label">
+              ⬇ Update v{updaterStatus.version} available…
+            </span>
           )}
           {updaterStatus.state === 'downloading' && (
             <>
-              <span className="toolbar-updater-label">Downloading update {updaterStatus.message ?? ''}</span>
+              <span className="toolbar-updater-label">
+                Downloading update {updaterStatus.message ?? ''}
+              </span>
               <div className="toolbar-updater-bar">
                 <div
                   className="toolbar-updater-bar-fill"
@@ -917,7 +1079,9 @@ export function Toolbar(): React.JSX.Element {
             <span className="toolbar-updater-label">✔ Update ready — see prompt</span>
           )}
           {updaterStatus.state === 'error' && (
-            <span className="toolbar-updater-label" title={updaterStatus.message}>⚠ Update error</span>
+            <span className="toolbar-updater-label" title={updaterStatus.message}>
+              ⚠ Update error
+            </span>
           )}
         </div>
       )}
@@ -935,7 +1099,10 @@ export function Toolbar(): React.JSX.Element {
           />
           <span className="toolbar-toggle-label">Auto-save</span>
         </label>
-        <label className="toolbar-toggle" title="Lefty Flip: mirror highway for left-handed players">
+        <label
+          className="toolbar-toggle"
+          title="Lefty Flip: mirror highway for left-handed players"
+        >
           <input
             type="checkbox"
             checked={leftyFlip ?? false}
@@ -952,12 +1119,21 @@ export function Toolbar(): React.JSX.Element {
         <button
           className="toolbar-button toolbar-button-accent"
           disabled={!enableAutoChart}
-          title={enableAutoChart ? 'Generate a chart package from audio with STRUM' : 'Enable STRUM auto-charting in Settings'}
+          title={
+            enableAutoChart
+              ? 'Generate a chart package from audio with STRUM'
+              : 'Enable STRUM auto-charting in Settings'
+          }
           onClick={openAutoChartModal}
         >
           <span className="toolbar-icon">🤖</span>
           <span className="toolbar-label">Auto-Chart</span>
-          <span className="toolbar-experimental-tag" title="Auto-charting is experimental — results vary by song.">experimental</span>
+          <span
+            className="toolbar-experimental-tag"
+            title="Auto-charting is experimental — results vary by song."
+          >
+            experimental
+          </span>
         </button>
       </div>
 
@@ -965,77 +1141,185 @@ export function Toolbar(): React.JSX.Element {
 
       {/* Validate chart */}
       <div className="toolbar-group">
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
         <button
           className="toolbar-button"
-          disabled={!activeSongId}
+          disabled={!activeSongId || isValidating}
           title="Validate Chart"
           onClick={() => {
-            if (!activeSongId) return
-            const state = getSongStore(activeSongId).getState()
-            const issues = validateChart(state.song)
-            setValidationIssues(issues)
+            if (!activeSongId || isValidating) return
+            setIsValidating(true)
+            const startTime = Date.now()
+            setTimeout(async () => {
+              try {
+                const state = getSongStore(activeSongId).getState()
+                const settings = useSettingsStore.getState()
+                const issues = await validateChartAsync(state.song, settings)
+
+                const elapsed = Date.now() - startTime
+                const remaining = Math.max(0, 500 - elapsed)
+                if (remaining > 0) {
+                  await new Promise((resolve) => setTimeout(resolve, remaining))
+                }
+
+                setValidationIssues(issues)
+              } catch (err) {
+                console.error('[Validate Action Error]', err)
+              } finally {
+                setIsValidating(false)
+              }
+            }, 50)
           }}
         >
-          <span className="toolbar-icon">✓</span>
-          <span className="toolbar-label">Validate</span>
+          {isValidating ? (
+            <span
+              className="toolbar-icon"
+              style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}
+            >
+              ↻
+            </span>
+          ) : (
+            <span className="toolbar-icon">✓</span>
+          )}
+          <span className="toolbar-label">{isValidating ? 'Validating...' : 'Validate'}</span>
         </button>
       </div>
 
       {/* Validation results modal */}
-      {validationIssues !== null && (
+      {validationIssues !== null && songStore !== null && (
         <div
           style={{
-            position: 'fixed', inset: 0, zIndex: 9999,
-            backgroundColor: 'rgba(0,0,0,0.6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}
           onClick={() => setValidationIssues(null)}
         >
           <div
             style={{
-              backgroundColor: '#1e1e2e', border: '1px solid #444', borderRadius: 8,
-              padding: '20px 24px', minWidth: 400, maxWidth: 600, maxHeight: '70vh',
-              overflow: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
+              backgroundColor: '#161622',
+              border: '1px solid #2d2d3d',
+              borderRadius: 8,
+              padding: '24px',
+              width: '1000px',
+              maxWidth: '95vw',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+              display: 'flex',
+              flexDirection: 'column'
             }}
-            onClick={e => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <h3 style={{ margin: 0, color: '#fff', fontSize: 16 }}>Chart Validation</h3>
-              <button
-                style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
-                onClick={() => setValidationIssues(null)}
-              >✕</button>
+            {(() => {
+              const hasOverlaps = validationIssues.some((issue) =>
+                issue.message.toLowerCase().includes('overlapping note')
+              )
+              return (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 16
+                  }}
+                >
+                  <h3 style={{ margin: 0, color: '#fff', fontSize: 18, fontWeight: 700 }}>
+                    Chart Validation
+                  </h3>
+                  {hasOverlaps && (
+                    <button
+                      onClick={cleanupAllDuplicates}
+                      style={{
+                        backgroundColor: '#ff4d4d',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        marginLeft: '16px',
+                        marginRight: 'auto',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        transition: 'background-color 0.2s',
+                        boxShadow: '0 2px 8px rgba(255, 77, 77, 0.3)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#ff3333'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#ff4d4d'
+                      }}
+                    >
+                      ✨ Clean Up All Duplicates
+                    </button>
+                  )}
+                  <button
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#aaa',
+                      cursor: 'pointer',
+                      fontSize: 20,
+                      lineHeight: 1
+                    }}
+                    onClick={() => setValidationIssues(null)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )
+            })()}
+            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }}>
+              {validationIssues.length === 0 ? (
+                <p style={{ color: '#2ecc71', margin: 0, fontWeight: 600, fontSize: 14 }}>
+                  ✓ No issues found!
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {validationIssues.map((issue, i) => (
+                    <ValidationPreviewCard
+                      key={i}
+                      issue={issue}
+                      song={songStore.getState().song}
+                      activeSongId={activeSongId!}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-            {validationIssues.length === 0 ? (
-              <p style={{ color: '#9CF69A', margin: 0 }}>✓ No issues found!</p>
-            ) : (
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {validationIssues.map((issue, i) => (
-                  <li key={i} style={{
-                    padding: '6px 10px', marginBottom: 6, borderRadius: 4,
-                    backgroundColor: issue.severity === 'error' ? 'rgba(220,50,50,0.15)' : 'rgba(255,180,0,0.12)',
-                    borderLeft: `3px solid ${issue.severity === 'error' ? '#dc3232' : '#ffb400'}`,
-                    color: '#ddd', fontSize: 13
-                  }}>
-                    <span style={{ fontWeight: 600, color: issue.severity === 'error' ? '#f88' : '#ffcc44' }}>
-                      {issue.severity === 'error' ? '✖ Error' : '⚠ Warning'}
-                    </span>
-                    <span style={{ marginLeft: 8 }}>{issue.message}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
         </div>
       )}
 
       {isAutoChartModalOpen && (
-        <div className="settings-modal-overlay" onClick={() => !autoChartProgress.isRunning && setIsAutoChartModalOpen(false)}>
-          <div className="settings-modal auto-chart-modal" onClick={(event) => event.stopPropagation()}>
+        <div
+          className="settings-modal-overlay"
+          onClick={() => !autoChartProgress.isRunning && setIsAutoChartModalOpen(false)}
+        >
+          <div
+            className="settings-modal auto-chart-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="settings-modal-header">
               <div>
                 <h2 className="settings-modal-title">Auto-Chart from Audio</h2>
-                <p className="settings-modal-subtitle">Run STRUM on local audio files, folders, or URLs and load the generated chart package output.</p>
+                <p className="settings-modal-subtitle">
+                  Run STRUM on local audio files, folders, or URLs and load the generated chart
+                  package output.
+                </p>
               </div>
               <button
                 className="settings-modal-close"
@@ -1061,7 +1345,9 @@ export function Toolbar(): React.JSX.Element {
                       onClick={() => void handleSetupRuntime()}
                       disabled={isInstallingRuntime || runtimeStatus.installing}
                     >
-                      {isInstallingRuntime || runtimeStatus.installing ? 'Installing\u2026' : 'Set up Python runtime'}
+                      {isInstallingRuntime || runtimeStatus.installing
+                        ? 'Installing\u2026'
+                        : 'Set up Python runtime'}
                     </button>
                   </div>
                   {runtimeSetupError && (
@@ -1082,576 +1368,922 @@ export function Toolbar(): React.JSX.Element {
                 </div>
               )}
               {!autoChartProgress.isRunning && (
-              <>
-              <section className="settings-preferences-group">
-                <h3 className="settings-hotkey-group-title">Inputs</h3>
-                <fieldset
-                  disabled={autoChartProgress.isRunning}
-                  style={{ border: 'none', padding: 0, margin: 0, opacity: autoChartProgress.isRunning ? 0.55 : 1 }}
-                >
-                <div className="settings-preferences-body auto-chart-inputs">
-                  {/* Top-level: Full Mix vs Stems */}
-                  <div
-                    role="tablist"
-                    style={{
-                      display: 'flex',
-                      gap: 2,
-                      borderBottom: '1px solid #444',
-                      marginBottom: 12
-                    }}
-                  >
-                    {([
-                      { id: 'mix', label: 'Full Mix', count: autoChartFiles.length + autoChartFolders.length + autoChartUrls.filter((u) => u.trim()).length },
-                      { id: 'stems', label: 'Stems', count: autoChartStemSongs.filter((s) => Object.values(s.stems).some((v) => v.trim()) || s.extras.some((e) => e.trim())).length }
-                    ] as const).map((tab) => {
-                      const active = autoChartInputTab === tab.id
-                      return (
-                        <button
-                          key={tab.id}
-                          role="tab"
-                          aria-selected={active}
-                          onClick={() => setAutoChartInputTab(tab.id)}
+                <>
+                  <section className="settings-preferences-group">
+                    <h3 className="settings-hotkey-group-title">Inputs</h3>
+                    <fieldset
+                      disabled={autoChartProgress.isRunning}
+                      style={{
+                        border: 'none',
+                        padding: 0,
+                        margin: 0,
+                        opacity: autoChartProgress.isRunning ? 0.55 : 1
+                      }}
+                    >
+                      <div className="settings-preferences-body auto-chart-inputs">
+                        {/* Top-level: Full Mix vs Stems */}
+                        <div
+                          role="tablist"
                           style={{
-                            padding: '10px 18px',
-                            border: 'none',
-                            borderBottom: active ? '2px solid #4a9eff' : '2px solid transparent',
-                            background: active ? '#2a2a2a' : 'transparent',
-                            color: active ? '#fff' : '#bbb',
-                            cursor: 'pointer',
-                            fontWeight: active ? 600 : 500,
-                            fontSize: 14
+                            display: 'flex',
+                            gap: 2,
+                            borderBottom: '1px solid #444',
+                            marginBottom: 12
                           }}
                         >
-                          {tab.label}
-                          {tab.count > 0 && (
-                            <span
-                              style={{
-                                marginLeft: 8,
-                                padding: '1px 7px',
-                                background: '#4a9eff',
-                                color: '#fff',
-                                borderRadius: 10,
-                                fontSize: 11
-                              }}
-                            >
-                              {tab.count}
-                            </span>
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
-
-                  {autoChartInputTab === 'mix' && (
-                    <div>
-                      {/* Sub-tabs: Audio Files / Audio Folders / URLs */}
-                      <div
-                        role="tablist"
-                        style={{
-                          display: 'flex',
-                          gap: 2,
-                          borderBottom: '1px solid #2f2f2f',
-                          marginBottom: 12
-                        }}
-                      >
-                        {([
-                          { id: 'files', label: 'Audio Files', count: autoChartFiles.length },
-                          { id: 'folders', label: 'Audio Folders', count: autoChartFolders.length },
-                          { id: 'urls', label: 'URLs', count: autoChartUrls.filter((u) => u.trim()).length }
-                        ] as const).map((tab) => {
-                          const active = autoChartFullMixSubTab === tab.id
-                          return (
-                            <button
-                              key={tab.id}
-                              role="tab"
-                              aria-selected={active}
-                              onClick={() => setAutoChartFullMixSubTab(tab.id)}
-                              style={{
-                                padding: '6px 12px',
-                                border: 'none',
-                                borderBottom: active ? '2px solid #4a9eff' : '2px solid transparent',
-                                background: 'transparent',
-                                color: active ? '#fff' : '#999',
-                                cursor: 'pointer',
-                                fontWeight: active ? 600 : 400,
-                                fontSize: 12
-                              }}
-                            >
-                              {tab.label}
-                              {tab.count > 0 && (
-                                <span style={{ marginLeft: 6, padding: '1px 6px', background: '#4a9eff', color: '#fff', borderRadius: 10, fontSize: 10 }}>{tab.count}</span>
-                              )}
-                            </button>
-                          )
-                        })}
-                      </div>
-
-                      {autoChartFullMixSubTab === 'files' && (
-                        <>
-                          <div className="auto-chart-actions-row">
-                            <button className="settings-modal-secondary" onClick={async () => {
-                              const files = await window.api.openAudioFilesDialog()
-                              if (files.length > 0) {
-                                setAutoChartFiles((prev) => Array.from(new Set([...prev, ...files])))
+                          {(
+                            [
+                              {
+                                id: 'mix',
+                                label: 'Full Mix',
+                                count:
+                                  autoChartFiles.length +
+                                  autoChartFolders.length +
+                                  autoChartUrls.filter((u) => u.trim()).length
+                              },
+                              {
+                                id: 'stems',
+                                label: 'Stems',
+                                count: autoChartStemSongs.filter(
+                                  (s) =>
+                                    Object.values(s.stems).some((v) => v.trim()) ||
+                                    s.extras.some((e) => e.trim())
+                                ).length
                               }
-                            }}>Add Files</button>
-                          </div>
-                          <p style={{ fontSize: 12, opacity: 0.7, margin: '6px 0 4px' }}>
-                            Pick one or more individual audio files (.wav/.ogg/.opus/.mp3/.flac).
-                          </p>
-                          <div className="auto-chart-chip-list">
-                            {autoChartFiles.map((file) => (
-                              <button key={file} className="auto-chart-chip" onClick={() => setAutoChartFiles((prev) => prev.filter((entry) => entry !== file))}>
-                                {file.split(/[\\/]/).pop()} ×
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-
-                      {autoChartFullMixSubTab === 'folders' && (
-                        <>
-                          <div className="auto-chart-actions-row">
-                            <button className="settings-modal-secondary" onClick={async () => {
-                              const folder = await window.api.openAudioFolderDialog()
-                              if (folder) {
-                                setAutoChartFolders((prev) => Array.from(new Set([...prev, folder])))
-                              }
-                            }}>Add Folder</button>
-                          </div>
-                          <p style={{ fontSize: 12, opacity: 0.7, margin: '6px 0 4px' }}>
-                            Each folder is scanned for supported audio files; every file is processed as its own song.
-                          </p>
-                          <div className="auto-chart-chip-list">
-                            {autoChartFolders.map((folder) => (
-                              <button key={folder} className="auto-chart-chip" onClick={() => setAutoChartFolders((prev) => prev.filter((entry) => entry !== folder))}>
-                                {folder.split(/[\\/]/).pop()} ×
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-
-                      {autoChartFullMixSubTab === 'urls' && (
-                        <div className="settings-field-stack">
-                          <div className="auto-chart-url-header">
-                            <label className="settings-field-label" htmlFor="auto-chart-url-0">Audio / YouTube URLs</label>
-                            <button className="auto-chart-icon-button" onClick={handleAddAutoChartUrl} title="Add URL row" aria-label="Add URL row">+</button>
-                          </div>
-                          <div className="auto-chart-url-list">
-                            {autoChartUrls.map((url, index) => (
-                              <div key={`auto-chart-url-${index}`} className="auto-chart-url-row">
-                                <input
-                                  id={`auto-chart-url-${index}`}
-                                  className="settings-folder-input auto-chart-url-input"
-                                  type="text"
-                                  value={url}
-                                  onChange={(event) => handleUpdateAutoChartUrl(index, event.target.value)}
-                                  placeholder="Paste an audio or YouTube URL"
-                                />
-                                <button
-                                  className="auto-chart-icon-button auto-chart-delete-button"
-                                  onClick={() => handleRemoveAutoChartUrl(index)}
-                                  title="Remove URL row"
-                                  aria-label="Remove URL row"
-                                >
-                                  🗑
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {autoChartInputTab === 'stems' && (
-                    <div>
-                      <p style={{ fontSize: 12, opacity: 0.75, margin: '0 0 10px' }}>
-                        Provide one file or URL per instrument. Empty slots are skipped — that instrument will not be charted, and the Demucs separation phase is skipped entirely (your stems are used as-is). The full mix is always auto-generated by summing your stems and any extra audio. Lead vocals are charted strictly as PART VOCALS; backing vocals 1/2 drive HARM2/HARM3 and play back as vocals_1.ogg/vocals_2.ogg. Anything you add as “Extra audio” is combined into other.ogg (the catch-all uncharted track); the optional Crowd slot is exported directly as crowd.ogg.
-                      </p>
-                      {autoChartStemSongs.map((song, songIdx) => (
-                        <div key={song.id} style={{ border: '1px solid #333', borderRadius: 6, padding: 12, marginBottom: 10, background: '#1c1c1c' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                            <input
-                              type="text"
-                              className="settings-folder-input"
-                              value={song.name}
-                              onChange={(event) => {
-                                const v = event.target.value
-                                setAutoChartStemSongs((prev) => prev.map((s, i) => i === songIdx ? { ...s, name: v } : s))
-                              }}
-                              placeholder="Song name (used for output folder)"
-                              style={{ flex: 1 }}
-                            />
-                            {autoChartStemSongs.length > 1 && (
+                            ] as const
+                          ).map((tab) => {
+                            const active = autoChartInputTab === tab.id
+                            return (
                               <button
-                                type="button"
-                                className="auto-chart-icon-button auto-chart-delete-button"
-                                onClick={() => setAutoChartStemSongs((prev) => prev.filter((_, i) => i !== songIdx))}
-                                title="Remove this stem song"
-                                aria-label="Remove stem song"
-                              >🗑</button>
+                                key={tab.id}
+                                role="tab"
+                                aria-selected={active}
+                                onClick={() => setAutoChartInputTab(tab.id)}
+                                style={{
+                                  padding: '10px 18px',
+                                  border: 'none',
+                                  borderBottom: active
+                                    ? '2px solid #4a9eff'
+                                    : '2px solid transparent',
+                                  background: active ? '#2a2a2a' : 'transparent',
+                                  color: active ? '#fff' : '#bbb',
+                                  cursor: 'pointer',
+                                  fontWeight: active ? 600 : 500,
+                                  fontSize: 14
+                                }}
+                              >
+                                {tab.label}
+                                {tab.count > 0 && (
+                                  <span
+                                    style={{
+                                      marginLeft: 8,
+                                      padding: '1px 7px',
+                                      background: '#4a9eff',
+                                      color: '#fff',
+                                      borderRadius: 10,
+                                      fontSize: 11
+                                    }}
+                                  >
+                                    {tab.count}
+                                  </span>
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+
+                        {autoChartInputTab === 'mix' && (
+                          <div>
+                            {/* Sub-tabs: Audio Files / Audio Folders / URLs */}
+                            <div
+                              role="tablist"
+                              style={{
+                                display: 'flex',
+                                gap: 2,
+                                borderBottom: '1px solid #2f2f2f',
+                                marginBottom: 12
+                              }}
+                            >
+                              {(
+                                [
+                                  {
+                                    id: 'files',
+                                    label: 'Audio Files',
+                                    count: autoChartFiles.length
+                                  },
+                                  {
+                                    id: 'folders',
+                                    label: 'Audio Folders',
+                                    count: autoChartFolders.length
+                                  },
+                                  {
+                                    id: 'urls',
+                                    label: 'URLs',
+                                    count: autoChartUrls.filter((u) => u.trim()).length
+                                  }
+                                ] as const
+                              ).map((tab) => {
+                                const active = autoChartFullMixSubTab === tab.id
+                                return (
+                                  <button
+                                    key={tab.id}
+                                    role="tab"
+                                    aria-selected={active}
+                                    onClick={() => setAutoChartFullMixSubTab(tab.id)}
+                                    style={{
+                                      padding: '6px 12px',
+                                      border: 'none',
+                                      borderBottom: active
+                                        ? '2px solid #4a9eff'
+                                        : '2px solid transparent',
+                                      background: 'transparent',
+                                      color: active ? '#fff' : '#999',
+                                      cursor: 'pointer',
+                                      fontWeight: active ? 600 : 400,
+                                      fontSize: 12
+                                    }}
+                                  >
+                                    {tab.label}
+                                    {tab.count > 0 && (
+                                      <span
+                                        style={{
+                                          marginLeft: 6,
+                                          padding: '1px 6px',
+                                          background: '#4a9eff',
+                                          color: '#fff',
+                                          borderRadius: 10,
+                                          fontSize: 10
+                                        }}
+                                      >
+                                        {tab.count}
+                                      </span>
+                                    )}
+                                  </button>
+                                )
+                              })}
+                            </div>
+
+                            {autoChartFullMixSubTab === 'files' && (
+                              <>
+                                <div className="auto-chart-actions-row">
+                                  <button
+                                    className="settings-modal-secondary"
+                                    onClick={async () => {
+                                      const files = await window.api.openAudioFilesDialog()
+                                      if (files.length > 0) {
+                                        setAutoChartFiles((prev) =>
+                                          Array.from(new Set([...prev, ...files]))
+                                        )
+                                      }
+                                    }}
+                                  >
+                                    Add Files
+                                  </button>
+                                </div>
+                                <p style={{ fontSize: 12, opacity: 0.7, margin: '6px 0 4px' }}>
+                                  Pick one or more individual audio files
+                                  (.wav/.ogg/.opus/.mp3/.flac).
+                                </p>
+                                <div className="auto-chart-chip-list">
+                                  {autoChartFiles.map((file) => (
+                                    <button
+                                      key={file}
+                                      className="auto-chart-chip"
+                                      onClick={() =>
+                                        setAutoChartFiles((prev) =>
+                                          prev.filter((entry) => entry !== file)
+                                        )
+                                      }
+                                    >
+                                      {file.split(/[\\/]/).pop()} ×
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+
+                            {autoChartFullMixSubTab === 'folders' && (
+                              <>
+                                <div className="auto-chart-actions-row">
+                                  <button
+                                    className="settings-modal-secondary"
+                                    onClick={async () => {
+                                      const folder = await window.api.openAudioFolderDialog()
+                                      if (folder) {
+                                        setAutoChartFolders((prev) =>
+                                          Array.from(new Set([...prev, folder]))
+                                        )
+                                      }
+                                    }}
+                                  >
+                                    Add Folder
+                                  </button>
+                                </div>
+                                <p style={{ fontSize: 12, opacity: 0.7, margin: '6px 0 4px' }}>
+                                  Each folder is scanned for supported audio files; every file is
+                                  processed as its own song.
+                                </p>
+                                <div className="auto-chart-chip-list">
+                                  {autoChartFolders.map((folder) => (
+                                    <button
+                                      key={folder}
+                                      className="auto-chart-chip"
+                                      onClick={() =>
+                                        setAutoChartFolders((prev) =>
+                                          prev.filter((entry) => entry !== folder)
+                                        )
+                                      }
+                                    >
+                                      {folder.split(/[\\/]/).pop()} ×
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+
+                            {autoChartFullMixSubTab === 'urls' && (
+                              <div className="settings-field-stack">
+                                <div className="auto-chart-url-header">
+                                  <label
+                                    className="settings-field-label"
+                                    htmlFor="auto-chart-url-0"
+                                  >
+                                    Audio / YouTube URLs
+                                  </label>
+                                  <button
+                                    className="auto-chart-icon-button"
+                                    onClick={handleAddAutoChartUrl}
+                                    title="Add URL row"
+                                    aria-label="Add URL row"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                                <div className="auto-chart-url-list">
+                                  {autoChartUrls.map((url, index) => (
+                                    <div
+                                      key={`auto-chart-url-${index}`}
+                                      className="auto-chart-url-row"
+                                    >
+                                      <input
+                                        id={`auto-chart-url-${index}`}
+                                        className="settings-folder-input auto-chart-url-input"
+                                        type="text"
+                                        value={url}
+                                        onChange={(event) =>
+                                          handleUpdateAutoChartUrl(index, event.target.value)
+                                        }
+                                        placeholder="Paste an audio or YouTube URL"
+                                      />
+                                      <button
+                                        className="auto-chart-icon-button auto-chart-delete-button"
+                                        onClick={() => handleRemoveAutoChartUrl(index)}
+                                        title="Remove URL row"
+                                        aria-label="Remove URL row"
+                                      >
+                                        🗑
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
                             )}
                           </div>
-                          <div style={{ display: 'grid', gap: 6 }}>
-                            {([
-                              { key: 'drums', label: 'Drums' },
-                              { key: 'bass', label: 'Bass' },
-                              { key: 'vocals', label: 'Vocals (lead)' },
-                              { key: 'vocalsHarm2', label: 'Backing Vocals 1' },
-                              { key: 'vocalsHarm3', label: 'Backing Vocals 2' },
-                              { key: 'guitar', label: 'Guitar' },
-                              { key: 'piano', label: 'Piano / Keys' },
-                              { key: 'crowd', label: 'Crowd (optional)' }
-                            ] as const).map((row) => (
-                              <div key={row.key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <label style={{ width: 140, fontSize: 12, opacity: 0.85 }}>{row.label}</label>
-                                <input
-                                  type="text"
-                                  className="settings-folder-input"
-                                  value={song.stems[row.key]}
-                                  onChange={(event) => {
-                                    const v = event.target.value
-                                    setAutoChartStemSongs((prev) => prev.map((s, i) => i === songIdx ? { ...s, stems: { ...s.stems, [row.key]: v } } : s))
+                        )}
+
+                        {autoChartInputTab === 'stems' && (
+                          <div>
+                            <p style={{ fontSize: 12, opacity: 0.75, margin: '0 0 10px' }}>
+                              Provide one file or URL per instrument. Empty slots are skipped — that
+                              instrument will not be charted, and the Demucs separation phase is
+                              skipped entirely (your stems are used as-is). The full mix is always
+                              auto-generated by summing your stems and any extra audio. Lead vocals
+                              are charted strictly as PART VOCALS; backing vocals 1/2 drive
+                              HARM2/HARM3 and play back as vocals_1.ogg/vocals_2.ogg. Anything you
+                              add as “Extra audio” is combined into other.ogg (the catch-all
+                              uncharted track); the optional Crowd slot is exported directly as
+                              crowd.ogg.
+                            </p>
+                            {autoChartStemSongs.map((song, songIdx) => (
+                              <div
+                                key={song.id}
+                                style={{
+                                  border: '1px solid #333',
+                                  borderRadius: 6,
+                                  padding: 12,
+                                  marginBottom: 10,
+                                  background: '#1c1c1c'
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    marginBottom: 10
                                   }}
-                                  placeholder="File path or URL — leave blank to skip"
-                                  style={{ flex: 1 }}
-                                />
-                                <button
-                                  type="button"
-                                  className="settings-modal-secondary"
-                                  style={{ padding: '4px 10px', fontSize: 12 }}
-                                  onClick={async () => {
-                                    const files = await window.api.openAudioFilesDialog()
-                                    const picked = files[0]
-                                    if (picked) {
-                                      setAutoChartStemSongs((prev) => prev.map((s, i) => i === songIdx ? { ...s, stems: { ...s.stems, [row.key]: picked } } : s))
-                                    }
-                                  }}
-                                >Browse…</button>
-                              </div>
-                            ))}
-                          </div>
-                          <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #333' }}>
-                            <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
-                              Extra audio (uncharted) — anything you add here is summed together and exported as <code style={{ fontSize: 11 }}>other.ogg</code> (the catch-all uncharted bucket).
-                            </div>
-                            <div style={{ display: 'grid', gap: 6 }}>
-                              {song.extras.map((extra, extraIdx) => (
-                                <div key={extraIdx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  <label style={{ width: 140, fontSize: 12, opacity: 0.85 }}>Extra {extraIdx + 1}</label>
+                                >
                                   <input
                                     type="text"
                                     className="settings-folder-input"
-                                    value={extra}
+                                    value={song.name}
                                     onChange={(event) => {
                                       const v = event.target.value
-                                      setAutoChartStemSongs((prev) => prev.map((s, i) => i === songIdx ? { ...s, extras: s.extras.map((e, j) => j === extraIdx ? v : e) } : s))
+                                      setAutoChartStemSongs((prev) =>
+                                        prev.map((s, i) => (i === songIdx ? { ...s, name: v } : s))
+                                      )
                                     }}
-                                    placeholder="File path or URL"
+                                    placeholder="Song name (used for output folder)"
                                     style={{ flex: 1 }}
                                   />
-                                  <button
-                                    type="button"
-                                    className="settings-modal-secondary"
-                                    style={{ padding: '4px 10px', fontSize: 12 }}
-                                    onClick={async () => {
-                                      const files = await window.api.openAudioFilesDialog()
-                                      const picked = files[0]
-                                      if (picked) {
-                                        setAutoChartStemSongs((prev) => prev.map((s, i) => i === songIdx ? { ...s, extras: s.extras.map((e, j) => j === extraIdx ? picked : e) } : s))
+                                  {autoChartStemSongs.length > 1 && (
+                                    <button
+                                      type="button"
+                                      className="auto-chart-icon-button auto-chart-delete-button"
+                                      onClick={() =>
+                                        setAutoChartStemSongs((prev) =>
+                                          prev.filter((_, i) => i !== songIdx)
+                                        )
                                       }
-                                    }}
-                                  >Browse…</button>
-                                  <button
-                                    type="button"
-                                    className="auto-chart-icon-button auto-chart-delete-button"
-                                    onClick={() => setAutoChartStemSongs((prev) => prev.map((s, i) => i === songIdx ? { ...s, extras: s.extras.filter((_, j) => j !== extraIdx) } : s))}
-                                    title="Remove this extra"
-                                    aria-label="Remove extra"
-                                  >🗑</button>
+                                      title="Remove this stem song"
+                                      aria-label="Remove stem song"
+                                    >
+                                      🗑
+                                    </button>
+                                  )}
                                 </div>
-                              ))}
-                              <button
-                                type="button"
-                                className="settings-modal-secondary"
-                                style={{ alignSelf: 'flex-start', padding: '4px 10px', fontSize: 12 }}
-                                onClick={() => setAutoChartStemSongs((prev) => prev.map((s, i) => i === songIdx ? { ...s, extras: [...s.extras, ''] } : s))}
-                              >+ Add extra audio</button>
-                            </div>
+                                <div style={{ display: 'grid', gap: 6 }}>
+                                  {(
+                                    [
+                                      { key: 'drums', label: 'Drums' },
+                                      { key: 'bass', label: 'Bass' },
+                                      { key: 'vocals', label: 'Vocals (lead)' },
+                                      { key: 'vocalsHarm2', label: 'Backing Vocals 1' },
+                                      { key: 'vocalsHarm3', label: 'Backing Vocals 2' },
+                                      { key: 'guitar', label: 'Guitar' },
+                                      { key: 'piano', label: 'Piano / Keys' },
+                                      { key: 'crowd', label: 'Crowd (optional)' }
+                                    ] as const
+                                  ).map((row) => (
+                                    <div
+                                      key={row.key}
+                                      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                                    >
+                                      <label style={{ width: 140, fontSize: 12, opacity: 0.85 }}>
+                                        {row.label}
+                                      </label>
+                                      <input
+                                        type="text"
+                                        className="settings-folder-input"
+                                        value={song.stems[row.key]}
+                                        onChange={(event) => {
+                                          const v = event.target.value
+                                          setAutoChartStemSongs((prev) =>
+                                            prev.map((s, i) =>
+                                              i === songIdx
+                                                ? { ...s, stems: { ...s.stems, [row.key]: v } }
+                                                : s
+                                            )
+                                          )
+                                        }}
+                                        placeholder="File path or URL — leave blank to skip"
+                                        style={{ flex: 1 }}
+                                      />
+                                      <button
+                                        type="button"
+                                        className="settings-modal-secondary"
+                                        style={{ padding: '4px 10px', fontSize: 12 }}
+                                        onClick={async () => {
+                                          const files = await window.api.openAudioFilesDialog()
+                                          const picked = files[0]
+                                          if (picked) {
+                                            setAutoChartStemSongs((prev) =>
+                                              prev.map((s, i) =>
+                                                i === songIdx
+                                                  ? {
+                                                      ...s,
+                                                      stems: { ...s.stems, [row.key]: picked }
+                                                    }
+                                                  : s
+                                              )
+                                            )
+                                          }
+                                        }}
+                                      >
+                                        Browse…
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div
+                                  style={{
+                                    marginTop: 10,
+                                    paddingTop: 10,
+                                    borderTop: '1px dashed #333'
+                                  }}
+                                >
+                                  <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
+                                    Extra audio (uncharted) — anything you add here is summed
+                                    together and exported as{' '}
+                                    <code style={{ fontSize: 11 }}>other.ogg</code> (the catch-all
+                                    uncharted bucket).
+                                  </div>
+                                  <div style={{ display: 'grid', gap: 6 }}>
+                                    {song.extras.map((extra, extraIdx) => (
+                                      <div
+                                        key={extraIdx}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                                      >
+                                        <label style={{ width: 140, fontSize: 12, opacity: 0.85 }}>
+                                          Extra {extraIdx + 1}
+                                        </label>
+                                        <input
+                                          type="text"
+                                          className="settings-folder-input"
+                                          value={extra}
+                                          onChange={(event) => {
+                                            const v = event.target.value
+                                            setAutoChartStemSongs((prev) =>
+                                              prev.map((s, i) =>
+                                                i === songIdx
+                                                  ? {
+                                                      ...s,
+                                                      extras: s.extras.map((e, j) =>
+                                                        j === extraIdx ? v : e
+                                                      )
+                                                    }
+                                                  : s
+                                              )
+                                            )
+                                          }}
+                                          placeholder="File path or URL"
+                                          style={{ flex: 1 }}
+                                        />
+                                        <button
+                                          type="button"
+                                          className="settings-modal-secondary"
+                                          style={{ padding: '4px 10px', fontSize: 12 }}
+                                          onClick={async () => {
+                                            const files = await window.api.openAudioFilesDialog()
+                                            const picked = files[0]
+                                            if (picked) {
+                                              setAutoChartStemSongs((prev) =>
+                                                prev.map((s, i) =>
+                                                  i === songIdx
+                                                    ? {
+                                                        ...s,
+                                                        extras: s.extras.map((e, j) =>
+                                                          j === extraIdx ? picked : e
+                                                        )
+                                                      }
+                                                    : s
+                                                )
+                                              )
+                                            }
+                                          }}
+                                        >
+                                          Browse…
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="auto-chart-icon-button auto-chart-delete-button"
+                                          onClick={() =>
+                                            setAutoChartStemSongs((prev) =>
+                                              prev.map((s, i) =>
+                                                i === songIdx
+                                                  ? {
+                                                      ...s,
+                                                      extras: s.extras.filter(
+                                                        (_, j) => j !== extraIdx
+                                                      )
+                                                    }
+                                                  : s
+                                              )
+                                            )
+                                          }
+                                          title="Remove this extra"
+                                          aria-label="Remove extra"
+                                        >
+                                          🗑
+                                        </button>
+                                      </div>
+                                    ))}
+                                    <button
+                                      type="button"
+                                      className="settings-modal-secondary"
+                                      style={{
+                                        alignSelf: 'flex-start',
+                                        padding: '4px 10px',
+                                        fontSize: 12
+                                      }}
+                                      onClick={() =>
+                                        setAutoChartStemSongs((prev) =>
+                                          prev.map((s, i) =>
+                                            i === songIdx ? { ...s, extras: [...s.extras, ''] } : s
+                                          )
+                                        )
+                                      }
+                                    >
+                                      + Add extra audio
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              className="settings-modal-secondary"
+                              onClick={() =>
+                                setAutoChartStemSongs((prev) => [...prev, makeEmptyStemSong()])
+                              }
+                            >
+                              + Add another stem song
+                            </button>
                           </div>
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        className="settings-modal-secondary"
-                        onClick={() => setAutoChartStemSongs((prev) => [...prev, makeEmptyStemSong()])}
-                      >+ Add another stem song</button>
-                    </div>
-                  )}
+                        )}
 
-                  <div className="settings-field-stack" style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #333' }}>
-                    <label className="settings-field-label" htmlFor="auto-chart-output">Output folder</label>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <input
-                        id="auto-chart-output"
-                        className="settings-folder-input"
-                        type="text"
-                        value={autoChartProgress.outputDir}
-                        onChange={(event) => setAutoChartProgress((prev) => ({ ...prev, outputDir: event.target.value }))}
-                        placeholder="Generated song folders will be written here"
-                        style={{ flex: 1 }}
-                      />
-                      <button className="settings-modal-secondary" onClick={async () => {
-                        const folder = await window.api.openOutputFolderDialog()
-                        if (folder) {
-                          setAutoChartProgress((prev) => ({ ...prev, outputDir: folder, error: null }))
-                        }
-                      }}>Browse…</button>
-                    </div>
-                  </div>
-                </div>
-                </fieldset>
-              </section>
-
-              <section className="settings-preferences-group">
-                <button
-                  type="button"
-                  className="auto-chart-collapse-toggle"
-                  onClick={() => setAutoChartAdvancedOpen((v) => !v)}
-                  aria-expanded={autoChartAdvancedOpen}
-                >
-                  <span className="auto-chart-collapse-chevron" aria-hidden="true">
-                    <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M4 2.5L8 6L4 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </span>
-                  <span>Advanced</span>
-                </button>
-                {autoChartAdvancedOpen && (
-                <div className="settings-preferences-body">
-                  <label className="settings-checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={autoChartDisableOnlineLookup}
-                      onChange={(event) => setAutoChartDisableOnlineLookup(event.target.checked)}
-                      disabled={autoChartProgress.isRunning}
-                    />
-                    <span>
-                      Offline mode (disable online lookups)
-                      <small style={{ display: 'block', opacity: 0.7 }}>
-                        Skips MusicBrainz, album art, and lyric searches. Use this for custom uploads to avoid them being misidentified as other songs.
-                      </small>
-                    </span>
-                  </label>
-
-                  <label className="settings-checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={autoChartDownloadVideo}
-                      onChange={(event) => setAutoChartDownloadVideo(event.target.checked)}
-                      disabled={autoChartProgress.isRunning}
-                    />
-                    <span>
-                      Download video for URL inputs
-                      <small style={{ display: 'block', opacity: 0.7 }}>
-                        After charting finishes, pull the source video (e.g. YouTube) into each song folder so it plays in the timeline and in-game.
-                      </small>
-                    </span>
-                  </label>
-
-                  <label className="settings-checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={autoChartKeepStems}
-                      onChange={(event) => setAutoChartKeepStems(event.target.checked)}
-                      disabled={autoChartProgress.isRunning}
-                    />
-                    <span>
-                      Keep separated stems
-                      <small style={{ display: 'block', opacity: 0.7 }}>
-                        Export the separated stems (drums, bass, vocals, etc.) as per-instrument oggs in each song folder instead of discarding them. Lets you remix or mute instruments in-game.
-                      </small>
-                    </span>
-                  </label>
-
-                  <label className="settings-checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={autoChartImproveTempo}
-                      onChange={(event) => setAutoChartImproveTempo(event.target.checked)}
-                      disabled={autoChartProgress.isRunning}
-                    />
-                    <span>
-                      Improve tempo accuracy (recommended)
-                      <small style={{ display: 'block', opacity: 0.7 }}>
-                        Beat-tracks the audio to align the chart&rsquo;s beat and measure lines to the real performance, so notes stop drifting off the grid. Follows tempo changes in live recordings while keeping notes in sync with the audio. Disabled automatically when you set a manual tempo map below.
-                      </small>
-                    </span>
-                  </label>
-
-                  <div className="auto-chart-bpm-source" style={{ margin: '4px 0 2px' }}>
-                    <label className="settings-checkbox-row" style={{ alignItems: 'flex-start' }}>
-                      <span style={{ flex: 1 }}>
-                        Manual BPM
-                        <small style={{ display: 'block', opacity: 0.7 }}>
-                          Know the song&rsquo;s tempo? Enter it and it&rsquo;s treated as the truth: the beat grid is locked to this BPM (fixing any wrong-tempo or octave detection). With &ldquo;Improve tempo accuracy&rdquo; on, the audio is still beat-tracked to follow drift around this value; with it off, this exact BPM is applied. Leave blank to detect automatically.
-                        </small>
-                      </span>
-                      <input
-                        type="number"
-                        min={1}
-                        step={0.001}
-                        value={autoChartManualBpm}
-                        placeholder="auto"
-                        disabled={autoChartProgress.isRunning}
-                        style={{ width: 84, marginLeft: 12 }}
-                        onChange={(event) => setAutoChartManualBpm(event.target.value)}
-                      />
-                    </label>
-                  </div>
-
-                  <label className="settings-checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={autoChartSnapDrums}
-                      onChange={(event) => setAutoChartSnapDrums(event.target.checked)}
-                      disabled={autoChartProgress.isRunning}
-                    />
-                    <span>
-                      Snap drums to grid
-                      <small style={{ display: 'block', opacity: 0.7 }}>
-                        Nudge drum notes that land just off the beat onto the nearest 1/32 grid line, removing the slight timing jitter from onset detection. Genuinely off-grid hits (fills, syncopation) are left untouched.
-                      </small>
-                    </span>
-                  </label>
-
-                  <div style={{ marginTop: 12 }}>
-                    {autoChartInputTab === 'stems' ? (
-                      <p style={{ fontSize: 12, opacity: 0.7, margin: 0 }}>
-                        Tracks to chart are determined automatically from the stems you provide on the Stems tab — only instruments with a stem will be charted.
-                      </p>
-                    ) : (
-                      <>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                          <strong style={{ fontSize: 13 }}>Tracks to chart</strong>
+                        <div
+                          className="settings-field-stack"
+                          style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #333' }}
+                        >
+                          <label className="settings-field-label" htmlFor="auto-chart-output">
+                            Output folder
+                          </label>
                           <div style={{ display: 'flex', gap: 6 }}>
+                            <input
+                              id="auto-chart-output"
+                              className="settings-folder-input"
+                              type="text"
+                              value={autoChartProgress.outputDir}
+                              onChange={(event) =>
+                                setAutoChartProgress((prev) => ({
+                                  ...prev,
+                                  outputDir: event.target.value
+                                }))
+                              }
+                              placeholder="Generated song folders will be written here"
+                              style={{ flex: 1 }}
+                            />
                             <button
-                              type="button"
                               className="settings-modal-secondary"
-                              style={{ fontSize: 11, padding: '2px 8px' }}
-                              disabled={autoChartProgress.isRunning}
-                              onClick={() => setAutoChartEnabledTracks({ drums: true, guitar: true, bass: true, vocals: true, harmonies: true, keys: true, proKeys: true })}
-                            >All</button>
-                            <button
-                              type="button"
-                              className="settings-modal-secondary"
-                              style={{ fontSize: 11, padding: '2px 8px' }}
-                              disabled={autoChartProgress.isRunning}
-                              onClick={() => setAutoChartEnabledTracks({ drums: false, guitar: false, bass: false, vocals: false, harmonies: false, keys: false, proKeys: false })}
-                            >None</button>
+                              onClick={async () => {
+                                const folder = await window.api.openOutputFolderDialog()
+                                if (folder) {
+                                  setAutoChartProgress((prev) => ({
+                                    ...prev,
+                                    outputDir: folder,
+                                    error: null
+                                  }))
+                                }
+                              }}
+                            >
+                              Browse…
+                            </button>
                           </div>
                         </div>
-                        <p style={{ fontSize: 12, opacity: 0.7, margin: '0 0 8px' }}>
-                          Uncheck any track you do not want STRUM to generate. All are charted by default.
-                        </p>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '6px 16px' }}>
-                          {([
-                            { key: 'drums', label: 'Drums' },
-                            { key: 'guitar', label: 'Guitar' },
-                            { key: 'bass', label: 'Bass' },
-                            { key: 'keys', label: 'Keys' },
-                            { key: 'proKeys', label: 'Pro Keys' },
-                            { key: 'vocals', label: 'Vocals' },
-                            { key: 'harmonies', label: 'Vocal Harmonies (HARM2/3)' }
-                          ] as const).map((track) => (
-                            <label key={track.key} className="settings-checkbox-row" style={{ margin: 0 }}>
-                              <input
-                                type="checkbox"
-                                checked={autoChartEnabledTracks[track.key]}
-                                disabled={autoChartProgress.isRunning || (track.key === 'harmonies' && !autoChartEnabledTracks.vocals)}
-                                onChange={(event) => setAutoChartEnabledTracks((prev) => {
-                                  const next = { ...prev, [track.key]: event.target.checked }
-                                  // Disabling vocals also disables harmonies.
-                                  if (track.key === 'vocals' && !event.target.checked) next.harmonies = false
-                                  return next
-                                })}
-                              />
-                              <span>{track.label}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
+                      </div>
+                    </fieldset>
+                  </section>
 
-                  <div className="auto-chart-tempo-override">
-                    <div className="auto-chart-tempo-header">
-                      <strong>Tempo override</strong>
-                      <button
-                        type="button"
-                        className="settings-modal-secondary"
-                        style={{ fontSize: 11, padding: '2px 8px' }}
-                        disabled={autoChartProgress.isRunning}
-                        onClick={() => setAutoChartTempoEvents((prev) => [
-                          ...prev,
-                          { timeSec: prev.length === 0 ? '0' : '', bpm: '' }
-                        ])}
-                      >+ Add tempo</button>
-                    </div>
-                    <p className="auto-chart-tempo-help">
-                      Leave empty to auto-detect. Add a row with time 0 to override the initial BPM, plus more rows to declare tempo changes at specific timestamps (in seconds). Note positions are retimed to keep audio sync.
-                    </p>
-                    {autoChartTempoEvents.length > 0 && (
-                      <div className="auto-chart-tempo-list">
-                        <div className="auto-chart-tempo-row auto-chart-tempo-row-head">
-                          <span>Time (s)</span>
-                          <span>BPM</span>
-                          <span />
-                        </div>
-                        {autoChartTempoEvents.map((event, index) => (
-                          <div key={index} className="auto-chart-tempo-row">
-                            <input
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              value={event.timeSec}
-                              placeholder="0"
-                              disabled={autoChartProgress.isRunning}
-                              onChange={(e) => {
-                                const v = e.target.value
-                                setAutoChartTempoEvents((prev) => prev.map((row, i) => i === index ? { ...row, timeSec: v } : row))
-                              }}
-                            />
+                  <section className="settings-preferences-group">
+                    <button
+                      type="button"
+                      className="auto-chart-collapse-toggle"
+                      onClick={() => setAutoChartAdvancedOpen((v) => !v)}
+                      aria-expanded={autoChartAdvancedOpen}
+                    >
+                      <span className="auto-chart-collapse-chevron" aria-hidden="true">
+                        <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path
+                            d="M4 2.5L8 6L4 9.5"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </span>
+                      <span>Advanced</span>
+                    </button>
+                    {autoChartAdvancedOpen && (
+                      <div className="settings-preferences-body">
+                        <label className="settings-checkbox-row">
+                          <input
+                            type="checkbox"
+                            checked={autoChartDisableOnlineLookup}
+                            onChange={(event) =>
+                              setAutoChartDisableOnlineLookup(event.target.checked)
+                            }
+                            disabled={autoChartProgress.isRunning}
+                          />
+                          <span>
+                            Offline mode (disable online lookups)
+                            <small style={{ display: 'block', opacity: 0.7 }}>
+                              Skips MusicBrainz, album art, and lyric searches. Use this for custom
+                              uploads to avoid them being misidentified as other songs.
+                            </small>
+                          </span>
+                        </label>
+
+                        <label className="settings-checkbox-row">
+                          <input
+                            type="checkbox"
+                            checked={autoChartDownloadVideo}
+                            onChange={(event) => setAutoChartDownloadVideo(event.target.checked)}
+                            disabled={autoChartProgress.isRunning}
+                          />
+                          <span>
+                            Download video for URL inputs
+                            <small style={{ display: 'block', opacity: 0.7 }}>
+                              After charting finishes, pull the source video (e.g. YouTube) into
+                              each song folder so it plays in the timeline and in-game.
+                            </small>
+                          </span>
+                        </label>
+
+                        <label className="settings-checkbox-row">
+                          <input
+                            type="checkbox"
+                            checked={autoChartKeepStems}
+                            onChange={(event) => setAutoChartKeepStems(event.target.checked)}
+                            disabled={autoChartProgress.isRunning}
+                          />
+                          <span>
+                            Keep separated stems
+                            <small style={{ display: 'block', opacity: 0.7 }}>
+                              Export the separated stems (drums, bass, vocals, etc.) as
+                              per-instrument oggs in each song folder instead of discarding them.
+                              Lets you remix or mute instruments in-game.
+                            </small>
+                          </span>
+                        </label>
+
+                        <label className="settings-checkbox-row">
+                          <input
+                            type="checkbox"
+                            checked={autoChartImproveTempo}
+                            onChange={(event) => setAutoChartImproveTempo(event.target.checked)}
+                            disabled={autoChartProgress.isRunning}
+                          />
+                          <span>
+                            Improve tempo accuracy (recommended)
+                            <small style={{ display: 'block', opacity: 0.7 }}>
+                              Beat-tracks the audio to align the chart&rsquo;s beat and measure
+                              lines to the real performance, so notes stop drifting off the grid.
+                              Follows tempo changes in live recordings while keeping notes in sync
+                              with the audio. Disabled automatically when you set a manual tempo map
+                              below.
+                            </small>
+                          </span>
+                        </label>
+
+                        <div className="auto-chart-bpm-source" style={{ margin: '4px 0 2px' }}>
+                          <label
+                            className="settings-checkbox-row"
+                            style={{ alignItems: 'flex-start' }}
+                          >
+                            <span style={{ flex: 1 }}>
+                              Manual BPM
+                              <small style={{ display: 'block', opacity: 0.7 }}>
+                                Know the song&rsquo;s tempo? Enter it and it&rsquo;s treated as the
+                                truth: the beat grid is locked to this BPM (fixing any wrong-tempo
+                                or octave detection). With &ldquo;Improve tempo accuracy&rdquo; on,
+                                the audio is still beat-tracked to follow drift around this value;
+                                with it off, this exact BPM is applied. Leave blank to detect
+                                automatically.
+                              </small>
+                            </span>
                             <input
                               type="number"
                               min={1}
                               step={0.001}
-                              value={event.bpm}
-                              placeholder="120"
+                              value={autoChartManualBpm}
+                              placeholder="auto"
                               disabled={autoChartProgress.isRunning}
-                              onChange={(e) => {
-                                const v = e.target.value
-                                setAutoChartTempoEvents((prev) => prev.map((row, i) => i === index ? { ...row, bpm: v } : row))
-                              }}
+                              style={{ width: 84, marginLeft: 12 }}
+                              onChange={(event) => setAutoChartManualBpm(event.target.value)}
                             />
+                          </label>
+                        </div>
+
+                        <label className="settings-checkbox-row">
+                          <input
+                            type="checkbox"
+                            checked={autoChartSnapDrums}
+                            onChange={(event) => setAutoChartSnapDrums(event.target.checked)}
+                            disabled={autoChartProgress.isRunning}
+                          />
+                          <span>
+                            Snap drums to grid
+                            <small style={{ display: 'block', opacity: 0.7 }}>
+                              Nudge drum notes that land just off the beat onto the nearest 1/32
+                              grid line, removing the slight timing jitter from onset detection.
+                              Genuinely off-grid hits (fills, syncopation) are left untouched.
+                            </small>
+                          </span>
+                        </label>
+
+                        <div style={{ marginTop: 12 }}>
+                          {autoChartInputTab === 'stems' ? (
+                            <p style={{ fontSize: 12, opacity: 0.7, margin: 0 }}>
+                              Tracks to chart are determined automatically from the stems you
+                              provide on the Stems tab — only instruments with a stem will be
+                              charted.
+                            </p>
+                          ) : (
+                            <>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  marginBottom: 6
+                                }}
+                              >
+                                <strong style={{ fontSize: 13 }}>Tracks to chart</strong>
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                  <button
+                                    type="button"
+                                    className="settings-modal-secondary"
+                                    style={{ fontSize: 11, padding: '2px 8px' }}
+                                    disabled={autoChartProgress.isRunning}
+                                    onClick={() =>
+                                      setAutoChartEnabledTracks({
+                                        drums: true,
+                                        guitar: true,
+                                        bass: true,
+                                        vocals: true,
+                                        harmonies: true,
+                                        keys: true,
+                                        proKeys: true
+                                      })
+                                    }
+                                  >
+                                    All
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="settings-modal-secondary"
+                                    style={{ fontSize: 11, padding: '2px 8px' }}
+                                    disabled={autoChartProgress.isRunning}
+                                    onClick={() =>
+                                      setAutoChartEnabledTracks({
+                                        drums: false,
+                                        guitar: false,
+                                        bass: false,
+                                        vocals: false,
+                                        harmonies: false,
+                                        keys: false,
+                                        proKeys: false
+                                      })
+                                    }
+                                  >
+                                    None
+                                  </button>
+                                </div>
+                              </div>
+                              <p style={{ fontSize: 12, opacity: 0.7, margin: '0 0 8px' }}>
+                                Uncheck any track you do not want STRUM to generate. All are charted
+                                by default.
+                              </p>
+                              <div
+                                style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                                  gap: '6px 16px'
+                                }}
+                              >
+                                {(
+                                  [
+                                    { key: 'drums', label: 'Drums' },
+                                    { key: 'guitar', label: 'Guitar' },
+                                    { key: 'bass', label: 'Bass' },
+                                    { key: 'keys', label: 'Keys' },
+                                    { key: 'proKeys', label: 'Pro Keys' },
+                                    { key: 'vocals', label: 'Vocals' },
+                                    { key: 'harmonies', label: 'Vocal Harmonies (HARM2/3)' }
+                                  ] as const
+                                ).map((track) => (
+                                  <label
+                                    key={track.key}
+                                    className="settings-checkbox-row"
+                                    style={{ margin: 0 }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={autoChartEnabledTracks[track.key]}
+                                      disabled={
+                                        autoChartProgress.isRunning ||
+                                        (track.key === 'harmonies' &&
+                                          !autoChartEnabledTracks.vocals)
+                                      }
+                                      onChange={(event) =>
+                                        setAutoChartEnabledTracks((prev) => {
+                                          const next = {
+                                            ...prev,
+                                            [track.key]: event.target.checked
+                                          }
+                                          // Disabling vocals also disables harmonies.
+                                          if (track.key === 'vocals' && !event.target.checked)
+                                            next.harmonies = false
+                                          return next
+                                        })
+                                      }
+                                    />
+                                    <span>{track.label}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        <div className="auto-chart-tempo-override">
+                          <div className="auto-chart-tempo-header">
+                            <strong>Tempo override</strong>
                             <button
                               type="button"
-                              className="auto-chart-tempo-remove"
-                              title="Remove"
+                              className="settings-modal-secondary"
+                              style={{ fontSize: 11, padding: '2px 8px' }}
                               disabled={autoChartProgress.isRunning}
-                              onClick={() => setAutoChartTempoEvents((prev) => prev.filter((_, i) => i !== index))}
-                            >×</button>
+                              onClick={() =>
+                                setAutoChartTempoEvents((prev) => [
+                                  ...prev,
+                                  { timeSec: prev.length === 0 ? '0' : '', bpm: '' }
+                                ])
+                              }
+                            >
+                              + Add tempo
+                            </button>
                           </div>
-                        ))}
+                          <p className="auto-chart-tempo-help">
+                            Leave empty to auto-detect. Add a row with time 0 to override the
+                            initial BPM, plus more rows to declare tempo changes at specific
+                            timestamps (in seconds). Note positions are retimed to keep audio sync.
+                          </p>
+                          {autoChartTempoEvents.length > 0 && (
+                            <div className="auto-chart-tempo-list">
+                              <div className="auto-chart-tempo-row auto-chart-tempo-row-head">
+                                <span>Time (s)</span>
+                                <span>BPM</span>
+                                <span />
+                              </div>
+                              {autoChartTempoEvents.map((event, index) => (
+                                <div key={index} className="auto-chart-tempo-row">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step={0.01}
+                                    value={event.timeSec}
+                                    placeholder="0"
+                                    disabled={autoChartProgress.isRunning}
+                                    onChange={(e) => {
+                                      const v = e.target.value
+                                      setAutoChartTempoEvents((prev) =>
+                                        prev.map((row, i) =>
+                                          i === index ? { ...row, timeSec: v } : row
+                                        )
+                                      )
+                                    }}
+                                  />
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    step={0.001}
+                                    value={event.bpm}
+                                    placeholder="120"
+                                    disabled={autoChartProgress.isRunning}
+                                    onChange={(e) => {
+                                      const v = e.target.value
+                                      setAutoChartTempoEvents((prev) =>
+                                        prev.map((row, i) =>
+                                          i === index ? { ...row, bpm: v } : row
+                                        )
+                                      )
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="auto-chart-tempo-remove"
+                                    title="Remove"
+                                    disabled={autoChartProgress.isRunning}
+                                    onClick={() =>
+                                      setAutoChartTempoEvents((prev) =>
+                                        prev.filter((_, i) => i !== index)
+                                      )
+                                    }
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
-                  </div>
-                </div>
-                )}
-              </section>
-              </>
+                  </section>
+                </>
               )}
 
               <section className="settings-preferences-group">
@@ -1662,15 +2294,20 @@ export function Toolbar(): React.JSX.Element {
                     <span>{autoChartProgress.percent}%</span>
                   </div>
                   <div className="toolbar-updater-bar auto-chart-progress-bar">
-                    <div className="toolbar-updater-bar-fill" style={{ width: `${autoChartProgress.percent}%` }} />
+                    <div
+                      className="toolbar-updater-bar-fill"
+                      style={{ width: `${autoChartProgress.percent}%` }}
+                    />
                   </div>
                   <div className="auto-chart-progress-message">
                     {autoChartCloseCountdown !== null
                       ? `All songs auto-charted. Closing in ${autoChartCloseCountdown}…`
-                      : (autoChartProgress.message || 'Idle')}
+                      : autoChartProgress.message || 'Idle'}
                   </div>
                   {autoChartProgress.currentItem && (
-                    <div className="auto-chart-progress-subtle">Current: {autoChartProgress.currentItem}</div>
+                    <div className="auto-chart-progress-subtle">
+                      Current: {autoChartProgress.currentItem}
+                    </div>
                   )}
                   {autoChartProgress.error && (
                     <div className="auto-chart-error">
@@ -1690,7 +2327,9 @@ export function Toolbar(): React.JSX.Element {
                   {autoChartProgress.warnings.length > 0 && (
                     <div className="auto-chart-warning-list">
                       {autoChartProgress.warnings.map((warning) => (
-                        <div key={warning} className="auto-chart-warning-item">{warning}</div>
+                        <div key={warning} className="auto-chart-warning-item">
+                          {warning}
+                        </div>
                       ))}
                     </div>
                   )}
@@ -1700,31 +2339,47 @@ export function Toolbar(): React.JSX.Element {
 
             <div className="settings-modal-footer">
               {!autoChartProgress.isRunning && (
-                <button className="settings-modal-secondary" onClick={() => {
-                  setAutoChartCloseCountdown(null)
-                  setAutoChartFiles([])
-                  setAutoChartFolders([])
-                  setAutoChartStemFolders([])
-                  setAutoChartStemSongs([makeEmptyStemSong()])
-                  setAutoChartUrls([EMPTY_AUTO_CHART_URL])
-                  setAutoChartErrorCopied(false)
-                  setAutoChartProgress({
-                    runId: null,
-                    stage: 'bootstrap',
-                    message: '',
-                    percent: 0,
-                    isRunning: false,
-                    outputDir: getPreferredAutoChartOutputDir(),
-                    error: null,
-                    warnings: []
-                  })
-                }}>Reset</button>
+                <button
+                  className="settings-modal-secondary"
+                  onClick={() => {
+                    setAutoChartCloseCountdown(null)
+                    setAutoChartFiles([])
+                    setAutoChartFolders([])
+                    setAutoChartStemFolders([])
+                    setAutoChartStemSongs([makeEmptyStemSong()])
+                    setAutoChartUrls([EMPTY_AUTO_CHART_URL])
+                    setAutoChartErrorCopied(false)
+                    setAutoChartProgress({
+                      runId: null,
+                      stage: 'bootstrap',
+                      message: '',
+                      percent: 0,
+                      isRunning: false,
+                      outputDir: getPreferredAutoChartOutputDir(),
+                      error: null,
+                      warnings: []
+                    })
+                  }}
+                >
+                  Reset
+                </button>
               )}
-              <button className="settings-modal-secondary" onClick={() => autoChartProgress.isRunning ? void handleCancelAutoChart() : setIsAutoChartModalOpen(false)}>
+              <button
+                className="settings-modal-secondary"
+                onClick={() =>
+                  autoChartProgress.isRunning
+                    ? void handleCancelAutoChart()
+                    : setIsAutoChartModalOpen(false)
+                }
+              >
                 {autoChartProgress.isRunning ? 'Cancel Run' : 'Close'}
               </button>
               {!autoChartProgress.isRunning && (
-                <button className="settings-modal-primary" onClick={() => void handleStartAutoChart()} disabled={runtimeStatus?.managed === true && !runtimeStatus.ready}>
+                <button
+                  className="settings-modal-primary"
+                  onClick={() => void handleStartAutoChart()}
+                  disabled={runtimeStatus?.managed === true && !runtimeStatus.ready}
+                >
                   Start Auto-Chart
                 </button>
               )}
@@ -1741,7 +2396,11 @@ export function Toolbar(): React.JSX.Element {
 
 // Stem mixer popover button — lets the user mute/solo individual audio
 // stems (drums.ogg, bass.ogg, vocals.ogg, etc.) loaded for the song.
-function StemMixerButton({ activeSongId }: { activeSongId: string | null }): React.JSX.Element | null {
+function StemMixerButton({
+  activeSongId
+}: {
+  activeSongId: string | null
+}): React.JSX.Element | null {
   const [open, setOpen] = useState(false)
   const [stems, setStems] = useState<audioService.StemControl[]>([])
   const [popoverPos, setPopoverPos] = useState<{ top: number; right: number } | null>(null)
@@ -1749,6 +2408,7 @@ function StemMixerButton({ activeSongId }: { activeSongId: string | null }): Rea
 
   useEffect(() => {
     if (!activeSongId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStems([])
       return
     }
@@ -1790,9 +2450,33 @@ function StemMixerButton({ activeSongId }: { activeSongId: string | null }): Rea
         aria-label="Stem mixer"
       >
         <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <line x1="3" y1="2" x2="3" y2="14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          <line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          <line x1="13" y1="2" x2="13" y2="14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <line
+            x1="3"
+            y1="2"
+            x2="3"
+            y2="14"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+          />
+          <line
+            x1="8"
+            y1="2"
+            x2="8"
+            y2="14"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+          />
+          <line
+            x1="13"
+            y1="2"
+            x2="13"
+            y2="14"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+          />
           <rect x="1.5" y="9" width="3" height="3" rx="0.6" fill="currentColor" />
           <rect x="6.5" y="4" width="3" height="3" rx="0.6" fill="currentColor" />
           <rect x="11.5" y="7" width="3" height="3" rx="0.6" fill="currentColor" />
@@ -1805,7 +2489,9 @@ function StemMixerButton({ activeSongId }: { activeSongId: string | null }): Rea
         >
           <div className="stem-mixer-header">
             <span>Stem Mixer</span>
-            <button className="stem-mixer-close" onClick={() => setOpen(false)} aria-label="Close">×</button>
+            <button className="stem-mixer-close" onClick={() => setOpen(false)} aria-label="Close">
+              ×
+            </button>
           </div>
           {stems.length === 0 ? (
             <div className="stem-mixer-empty">No stems loaded.</div>
@@ -1840,7 +2526,11 @@ function StemMixerButton({ activeSongId }: { activeSongId: string | null }): Rea
                       step={0.01}
                       value={s.volume}
                       onChange={(e) =>
-                        audioService.setStemVolume(activeSongId, s.filePath, parseFloat(e.target.value))
+                        audioService.setStemVolume(
+                          activeSongId,
+                          s.filePath,
+                          parseFloat(e.target.value)
+                        )
                       }
                       className="toolbar-volume-slider stem-mixer-volume-slider"
                       title={`Volume: ${Math.round(s.volume * 100)}%`}
