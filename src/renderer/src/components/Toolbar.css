@@ -865,6 +865,11 @@
 }
 
 /* Dropdown Menu Styles */
+.toolbar-dropdown-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
 .toolbar-dropdown-backdrop {
   position: fixed;
   top: 0;
