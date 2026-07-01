@@ -79,20 +79,23 @@ function FretPad({
     }
   }, [outerMat, innerMat, metalMat])
 
-  // Update material uniforms/properties in place without allocating new ThreeJS objects or compiling shaders
+  // Update material maps: only triggers recompilation when assets load/change (very rare)
+  useEffect(() => {
+    outerMat.map = assets?.fretMap ?? null
+    outerMat.needsUpdate = true
+  }, [outerMat, assets?.fretMap])
+
+  // Update material uniforms: color, emissive, intensity (cheap, runs on frame loop without compiling shaders)
   useEffect(() => {
     outerMat.color.set(activeOuterColor)
     outerMat.emissive.set(isPressed ? color : '#111111')
     outerMat.emissiveIntensity = outerEmissiveIntensity
-    outerMat.map = assets?.fretMap ?? null
-    outerMat.needsUpdate = true
-  }, [outerMat, activeOuterColor, isPressed, color, outerEmissiveIntensity, assets?.fretMap])
+  }, [outerMat, activeOuterColor, isPressed, color, outerEmissiveIntensity])
 
   useEffect(() => {
     innerMat.color.set(activeInnerColor)
     innerMat.emissive.set(isPressed ? innerColor : '#080808')
     innerMat.emissiveIntensity = innerEmissiveIntensity
-    innerMat.needsUpdate = true
   }, [innerMat, activeInnerColor, isPressed, innerColor, innerEmissiveIntensity])
 
   const bodyMaterials = useMemo(() => [outerMat, innerMat], [outerMat, innerMat])
