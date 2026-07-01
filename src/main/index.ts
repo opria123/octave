@@ -1,6 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net, Menu, session, type MenuItemConstructorOptions } from 'electron'
 import { join, resolve, basename } from 'path'
-import { readdir, readFile, writeFile, stat, rename, copyFile, unlink, mkdir } from 'fs/promises'
+import { readdir, readFile, writeFile, stat, rename, copyFile, unlink, mkdir, open } from 'fs/promises'
 import { existsSync, readFileSync } from 'fs'
 import { execFile, spawn } from 'child_process'
 import { randomUUID } from 'crypto'
@@ -11,6 +11,9 @@ import ffmpeg from 'fluent-ffmpeg'
 import { cancelAutoChart, getStrumRequirementsPath, killAllRunningJobs, openStrumLogsFolder, resolvePythonCommand, runAutoChart } from './strumIntegration/runner'
 import { ensureBootstrappedPython, getRuntimeStatus, isBootstrapTarget } from './strumIntegration/runtimeBootstrap'
 import { packSng } from './sngPacker'
+import { packRb3con } from './conPacker'
+import { importSng } from './import/sngImporter'
+import { importCon } from './import/conImporter'
 
 // Point fluent-ffmpeg at the bundled static binary
 try {
@@ -588,6 +591,88 @@ ipcMain.handle('dialog:openFolder', async () => {
   return result.filePaths[0]
 })
 
+// Import song package dialog
+ipcMain.handle('dialog:importSongPackage', async () => {
+  let targetLibrary = allowedProjectPath
+
+  if (!targetLibrary) {
+    // No library folder is open yet - ask to open one
+    const libChoiceResult = await dialog.showMessageBox({
+      type: 'question',
+      buttons: ['Select Library Folder', 'Cancel'],
+      defaultId: 0,
+      title: 'No Library Folder Open',
+      message:
+        'A song library folder must be open to import packages. Would you like to select a song library folder now?'
+    })
+
+    if (libChoiceResult.response === 1) {
+      return null
+    }
+
+    const libResult = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+      title: 'Select Songs Folder'
+    })
+
+    if (libResult.canceled || libResult.filePaths.length === 0) {
+      return null
+    }
+
+    targetLibrary = resolve(libResult.filePaths[0])
+    allowedProjectPath = targetLibrary
+  }
+
+  // Select the package file to import
+  const fileResult = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    title: 'Select Song Package File (.sng or rb3con)'
+  })
+
+  if (fileResult.canceled || fileResult.filePaths.length === 0) {
+    // If they just opened the library but cancelled the file selection,
+    // we should still return the library so it gets loaded in the explorer!
+    return targetLibrary
+  }
+
+  const selectedPath = fileResult.filePaths[0]
+
+  try {
+    // Read first 6 bytes to detect magic header
+    const fileHandle = await open(selectedPath, 'r')
+    const magicBuffer = Buffer.alloc(6)
+    await fileHandle.read(magicBuffer, 0, 6, 0)
+    await fileHandle.close()
+
+    const magic6 = magicBuffer.toString('ascii')
+    const magic4 = magicBuffer.subarray(0, 4).toString('ascii')
+
+    if (magic6 === 'SNGPKG') {
+      await importSng(selectedPath, targetLibrary)
+    } else if (magic4 === 'CON ' || magic4 === 'LIVE' || magic4 === 'PIRS') {
+      await importCon(selectedPath, targetLibrary)
+    } else {
+      throw new Error('The selected file does not have a recognized header signature.')
+    }
+
+    await dialog.showMessageBox({
+      type: 'info',
+      title: 'Import Success',
+      message: 'Successfully imported the song package into your current library folder.'
+    })
+
+    return targetLibrary
+  } catch (error) {
+    console.error('Failed to import package file:', error)
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'Import Failed',
+      message: `Failed to import song package:\n${error instanceof Error ? error.message : String(error)}\n\nSupported import formats:\n• Clone Hero Package (starts with SNGPKG)\n• Rock Band 3 Xbox 360 Container Package (starts with CON, LIVE, or PIRS)`
+    })
+    return targetLibrary // Return the library so it remains loaded/active
+  }
+})
+
 // Open audio file dialog
 ipcMain.handle('dialog:openAudio', async () => {
   const result = await dialog.showOpenDialog({
@@ -1076,6 +1161,75 @@ ipcMain.handle('song:exportSng', async (_event, songPath: string, metadata: Reco
     return { success: true }
   } catch (error) {
     console.error('Error packing SNG:', error)
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
+})
+
+// Export song to .con (Rock Band 3 STFS) package
+ipcMain.handle(
+  'song:exportCon',
+  async (_event, songPath: string, metadata: Record<string, unknown>, outputPath: string) => {
+    if (!isPathAllowed(songPath)) {
+      return { success: false, error: 'Path to song directory not allowed' }
+    }
+
+    const resolvedOutput = resolve(outputPath)
+    const parentDir = resolve(resolvedOutput, '..')
+    try {
+      const parentStat = await stat(parentDir)
+      if (!parentStat.isDirectory()) {
+        return { success: false, error: 'Output directory does not exist' }
+      }
+    } catch {
+      return { success: false, error: 'Output directory does not exist or is inaccessible' }
+    }
+
+    try {
+      await packRb3con(
+        songPath,
+        metadata as Record<string, string | number | boolean>,
+        resolvedOutput
+      )
+      return { success: true }
+    } catch (error) {
+      console.error('Error packing CON:', error)
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+)
+
+// Import song from .sng package
+ipcMain.handle('song:importSng', async (_event, sngFilePath: string) => {
+  if (!allowedProjectPath) {
+    return {
+      success: false,
+      error: 'No active song library is loaded. Please open a library folder first.'
+    }
+  }
+  try {
+    const resolvedSng = resolve(sngFilePath)
+    const targetDir = await importSng(resolvedSng, allowedProjectPath)
+    return { success: true, targetDir }
+  } catch (error) {
+    console.error('Error importing SNG:', error)
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
+})
+
+// Import song from .con/.rb3con STFS package
+ipcMain.handle('song:importCon', async (_event, conFilePath: string) => {
+  if (!allowedProjectPath) {
+    return {
+      success: false,
+      error: 'No active song library is loaded. Please open a library folder first.'
+    }
+  }
+  try {
+    const resolvedCon = resolve(conFilePath)
+    const targetDirs = await importCon(resolvedCon, allowedProjectPath)
+    return { success: true, targetDirs }
+  } catch (error) {
+    console.error('Error importing CON:', error)
     return { success: false, error: error instanceof Error ? error.message : String(error) }
   }
 })

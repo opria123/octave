@@ -6,6 +6,9 @@ const api = {
   // Dialog APIs
   openFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:openFolder'),
 
+  importSongPackage: (): Promise<string | null> =>
+    ipcRenderer.invoke('dialog:importSongPackage'),
+
   // Folder APIs
   scanFolder: (folderPath: string): Promise<Array<{ id: string; path: string; name: string }>> =>
     ipcRenderer.invoke('folder:scan', folderPath),
@@ -63,6 +66,23 @@ const api = {
     outputPath: string
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('song:exportSng', songPath, metadata, outputPath),
+
+  exportCon: (
+    songPath: string,
+    metadata: Record<string, unknown>,
+    outputPath: string
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('song:exportCon', songPath, metadata, outputPath),
+
+  importSng: (
+    sngFilePath: string
+  ): Promise<{ success: boolean; targetDir?: string; error?: string }> =>
+    ipcRenderer.invoke('song:importSng', sngFilePath),
+
+  importCon: (
+    conFilePath: string
+  ): Promise<{ success: boolean; targetDirs?: string[]; error?: string }> =>
+    ipcRenderer.invoke('song:importCon', conFilePath),
 
   fileExists: (filePath: string): Promise<boolean> =>
     ipcRenderer.invoke('fs:fileExists', filePath),

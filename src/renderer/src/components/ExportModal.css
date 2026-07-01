@@ -140,6 +140,29 @@
   box-shadow: 0 0 12px var(--accent-color-transparent);
 }
 
+.export-format-card.inactive {
+  padding: 10px 16px;
+  border-color: var(--border-color);
+  background: var(--bg-tertiary);
+  opacity: 0.7;
+}
+
+.export-format-card.inactive:hover {
+  opacity: 1;
+  border-color: var(--text-secondary);
+}
+
+.export-format-card.inactive h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.export-format-card.inactive:hover h4 {
+  color: var(--text-primary);
+}
+
 .export-format-card-header {
   display: flex;
   justify-content: space-between;
@@ -350,17 +373,29 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes scaleIn {
-  from { transform: scale(0.8); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Base Modal Layout Structure (scoped to export) */

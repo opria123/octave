@@ -2,7 +2,7 @@
 import { useMemo, useCallback } from 'react'
 import { STRIKE_LINE_POS, HIGHWAY_LENGTH, COLORS, DRUM_KICK_COLOR, DOUBLE_KICK_COLOR, getLaneConfig, getFretX, PRO_GUITAR_COLORS, PRO_KEYS_COLOR, VOCAL_COLOR, PRO_KEYS_MIN, PRO_KEYS_VISIBLE, TRACK_WIDTH } from './constants'
 import type { InstrumentRenderType } from './constants'
-import { NoteGem, KickNoteBar } from './NoteGem'
+import { NoteGem, KickNoteBar, sharedGeometries } from './NoteGem'
 import type { Note, Instrument, Difficulty, VocalNote } from '../../types'
 import { SUSTAIN_THRESHOLD_MID, SUSTAIN_THRESHOLD_CHART } from '../../types'
 import type { HighwayAssets } from './types'
@@ -202,14 +202,21 @@ export function NotesRenderer({
           return (
             <group key={note.id} position={[0, 0.015, barStartZ - actualLength / 2]}
               onClick={(e) => { e.stopPropagation?.(); onNoteClick(note.id, (e as unknown as { nativeEvent?: MouseEvent }).nativeEvent) }}>
-              <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                <planeGeometry args={[TRACK_WIDTH, actualLength]} />
+              <mesh
+                geometry={sharedGeometries.unitPlane}
+                rotation={[-Math.PI / 2, 0, 0]}
+                scale={[TRACK_WIDTH, actualLength, 1]}
+              >
                 <meshBasicMaterial color={isSelected ? '#BBBBFF' : '#888888'} transparent opacity={0.82} />
               </mesh>
               {/* Leading edge marker */}
               {!isHeadHit && (
-                <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, actualLength / 2]}>
-                  <planeGeometry args={[TRACK_WIDTH, 0.04]} />
+                <mesh
+                  geometry={sharedGeometries.unitPlane}
+                  rotation={[-Math.PI / 2, 0, 0]}
+                  position={[0, 0, actualLength / 2]}
+                  scale={[TRACK_WIDTH, 0.04, 1]}
+                >
                   <meshBasicMaterial color={isSelected ? '#CCCCFF' : '#AAAAAA'} transparent opacity={0.95} />
                 </mesh>
               )}
