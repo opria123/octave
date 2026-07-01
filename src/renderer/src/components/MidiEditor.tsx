@@ -1,4 +1,4 @@
-﻿// MIDI Editor - Piano roll style note editor
+// MIDI Editor - Piano roll style note editor
 import { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from 'react'
 import { useProjectStore, getSongStore, useSettingsStore, useUIStore } from '../stores'
 import type { Note, NoteFlags, NoteModifiers, Instrument, DrumLane, GuitarLane, Difficulty, EditingTool, StarPowerPhrase, SoloSection, LaneMarker, LaneMarkerType, VocalNote, VocalPhrase, HarmonyPart,TempoEvent } from '../types'
@@ -406,6 +406,7 @@ function StarPowerLane({
   instrument,
   scrollX,
   zoomLevel,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   width: _width,
   selectedSpId,
   songStore,
@@ -643,6 +644,7 @@ function SoloLane({
   instrument,
   scrollX,
   zoomLevel,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   width: _width,
   selectedSoloId,
   songStore,
@@ -997,12 +999,14 @@ function Notes({
   height,
   selectedNoteIds,
   onNoteClick,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onNoteMove: _onNoteMove,
   starPowerPhrases,
   instrument,
   onFretChange,
   onSustainResize,
-  sustainThreshold
+  sustainThreshold,
+  difficulty
 }: {
   notes: Note[]
   lanes: string[]
@@ -1019,10 +1023,22 @@ function Notes({
   onFretChange?: (noteId: string, fret: number) => void
   onSustainResize?: (noteId: string, e: React.MouseEvent) => void
   sustainThreshold: number
+  difficulty: Difficulty
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
   const isProGuitarInst = instrument === 'proGuitar' || instrument === 'proBass'
+
+  const validationIssues = useUIStore((s) => s.validationIssues)
+  const activeIssues = useMemo(() => {
+    if (!validationIssues) return []
+    return validationIssues.filter(
+      (issue) =>
+        issue.tick !== undefined &&
+        issue.instrument === instrument &&
+        issue.difficulty === difficulty
+    )
+  }, [validationIssues, instrument, difficulty])
 
   // Inline fret editing state (like vocal lyric editing)
   const [editingFret, setEditingFret] = useState<{
@@ -1079,7 +1095,7 @@ function Notes({
 
     const w = canvas.clientWidth
     const h = canvas.clientHeight
-    if (w === 0 || h === 0) return // not laid out yet â€” ResizeObserver will trigger redraw
+    if (w === 0 || h === 0) return // not laid out yet — ResizeObserver will trigger redraw
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h }
     else ctx.clearRect(0, 0, w, h)
 
@@ -1103,12 +1119,48 @@ function Notes({
       ctx.stroke()
     }
 
+    // Draw validation issue columns
+    if (activeIssues && activeIssues.length > 0) {
+      for (const issue of activeIssues) {
+        if (issue.tick === undefined) continue
+        const issueX = issue.tick * pixelsPerTick - scrollX
+        if (issueX < 0 || issueX > w) continue
+        
+        // 1. Draw glowing column gradient
+        const colW = 24
+        const startX = issueX - colW / 2
+        const colorBase = issue.severity === 'error' ? '255, 77, 77' : '255, 165, 2'
+        const grad = ctx.createLinearGradient(startX, 0, startX + colW, 0)
+        grad.addColorStop(0, `rgba(${colorBase}, 0)`)
+        grad.addColorStop(0.5, `rgba(${colorBase}, 0.12)`)
+        grad.addColorStop(1, `rgba(${colorBase}, 0)`)
+        ctx.fillStyle = grad
+        ctx.fillRect(startX, 0, colW, totalLaneHeight)
+        
+        // 2. Draw dashed line
+        ctx.strokeStyle = issue.severity === 'error' ? 'rgba(255, 77, 77, 0.6)' : 'rgba(255, 165, 2, 0.6)'
+        ctx.lineWidth = 1.5
+        ctx.setLineDash([4, 4])
+        ctx.beginPath()
+        ctx.moveTo(issueX, 0)
+        ctx.lineTo(issueX, totalLaneHeight)
+        ctx.stroke()
+        ctx.setLineDash([]) // reset dash
+      }
+    }
+
     const selectedSet = new Set(selectedNoteIds)
     const isProGuitarInst = instrument === 'proGuitar' || instrument === 'proBass'
 
     for (const { note, x, y, w, h, isSustain } of visibleNotes) {
       const isSelected = selectedSet.has(note.id)
       const color = MIDI_EDITOR_CONFIG.laneColors[getEditorLaneForNote(note)] || '#888888'
+
+      const noteIssue = activeIssues?.find((issue) => issue.tick === note.tick)
+      if (noteIssue) {
+        ctx.shadowColor = noteIssue.severity === 'error' ? '#ff4d4d' : '#ffa502'
+        ctx.shadowBlur = 12
+      }
 
       if (isSustain) {
         // Sustain: gem head + thinner tail
@@ -1118,15 +1170,32 @@ function Notes({
         // Draw sustain tail
         ctx.fillStyle = color
         ctx.globalAlpha = isSelected ? 0.7 : 0.5
+        // Temporarily disable shadow for the tail
+        if (noteIssue) {
+          ctx.shadowColor = 'transparent'
+          ctx.shadowBlur = 0
+        }
         ctx.beginPath()
         ctx.roundRect(x + STRUM_GEM_WIDTH / 2, tailY, w - STRUM_GEM_WIDTH / 2, tailH, 2)
         ctx.fill()
 
+        // Enable shadow for the gem head
+        if (noteIssue) {
+          ctx.shadowColor = noteIssue.severity === 'error' ? '#ff4d4d' : '#ffa502'
+          ctx.shadowBlur = 12
+        }
         // Draw gem head (full height)
+        ctx.fillStyle = color
         ctx.globalAlpha = isSelected ? 1.0 : 0.85
         ctx.beginPath()
         ctx.roundRect(x, y, STRUM_GEM_WIDTH, h, 3)
         ctx.fill()
+
+        // Reset shadow
+        if (noteIssue) {
+          ctx.shadowColor = 'transparent'
+          ctx.shadowBlur = 0
+        }
 
         // Sustain end handle (subtle line)
         ctx.fillStyle = isSelected ? '#FFFFFF' : color
@@ -1143,6 +1212,11 @@ function Notes({
 
       // Selection outline
       if (isSelected) {
+        // Temporarily disable shadow for the outline
+        if (noteIssue) {
+          ctx.shadowColor = 'transparent'
+          ctx.shadowBlur = 0
+        }
         ctx.strokeStyle = '#FFFFFF'
         ctx.lineWidth = 2
         ctx.beginPath()
@@ -1157,6 +1231,11 @@ function Notes({
 
       // Draw fret number for pro guitar/bass
       if (isProGuitarInst && note.fret !== undefined) {
+        // Temporarily disable shadow for the text
+        if (noteIssue) {
+          ctx.shadowColor = 'transparent'
+          ctx.shadowBlur = 0
+        }
         ctx.globalAlpha = 1.0
         ctx.fillStyle = '#000'
         ctx.font = 'bold 10px monospace'
@@ -1165,9 +1244,15 @@ function Notes({
         ctx.fillText(String(note.fret), x + Math.min(w, STRUM_GEM_WIDTH) / 2, y + h / 2)
       }
 
+      // Final shadow reset per note
+      if (noteIssue) {
+        ctx.shadowColor = 'transparent'
+        ctx.shadowBlur = 0
+      }
+
       ctx.globalAlpha = 1.0
     }
-  }, [visibleNotes, selectedNoteIds, width, height, starPowerPhrases, instrument, pixelsPerTick, scrollX, lanes, rowHeight])
+  }, [visibleNotes, selectedNoteIds, width, height, starPowerPhrases, instrument, pixelsPerTick, scrollX, lanes, rowHeight, activeIssues])
 
   // Handle mousedown: intercept sustain right-edge drags before click propagates
   const handleMouseDown = useCallback(
@@ -2275,7 +2360,9 @@ function SwapLanesTool({
 
   useEffect(() => {
     const next = SWAP_LANE_OPTIONS[instrument]
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!next.includes(laneA)) setLaneA(next[1] ?? next[0] ?? '')
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!next.includes(laneB)) setLaneB(next[2] ?? next[0] ?? '')
   }, [instrument, laneA, laneB])
 
@@ -2585,6 +2672,7 @@ export function MidiEditor(): React.JSX.Element {
   // Derive effective scrollX: during playback, compute directly from currentTick
   // to avoid double re-render (tick change â†’ effect â†’ setScrollX â†’ second render)
   const effectiveScrollX = useMemo(() => {
+    // eslint-disable-next-line react-hooks/refs
     if (isPlaying && !isUserScrolling.current) {
       // During playback: keep playhead at ~1/3 from left
       const pixelsPerTick = MIDI_EDITOR_CONFIG.pixelsPerTick * zoomLevel
@@ -3065,7 +3153,7 @@ export function MidiEditor(): React.JSX.Element {
           else finalLane = 'open'
         }
         const shiftPlace = !!e.shiftKey
-        let finalFlags = { ...(flags || {}) }
+        const finalFlags = { ...(flags || {}) }
         if (instrument === 'drums') {
           const clickedDoubleKickLane = lane === DOUBLE_KICK_EDITOR_LANE
           const clickedKickLane = lane === 'kick'
@@ -3724,8 +3812,8 @@ export function MidiEditor(): React.JSX.Element {
           className="midi-snap-to-grid-button"
           title={
             selectedNoteIds.length > 0
-              ? `Snap ${selectedNoteIds.length} selected note(s) to the 1/${snapDivision} grid`
-              : `Snap ALL notes to the 1/${snapDivision} grid`
+              ? `Nudge ${selectedNoteIds.length} selected note(s) that sit just off the 1/${snapDivision} grid onto it (off-grid notes are left alone)`
+              : `Nudge notes that sit just off the 1/${snapDivision} grid onto it (off-grid notes are left alone)`
           }
           onClick={() => songStore?.getState().snapNotesToGrid()}
         >
@@ -4171,6 +4259,7 @@ export function MidiEditor(): React.JSX.Element {
                           onFretChange={(noteId, fret) => songStore?.getState().updateNote(noteId, { fret })}
                           onSustainResize={(noteId, e) => handleSustainResize(noteId, e, instrument, lanes as string[])}
                           sustainThreshold={sustainThreshold}
+                          difficulty={activeDifficulty}
                         />
                       )}
                       {selectionBox && selectionBox.instrument === instrument && (

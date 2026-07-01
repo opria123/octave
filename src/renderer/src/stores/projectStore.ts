@@ -1,7 +1,7 @@
 // Project-level store (global state)
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { ProjectState, AppSettings, UIState, NoteModifiers } from '../types'
+import type { ProjectState, AppSettings, UIState, NoteModifiers, ValidationIssue } from '../types'
 import { cloneDefaultHotkeys } from '../utils/hotkeys'
 
 interface ProjectStore extends ProjectState {
@@ -64,7 +64,16 @@ const defaultSettings: AppSettings = {
   sngLastExportDir: undefined,
   betaUpdates: false,
   invertPianoRollVerticalScroll: false,
-  hotkeys: cloneDefaultHotkeys()
+  hotkeys: cloneDefaultHotkeys(),
+  validationMinSustainGuitar: 48,
+  validationMinSustainBass: 48,
+  validationMinSustainKeys: 48,
+  validationMinSustainDrums: 0,
+  validationEnableOverlapsCheck: true,
+  validationEnableStarPowerCheck: true,
+  validationEnableDrumImpossibilityCheck: true,
+  validationDrumTimeThresholdMs: 40,
+  validationDrumCrossoverThresholdMs: 80
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -102,6 +111,7 @@ interface UIStore extends UIState {
   setExportModalOpen: (open: boolean) => void
   toggleVocalPitchPlayback: () => void
   toggleHighwayWaveform: () => void
+  setValidationIssues: (issues: ValidationIssue[] | null) => void
 }
 
 const defaultModifiers: NoteModifiers = {
@@ -129,6 +139,7 @@ export const useUIStore = create<UIStore>()((set) => ({
   isExportModalOpen: false,
   vocalPitchPlayback: false,
   showHighwayWaveform: false,
+  validationIssues: null,
 
   // Actions
   setLeftPanelWidth: (width) => set({ leftPanelWidth: width }),
@@ -165,5 +176,6 @@ export const useUIStore = create<UIStore>()((set) => ({
   setSettingsModalOpen: (open) => set({ isSettingsModalOpen: open }),
   setExportModalOpen: (open) => set({ isExportModalOpen: open }),
   toggleVocalPitchPlayback: () => set((state) => ({ vocalPitchPlayback: !state.vocalPitchPlayback })),
-  toggleHighwayWaveform: () => set((state) => ({ showHighwayWaveform: !state.showHighwayWaveform }))
+  toggleHighwayWaveform: () => set((state) => ({ showHighwayWaveform: !state.showHighwayWaveform })),
+  setValidationIssues: (issues) => set({ validationIssues: issues })
 }))
