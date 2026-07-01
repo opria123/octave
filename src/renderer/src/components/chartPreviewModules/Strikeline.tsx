@@ -1,5 +1,5 @@
 // Strikeline and Fret Pads - YARG RectangularFret.prefab recreation
-import { useMemo, useRef, useContext } from 'react'
+import { useMemo, useRef, useContext, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import {
@@ -46,41 +46,54 @@ function FretPad({
   const fretMeshes = assets?.fretMeshes
   const hasFBX = fretMeshes && fretMeshes.length >= 2
 
-  const outerMat = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: activeOuterColor,
-        emissive: new THREE.Color(isPressed ? color : '#111111'),
-        emissiveIntensity: outerEmissiveIntensity,
-        map: assets?.fretMap ?? null,
-        metalness: 0.5,
-        roughness: 0.3,
-        toneMapped: false
-      }),
-    [activeOuterColor, isPressed, color, outerEmissiveIntensity, assets?.fretMap]
-  )
+  // Create stable materials that are instantiated exactly once and never recreated during button presses
+  const outerMat = useMemo(() => {
+    return new THREE.MeshStandardMaterial({
+      metalness: 0.5,
+      roughness: 0.3,
+      toneMapped: false
+    })
+  }, [])
 
-  const innerMat = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: activeInnerColor,
-        emissive: new THREE.Color(isPressed ? innerColor : '#080808'),
-        emissiveIntensity: innerEmissiveIntensity,
-        metalness: 0.6,
-        roughness: 0.35
-      }),
-    [activeInnerColor, isPressed, innerColor, innerEmissiveIntensity]
-  )
+  const innerMat = useMemo(() => {
+    return new THREE.MeshStandardMaterial({
+      metalness: 0.6,
+      roughness: 0.35
+    })
+  }, [])
 
-  const metalMat = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: '#888899',
-        metalness: 0.85,
-        roughness: 0.2
-      }),
-    []
-  )
+  const metalMat = useMemo(() => {
+    return new THREE.MeshStandardMaterial({
+      color: '#888899',
+      metalness: 0.85,
+      roughness: 0.2
+    })
+  }, [])
+
+  // Safely dispose of materials from GPU memory on unmount
+  useEffect(() => {
+    return () => {
+      outerMat.dispose()
+      innerMat.dispose()
+      metalMat.dispose()
+    }
+  }, [outerMat, innerMat, metalMat])
+
+  // Update material uniforms/properties in place without allocating new ThreeJS objects or compiling shaders
+  useEffect(() => {
+    outerMat.color.set(activeOuterColor)
+    outerMat.emissive.set(isPressed ? color : '#111111')
+    outerMat.emissiveIntensity = outerEmissiveIntensity
+    outerMat.map = assets?.fretMap ?? null
+    outerMat.needsUpdate = true
+  }, [outerMat, activeOuterColor, isPressed, color, outerEmissiveIntensity, assets?.fretMap])
+
+  useEffect(() => {
+    innerMat.color.set(activeInnerColor)
+    innerMat.emissive.set(isPressed ? innerColor : '#080808')
+    innerMat.emissiveIntensity = innerEmissiveIntensity
+    innerMat.needsUpdate = true
+  }, [innerMat, activeInnerColor, isPressed, innerColor, innerEmissiveIntensity])
 
   const bodyMaterials = useMemo(() => [outerMat, innerMat], [outerMat, innerMat])
 
