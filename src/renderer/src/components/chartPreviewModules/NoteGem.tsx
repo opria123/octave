@@ -4,6 +4,21 @@ import { TRACK_WIDTH, STRIKE_LINE_POS } from './constants'
 import type { Note } from '../../types'
 import type { HighwayAssets } from './types'
 
+// Shared geometries to prevent GPU memory leaks and WebGL recreation overhead
+export const sharedGeometries = {
+  noteGemFallback: new THREE.BoxGeometry(0.34, 0.06, 0.2),
+  selectionRing: new THREE.RingGeometry(0.2, 0.26, 16),
+  sustainUnit: new THREE.BoxGeometry(0.1, 0.04, 1), // Depth (Z) is 1.0, scale dynamically
+  burnEdge: new THREE.BoxGeometry(0.18, 0.08, 0.06),
+  kickNoteFallback: new THREE.BoxGeometry(3.27, 0.06, 0.15),
+  kickSelection: new THREE.BoxGeometry(3.4, 0.02, 0.22),
+  kickSustainUnit: new THREE.BoxGeometry(3.27, 0.04, 1), // Depth (Z) is 1.0, scale dynamically
+  flashSphere: new THREE.SphereGeometry(0.06, 8, 8),
+  flashRing: new THREE.RingGeometry(0.06, 0.10, 16),
+  flashParticleUnit: new THREE.BoxGeometry(0.02, 0.02, 0.02),
+  unitPlane: new THREE.PlaneGeometry(1, 1)
+}
+
 // Cached canvas textures for fret number labels (0-22)
 const fretTextureCache = new Map<number, THREE.CanvasTexture>()
 function getFretTexture(fret: number): THREE.CanvasTexture {
@@ -93,14 +108,14 @@ export function NoteGem({
   const isGhost = noteFlags?.isGhost
   const isAccent = noteFlags?.isAccent
 
-  let geometry: THREE.BufferGeometry | undefined
+  let geometry = sharedGeometries.noteGemFallback
   if (assets) {
-    if (isCymbal) geometry = assets.cymbalGeo
-    else if (isTap) geometry = assets.tapGeo
-    else if (isHOPO) geometry = assets.hopoGeo
-    else if (isGhost) geometry = assets.ghostGeo
-    else if (isAccent) geometry = assets.accentGeo
-    else geometry = assets.noteGeo
+    if (isCymbal) geometry = assets.cymbalGeo || sharedGeometries.noteGemFallback
+    else if (isTap) geometry = assets.tapGeo || sharedGeometries.noteGemFallback
+    else if (isHOPO) geometry = assets.hopoGeo || sharedGeometries.noteGemFallback
+    else if (isGhost) geometry = assets.ghostGeo || sharedGeometries.noteGemFallback
+    else if (isAccent) geometry = assets.accentGeo || sharedGeometries.noteGemFallback
+    else geometry = assets.noteGeo || sharedGeometries.noteGemFallback
   }
 
   const noteHeightScale = isGhost ? 0.8 : isAccent ? 1.2 : 1.0
@@ -118,7 +133,6 @@ export function NoteGem({
     <group position={position} scale={[1, noteHeightScale, 1]}>
       {isHeadVisible && (
         <mesh geometry={geometry}>
-          {!geometry && <boxGeometry args={[0.34, 0.06, 0.2]} />}
           <meshStandardMaterial
             color={color}
             map={assets?.noteMap ?? null}
@@ -135,8 +149,11 @@ export function NoteGem({
       )}
       {/* Selection ring around note head */}
       {isHeadVisible && isSelected && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
-          <ringGeometry args={[0.2, 0.26, 16]} />
+        <mesh
+          geometry={sharedGeometries.selectionRing}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[0, 0.03, 0]}
+        >
           <meshBasicMaterial color="#FFFFFF" transparent opacity={0.7} side={THREE.DoubleSide} toneMapped={false} />
         </mesh>
       )}
@@ -149,8 +166,11 @@ export function NoteGem({
       )}
 
       {sustainLength > 0 && (
-        <mesh position={[0, 0.03, sustainZ]}>
-          <boxGeometry args={[0.1, 0.04, sustainLength]} />
+        <mesh
+          geometry={sharedGeometries.sustainUnit}
+          position={[0, 0.03, sustainZ]}
+          scale={[1, 1, sustainLength]}
+        >
           <meshStandardMaterial
             color={color}
             emissive={color}
@@ -164,8 +184,7 @@ export function NoteGem({
 
       {/* Burn edge glow at the strike-line end of an active sustain */}
       {isBurning && (
-        <mesh position={[0, 0.04, 0]}>
-          <boxGeometry args={[0.18, 0.08, 0.06]} />
+        <mesh geometry={sharedGeometries.burnEdge} position={[0, 0.04, 0]}>
           <meshBasicMaterial
             color={color}
             transparent
@@ -207,15 +226,13 @@ export function KickNoteBar({
       {/* Sustain trail */}
       {hasSustain && (
         <group scale={[sustainScaleX / (TRACK_WIDTH / 3.27), 1, 1]} position={[0, 0, trailZ]}>
-          <mesh>
-            <boxGeometry args={[3.27, 0.04, sustainLength]} />
+          <mesh geometry={sharedGeometries.kickSustainUnit} scale={[1, 1, sustainLength]}>
             <meshBasicMaterial color={color} transparent opacity={0.3} toneMapped={false} />
           </mesh>
         </group>
       )}
       {/* Bar head */}
-      <mesh geometry={assets?.kickGeo ?? undefined}>
-        {!assets?.kickGeo && <boxGeometry args={[3.27, 0.06, 0.15]} />}
+      <mesh geometry={assets?.kickGeo ?? sharedGeometries.kickNoteFallback}>
         <meshStandardMaterial
           color={color}
           map={assets?.kickMap ?? null}
@@ -227,8 +244,7 @@ export function KickNoteBar({
         />
       </mesh>
       {isSelected && (
-        <mesh position={[0, 0.03, 0]}>
-          <boxGeometry args={[3.4, 0.02, 0.22]} />
+        <mesh geometry={sharedGeometries.kickSelection} position={[0, 0.03, 0]}>
           <meshBasicMaterial color="#FFFFFF" transparent opacity={0.5} toneMapped={false} />
         </mesh>
       )}
@@ -263,12 +279,19 @@ export function HitFlashEffect({
 
   return (
     <group position={[offsetX + x, 0, STRIKE_LINE_POS]} visible={visible}>
-      <mesh position={[0, 0.06, 0]} scale={[flashScale, flashScale, flashScale]}>
-        <sphereGeometry args={[0.06, 8, 8]} />
+      <mesh
+        geometry={sharedGeometries.flashSphere}
+        position={[0, 0.06, 0]}
+        scale={[flashScale, flashScale, flashScale]}
+      >
         <meshBasicMaterial color={color} transparent opacity={flashOpacity} depthWrite={false} toneMapped={false} />
       </mesh>
-      <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[ringScale, ringScale, 1]}>
-        <ringGeometry args={[0.06, 0.10, 16]} />
+      <mesh
+        geometry={sharedGeometries.flashRing}
+        position={[0, 0.04, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        scale={[ringScale, ringScale, 1]}
+      >
         <meshBasicMaterial color={color} transparent opacity={ringOpacity} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
       </mesh>
       {[0, 1, 2, 3].map((i) => {
@@ -277,10 +300,10 @@ export function HitFlashEffect({
         return (
           <mesh
             key={i}
+            geometry={sharedGeometries.flashParticleUnit}
             position={[Math.cos(angle) * dist, 0.04 + particleY, Math.sin(angle) * dist]}
             scale={[1 - clamped, 1 - clamped, 1 - clamped]}
           >
-            <boxGeometry args={[0.02, 0.02, 0.02]} />
             <meshBasicMaterial color={color} transparent opacity={flashOpacity * 0.7} depthWrite={false} toneMapped={false} />
           </mesh>
         )
