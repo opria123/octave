@@ -1,8 +1,24 @@
 // Note Gem, Kick Note Bar, and Hit Flash Effect rendering
+import React from 'react'
 import * as THREE from 'three'
 import { TRACK_WIDTH, STRIKE_LINE_POS } from './constants'
 import type { Note } from '../../types'
 import type { HighwayAssets } from './types'
+
+// Shared geometries to prevent GPU memory leaks and WebGL recreation overhead
+export const sharedGeometries = {
+  noteGemFallback: new THREE.BoxGeometry(0.34, 0.06, 0.2),
+  selectionRing: new THREE.RingGeometry(0.2, 0.26, 16),
+  sustainUnit: new THREE.BoxGeometry(0.1, 0.04, 1), // Depth (Z) is 1.0, scale dynamically
+  burnEdge: new THREE.BoxGeometry(0.18, 0.08, 0.06),
+  kickNoteFallback: new THREE.BoxGeometry(3.27, 0.06, 0.15),
+  kickSelection: new THREE.BoxGeometry(3.4, 0.02, 0.22),
+  kickSustainUnit: new THREE.BoxGeometry(3.27, 0.04, 1), // Depth (Z) is 1.0, scale dynamically
+  flashSphere: new THREE.SphereGeometry(0.06, 8, 8),
+  flashRing: new THREE.RingGeometry(0.06, 0.10, 16),
+  flashParticleUnit: new THREE.BoxGeometry(0.02, 0.02, 0.02),
+  unitPlane: new THREE.PlaneGeometry(1, 1)
+}
 
 // Cached canvas textures for fret number labels (0-22)
 const fretTextureCache = new Map<number, THREE.CanvasTexture>()
@@ -63,9 +79,145 @@ function getDoubleKickBadgeTexture(): THREE.CanvasTexture {
   ctx.fillText('2x', 64, 33)
   doubleKickBadgeTexture = new THREE.CanvasTexture(canvas)
   return doubleKickBadgeTexture
+}// Shared material caches to prevent GPU memory leaks and WebGL compilation overhead during playback
+let lastAssets: HighwayAssets | null = null
+const sharedMaterials = new Map<string, THREE.MeshStandardMaterial>()
+const sharedSustainMaterials = new Map<string, THREE.MeshStandardMaterial>()
+const sharedBurnMaterials = new Map<string, THREE.MeshBasicMaterial>()
+const sharedKickSustainMaterials = new Map<string, THREE.MeshBasicMaterial>()
+const sharedKickHeadMaterials = new Map<string, THREE.MeshStandardMaterial>()
+
+export function clearMaterialCaches(): void {
+  for (const mat of sharedMaterials.values()) mat.dispose()
+  for (const mat of sharedSustainMaterials.values()) mat.dispose()
+  for (const mat of sharedBurnMaterials.values()) mat.dispose()
+  for (const mat of sharedKickSustainMaterials.values()) mat.dispose()
+  for (const mat of sharedKickHeadMaterials.values()) mat.dispose()
+  sharedMaterials.clear()
+  sharedSustainMaterials.clear()
+  sharedBurnMaterials.clear()
+  sharedKickSustainMaterials.clear()
+  sharedKickHeadMaterials.clear()
+  lastAssets = null
 }
 
-export function NoteGem({
+function checkAssetsChange(assets: HighwayAssets | null): void {
+  if (assets !== lastAssets) {
+    clearMaterialCaches()
+    lastAssets = assets
+  }
+}
+
+export function getSharedNoteMaterial(
+  color: string,
+  isSelected: boolean,
+  isGhost: boolean,
+  assets: HighwayAssets | null
+): THREE.MeshStandardMaterial {
+  checkAssetsChange(assets)
+  const key = `${color}-${isSelected}-${isGhost}`
+  let mat = sharedMaterials.get(key)
+  if (!mat) {
+    mat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(color),
+      map: assets?.noteMap ?? null,
+      emissive: new THREE.Color(isSelected ? '#FFFFFF' : color),
+      emissiveMap: isSelected ? null : (assets?.noteEmission ?? null),
+      emissiveIntensity: isSelected ? 3.0 : 1.0,
+      metalness: 0.7,
+      roughness: 0.15,
+      transparent: isGhost,
+      opacity: isGhost ? 0.5 : 1,
+      toneMapped: false
+    })
+    sharedMaterials.set(key, mat)
+  }
+  return mat
+}
+
+export function getSharedSustainMaterial(
+  color: string,
+  isBurning: boolean,
+  assets: HighwayAssets | null
+): THREE.MeshStandardMaterial {
+  checkAssetsChange(assets)
+  const key = `${color}-${isBurning}`
+  let mat = sharedSustainMaterials.get(key)
+  if (!mat) {
+    mat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(color),
+      emissive: new THREE.Color(color),
+      emissiveIntensity: isBurning ? 0.9 : 0.7,
+      transparent: true,
+      opacity: 0.9,
+      toneMapped: false
+    })
+    sharedSustainMaterials.set(key, mat)
+  }
+  return mat
+}
+
+export function getSharedBurnMaterial(
+  color: string,
+  assets: HighwayAssets | null
+): THREE.MeshBasicMaterial {
+  checkAssetsChange(assets)
+  let mat = sharedBurnMaterials.get(color)
+  if (!mat) {
+    mat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(color),
+      transparent: true,
+      opacity: 0.45,
+      toneMapped: false
+    })
+    sharedBurnMaterials.set(color, mat)
+  }
+  return mat
+}
+
+export function getSharedKickSustainMaterial(
+  color: string,
+  assets: HighwayAssets | null
+): THREE.MeshBasicMaterial {
+  checkAssetsChange(assets)
+  let mat = sharedKickSustainMaterials.get(color)
+  if (!mat) {
+    mat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(color),
+      transparent: true,
+      opacity: 0.3,
+      toneMapped: false
+    })
+    sharedKickSustainMaterials.set(color, mat)
+  }
+  return mat
+}
+
+export function getSharedKickHeadMaterial(
+  color: string,
+  isSelected: boolean,
+  assets: HighwayAssets | null
+): THREE.MeshStandardMaterial {
+  checkAssetsChange(assets)
+  const key = `${color}-${isSelected}`
+  let mat = sharedKickHeadMaterials.get(key)
+  if (!mat) {
+    mat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(color),
+      map: assets?.kickMap ?? null,
+      emissive: new THREE.Color(isSelected ? '#FFFFFF' : color),
+      emissiveIntensity: isSelected ? 3.0 : 1.2,
+      metalness: 0.5,
+      roughness: 0.3,
+      toneMapped: false
+    })
+    sharedKickHeadMaterials.set(key, mat)
+  }
+  return mat
+}
+
+
+function NoteGemComponent({
   position,
   color,
   isSelected,
@@ -93,14 +245,14 @@ export function NoteGem({
   const isGhost = noteFlags?.isGhost
   const isAccent = noteFlags?.isAccent
 
-  let geometry: THREE.BufferGeometry | undefined
+  let geometry: THREE.BufferGeometry = sharedGeometries.noteGemFallback
   if (assets) {
-    if (isCymbal) geometry = assets.cymbalGeo
-    else if (isTap) geometry = assets.tapGeo
-    else if (isHOPO) geometry = assets.hopoGeo
-    else if (isGhost) geometry = assets.ghostGeo
-    else if (isAccent) geometry = assets.accentGeo
-    else geometry = assets.noteGeo
+    if (isCymbal) geometry = assets.cymbalGeo || sharedGeometries.noteGemFallback
+    else if (isTap) geometry = assets.tapGeo || sharedGeometries.noteGemFallback
+    else if (isHOPO) geometry = assets.hopoGeo || sharedGeometries.noteGemFallback
+    else if (isGhost) geometry = assets.ghostGeo || sharedGeometries.noteGemFallback
+    else if (isAccent) geometry = assets.accentGeo || sharedGeometries.noteGemFallback
+    else geometry = assets.noteGeo || sharedGeometries.noteGemFallback
   }
 
   const noteHeightScale = isGhost ? 0.8 : isAccent ? 1.2 : 1.0
@@ -117,26 +269,15 @@ export function NoteGem({
   return (
     <group position={position} scale={[1, noteHeightScale, 1]}>
       {isHeadVisible && (
-        <mesh geometry={geometry}>
-          {!geometry && <boxGeometry args={[0.34, 0.06, 0.2]} />}
-          <meshStandardMaterial
-            color={color}
-            map={assets?.noteMap ?? null}
-            emissive={isSelected ? '#FFFFFF' : color}
-            emissiveMap={isSelected ? null : (assets?.noteEmission ?? null)}
-            emissiveIntensity={isSelected ? 3.0 : 1.0}
-            metalness={0.7}
-            roughness={0.15}
-            transparent={!!isGhost}
-            opacity={isGhost ? 0.5 : 1}
-            toneMapped={false}
-          />
-        </mesh>
+        <mesh geometry={geometry} material={getSharedNoteMaterial(color, isSelected, !!isGhost, assets)} />
       )}
       {/* Selection ring around note head */}
       {isHeadVisible && isSelected && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
-          <ringGeometry args={[0.2, 0.26, 16]} />
+        <mesh
+          geometry={sharedGeometries.selectionRing}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[0, 0.03, 0]}
+        >
           <meshBasicMaterial color="#FFFFFF" transparent opacity={0.7} side={THREE.DoubleSide} toneMapped={false} />
         </mesh>
       )}
@@ -149,36 +290,47 @@ export function NoteGem({
       )}
 
       {sustainLength > 0 && (
-        <mesh position={[0, 0.03, sustainZ]}>
-          <boxGeometry args={[0.1, 0.04, sustainLength]} />
-          <meshStandardMaterial
-            color={color}
-            emissive={color}
-            emissiveIntensity={isBurning ? 0.9 : 0.7}
-            transparent
-            opacity={0.9}
-            toneMapped={false}
-          />
-        </mesh>
+        <mesh
+          geometry={sharedGeometries.sustainUnit}
+          position={[0, 0.03, sustainZ]}
+          scale={[1, 1, sustainLength]}
+          material={getSharedSustainMaterial(color, isBurning, assets)}
+        />
       )}
 
       {/* Burn edge glow at the strike-line end of an active sustain */}
       {isBurning && (
-        <mesh position={[0, 0.04, 0]}>
-          <boxGeometry args={[0.18, 0.08, 0.06]} />
-          <meshBasicMaterial
-            color={color}
-            transparent
-            opacity={0.45}
-            toneMapped={false}
-          />
-        </mesh>
+        <mesh
+          geometry={sharedGeometries.burnEdge}
+          position={[0, 0.04, 0]}
+          material={getSharedBurnMaterial(color, assets)}
+        />
       )}
     </group>
   )
 }
 
-export function KickNoteBar({
+export const NoteGem = React.memo(NoteGemComponent, (prev, next) => {
+  return (
+    prev.position[0] === next.position[0] &&
+    prev.position[1] === next.position[1] &&
+    prev.position[2] === next.position[2] &&
+    prev.color === next.color &&
+    prev.isSelected === next.isSelected &&
+    prev.sustainLength === next.sustainLength &&
+    prev.sustainOffset === next.sustainOffset &&
+    prev.isHeadVisible === next.isHeadVisible &&
+    prev.assets === next.assets &&
+    prev.isCymbal === next.isCymbal &&
+    prev.fretNumber === next.fretNumber &&
+    prev.noteFlags?.isTap === next.noteFlags?.isTap &&
+    prev.noteFlags?.isHOPO === next.noteFlags?.isHOPO &&
+    prev.noteFlags?.isGhost === next.noteFlags?.isGhost &&
+    prev.noteFlags?.isAccent === next.noteFlags?.isAccent
+  )
+})
+
+function KickNoteBarComponent({
   z,
   color,
   assets,
@@ -207,28 +359,20 @@ export function KickNoteBar({
       {/* Sustain trail */}
       {hasSustain && (
         <group scale={[sustainScaleX / (TRACK_WIDTH / 3.27), 1, 1]} position={[0, 0, trailZ]}>
-          <mesh>
-            <boxGeometry args={[3.27, 0.04, sustainLength]} />
-            <meshBasicMaterial color={color} transparent opacity={0.3} toneMapped={false} />
-          </mesh>
+          <mesh
+            geometry={sharedGeometries.kickSustainUnit}
+            scale={[1, 1, sustainLength]}
+            material={getSharedKickSustainMaterial(color, assets)}
+          />
         </group>
       )}
       {/* Bar head */}
-      <mesh geometry={assets?.kickGeo ?? undefined}>
-        {!assets?.kickGeo && <boxGeometry args={[3.27, 0.06, 0.15]} />}
-        <meshStandardMaterial
-          color={color}
-          map={assets?.kickMap ?? null}
-          emissive={isSelected ? '#FFFFFF' : color}
-          emissiveIntensity={isSelected ? 3.0 : 1.2}
-          metalness={0.5}
-          roughness={0.3}
-          toneMapped={false}
-        />
-      </mesh>
+      <mesh
+        geometry={assets?.kickGeo ?? sharedGeometries.kickNoteFallback}
+        material={getSharedKickHeadMaterial(color, isSelected, assets)}
+      />
       {isSelected && (
-        <mesh position={[0, 0.03, 0]}>
-          <boxGeometry args={[3.4, 0.02, 0.22]} />
+        <mesh geometry={sharedGeometries.kickSelection} position={[0, 0.03, 0]}>
           <meshBasicMaterial color="#FFFFFF" transparent opacity={0.5} toneMapped={false} />
         </mesh>
       )}
@@ -240,6 +384,19 @@ export function KickNoteBar({
     </group>
   )
 }
+
+export const KickNoteBar = React.memo(KickNoteBarComponent, (prev, next) => {
+  return (
+    prev.z === next.z &&
+    prev.color === next.color &&
+    prev.assets === next.assets &&
+    prev.isSelected === next.isSelected &&
+    prev.sustainLength === next.sustainLength &&
+    prev.isSustainActive === next.isSustainActive &&
+    prev.showDoubleKickBadge === next.showDoubleKickBadge
+  )
+})
+
 
 export function HitFlashEffect({
   x,
@@ -263,12 +420,19 @@ export function HitFlashEffect({
 
   return (
     <group position={[offsetX + x, 0, STRIKE_LINE_POS]} visible={visible}>
-      <mesh position={[0, 0.06, 0]} scale={[flashScale, flashScale, flashScale]}>
-        <sphereGeometry args={[0.06, 8, 8]} />
+      <mesh
+        geometry={sharedGeometries.flashSphere}
+        position={[0, 0.06, 0]}
+        scale={[flashScale, flashScale, flashScale]}
+      >
         <meshBasicMaterial color={color} transparent opacity={flashOpacity} depthWrite={false} toneMapped={false} />
       </mesh>
-      <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[ringScale, ringScale, 1]}>
-        <ringGeometry args={[0.06, 0.10, 16]} />
+      <mesh
+        geometry={sharedGeometries.flashRing}
+        position={[0, 0.04, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        scale={[ringScale, ringScale, 1]}
+      >
         <meshBasicMaterial color={color} transparent opacity={ringOpacity} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
       </mesh>
       {[0, 1, 2, 3].map((i) => {
@@ -277,10 +441,10 @@ export function HitFlashEffect({
         return (
           <mesh
             key={i}
+            geometry={sharedGeometries.flashParticleUnit}
             position={[Math.cos(angle) * dist, 0.04 + particleY, Math.sin(angle) * dist]}
             scale={[1 - clamped, 1 - clamped, 1 - clamped]}
           >
-            <boxGeometry args={[0.02, 0.02, 0.02]} />
             <meshBasicMaterial color={color} transparent opacity={flashOpacity * 0.7} depthWrite={false} toneMapped={false} />
           </mesh>
         )

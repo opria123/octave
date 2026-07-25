@@ -5,6 +5,7 @@ import type { ProjectState, AppSettings, UIState, NoteModifiers, ValidationIssue
 import { cloneDefaultHotkeys } from '../utils/hotkeys'
 
 interface ProjectStore extends ProjectState {
+  libraryLoadVersion: number
   // Actions
   setLoadedFolder: (path: string | null) => void
   addSong: (songId: string) => void
@@ -18,10 +19,20 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
   loadedFolderPath: null,
   songIds: [],
   activeSongId: null,
+  libraryLoadVersion: 0,
 
   // Actions
   setLoadedFolder: (path) =>
-    set({ loadedFolderPath: path, songIds: [], activeSongId: null }),
+    set((state) =>
+      state.loadedFolderPath === path
+        ? { libraryLoadVersion: state.libraryLoadVersion + 1 }
+        : {
+            loadedFolderPath: path,
+            songIds: [],
+            activeSongId: null,
+            libraryLoadVersion: state.libraryLoadVersion + 1
+          }
+    ),
 
   addSong: (songId) =>
     set((state) => ({
@@ -38,7 +49,13 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
 
   setActiveSong: (songId) => set({ activeSongId: songId }),
 
-  clearProject: () => set({ loadedFolderPath: null, songIds: [], activeSongId: null })
+  clearProject: () =>
+    set((state) => ({
+      loadedFolderPath: null,
+      songIds: [],
+      activeSongId: null,
+      libraryLoadVersion: state.libraryLoadVersion + 1
+    }))
 }))
 
 // App settings store (persisted)
@@ -61,6 +78,20 @@ const defaultSettings: AppSettings = {
   waveformAudioSourcePath: undefined,
   enableAutoChart: true,
   autoChartOutputDir: undefined,
+  autoChartDisableOnlineLookup: false,
+  autoChartDownloadVideo: true,
+  autoChartKeepStems: false,
+  autoChartImproveTempo: true,
+  autoChartSnapDrums: false,
+  autoChartEnabledTracks: {
+    drums: true,
+    guitar: true,
+    bass: true,
+    vocals: true,
+    harmonies: true,
+    keys: true,
+    proKeys: true
+  },
   sngLastExportDir: undefined,
   betaUpdates: false,
   invertPianoRollVerticalScroll: false,

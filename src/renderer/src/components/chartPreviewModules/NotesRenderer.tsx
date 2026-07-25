@@ -2,7 +2,7 @@
 import { useMemo, useCallback } from 'react'
 import { STRIKE_LINE_POS, HIGHWAY_LENGTH, COLORS, DRUM_KICK_COLOR, DOUBLE_KICK_COLOR, getLaneConfig, getFretX, PRO_GUITAR_COLORS, PRO_KEYS_COLOR, VOCAL_COLOR, PRO_KEYS_MIN, PRO_KEYS_VISIBLE, TRACK_WIDTH } from './constants'
 import type { InstrumentRenderType } from './constants'
-import { NoteGem, KickNoteBar } from './NoteGem'
+import { NoteGem, KickNoteBar, sharedGeometries } from './NoteGem'
 import type { Note, Instrument, Difficulty, VocalNote } from '../../types'
 import { SUSTAIN_THRESHOLD_MID, SUSTAIN_THRESHOLD_CHART } from '../../types'
 import type { HighwayAssets } from './types'
@@ -145,8 +145,10 @@ export function NotesRenderer({
     }
   }
 
+  const groupZ = currentTick * pixelsPerTick
+
   return (
-    <group position={[offsetX, 0, 0]}>
+    <group position={[offsetX, 0, groupZ]}>
       {visibleNotes.map((note) => {
         const isKick = instrument === 'drums' && String(note.lane) === 'kick'
         const isOpen = (instrument === 'guitar' || instrument === 'bass' || instrument === 'keys') && String(note.lane) === 'open'
@@ -171,12 +173,16 @@ export function NotesRenderer({
         // Skip notes too far ahead
         if (z > STRIKE_LINE_POS + 1 && !isSustainActive) return null
 
+        // Compute local Z position relative to the moving group
+        // If sustain is active, the note head sits at the strike line (world Z = STRIKE_LINE_POS)
+        const localZ = isSustainActive ? STRIKE_LINE_POS - groupZ : STRIKE_LINE_POS - note.tick * pixelsPerTick
+
         if (isKick || isOpen) {
           if (isHeadHit) return null // no sustain, just hide
           return (
             <group key={note.id} onClick={(e) => { e.stopPropagation?.(); onNoteClick(note.id, (e as unknown as { nativeEvent?: MouseEvent }).nativeEvent) }}>
               <KickNoteBar
-                z={z}
+                z={localZ}
                 color={isOpen ? '#CC44FF' : (note.flags?.isDoubleKick ? DOUBLE_KICK_COLOR : DRUM_KICK_COLOR)}
                 assets={assets}
                 isSelected={isSelected}
@@ -196,20 +202,27 @@ export function NotesRenderer({
         const isTalkie = instrument === 'vocals' && !!(note as VocalNote).isPitchless
         if (isTalkie) {
           const barLength = Math.max(note.duration * pixelsPerTick, 0.04)
-          const barStartZ = isSustainActive ? STRIKE_LINE_POS : z
+          const barStartZ = localZ
           const actualLength = isSustainActive ? remainingSustainLength : barLength
           if (isHeadHit && !isSustainActive) return null
           return (
             <group key={note.id} position={[0, 0.015, barStartZ - actualLength / 2]}
               onClick={(e) => { e.stopPropagation?.(); onNoteClick(note.id, (e as unknown as { nativeEvent?: MouseEvent }).nativeEvent) }}>
-              <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                <planeGeometry args={[TRACK_WIDTH, actualLength]} />
+              <mesh
+                geometry={sharedGeometries.unitPlane}
+                rotation={[-Math.PI / 2, 0, 0]}
+                scale={[TRACK_WIDTH, actualLength, 1]}
+              >
                 <meshBasicMaterial color={isSelected ? '#BBBBFF' : '#888888'} transparent opacity={0.82} />
               </mesh>
               {/* Leading edge marker */}
               {!isHeadHit && (
-                <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, actualLength / 2]}>
-                  <planeGeometry args={[TRACK_WIDTH, 0.04]} />
+                <mesh
+                  geometry={sharedGeometries.unitPlane}
+                  rotation={[-Math.PI / 2, 0, 0]}
+                  position={[0, 0, actualLength / 2]}
+                  scale={[TRACK_WIDTH, 0.04, 1]}
+                >
                   <meshBasicMaterial color={isSelected ? '#CCCCFF' : '#AAAAAA'} transparent opacity={0.95} />
                 </mesh>
               )}
@@ -220,7 +233,7 @@ export function NotesRenderer({
         return (
           <group key={note.id} onClick={(e) => { e.stopPropagation?.(); onNoteClick(note.id, (e as unknown as { nativeEvent?: MouseEvent }).nativeEvent) }}>
             <NoteGem
-              position={isSustainActive ? [x, 0.01, STRIKE_LINE_POS] : [x, 0.01, z]}
+              position={[x, 0.01, localZ]}
               color={color}
               isSelected={isSelected}
               sustainLength={isSustainActive ? remainingSustainLength : totalSustainLength}

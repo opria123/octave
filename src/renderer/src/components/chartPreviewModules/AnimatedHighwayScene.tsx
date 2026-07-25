@@ -1,5 +1,5 @@
 // Animated Highway Scene - Main 3D scene orchestrator
-import { useCallback, useRef, useContext, useMemo } from 'react'
+import { useCallback, useRef, useContext, useMemo, useEffect } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { useStore } from 'zustand'
@@ -523,24 +523,84 @@ function HitEffectsGroup({
 }): React.JSX.Element {
   const groupRef = useRef<THREE.Group>(null)
 
-  // Pool of materials we reuse (avoid GC thrashing)
+  // Object pools for meshes and materials to prevent dynamic allocations inside useFrame
   const poolRef = useRef<{
-    mats: THREE.MeshBasicMaterial[]
-  }>({ mats: [] })
+    spheres: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }[]
+    particles: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }[]
+  }>({ spheres: [], particles: [] })
+
+  // Clean up all compiled materials on unmount
+  useEffect(() => {
+    return () => {
+      for (const item of poolRef.current.spheres) {
+        item.mat.dispose()
+      }
+      for (const item of poolRef.current.particles) {
+        item.mat.dispose()
+      }
+    }
+  }, [])
 
   useFrame(() => {
     const group = groupRef.current
     if (!group) return
 
-    // Remove all children every frame (imperative — no React)
-    while (group.children.length > 0) {
-      group.remove(group.children[0])
+    // 1. Mark all pooled meshes as invisible first
+    for (const item of poolRef.current.spheres) {
+      item.mesh.visible = false
+    }
+    for (const item of poolRef.current.particles) {
+      item.mesh.visible = false
     }
 
-    // Dispose old pooled materials
-    for (const m of poolRef.current.mats) m.dispose()
-    poolRef.current.mats = []
+    let sphereIdx = 0
+    let particleIdx = 0
 
+    // Helper to get or create a pooled sphere mesh
+    const getSphere = (color: string, opacity: number, scale: number, x: number) => {
+      let item = poolRef.current.spheres[sphereIdx]
+      if (!item) {
+        const mat = new THREE.MeshBasicMaterial({
+          transparent: true,
+          depthWrite: false,
+          toneMapped: false
+        })
+        const mesh = new THREE.Mesh(_sphereGeo, mat)
+        group.add(mesh)
+        item = { mesh, mat }
+        poolRef.current.spheres.push(item)
+      }
+      item.mat.color.set(color)
+      item.mat.opacity = opacity
+      item.mesh.position.set(x, 0.06, STRIKE_LINE_POS)
+      item.mesh.scale.setScalar(scale)
+      item.mesh.visible = true
+      sphereIdx++
+    }
+
+    // Helper to get or create a pooled particle mesh
+    const getParticle = (color: string, opacity: number, scale: number, x: number, y: number, z: number) => {
+      let item = poolRef.current.particles[particleIdx]
+      if (!item) {
+        const mat = new THREE.MeshBasicMaterial({
+          transparent: true,
+          depthWrite: false,
+          toneMapped: false
+        })
+        const mesh = new THREE.Mesh(_boxGeo, mat)
+        group.add(mesh)
+        item = { mesh, mat }
+        poolRef.current.particles.push(item)
+      }
+      item.mat.color.set(color)
+      item.mat.opacity = opacity
+      item.mesh.position.set(x, y, z)
+      item.mesh.scale.setScalar(scale)
+      item.mesh.visible = true
+      particleIdx++
+    }
+
+    // 2. Activate and update pooled meshes for current active effects
     for (const effect of effects) {
       const progress = (currentTick - effect.startTick) / HIT_EFFECT_TICKS
       if (progress < 0 || progress >= 1) continue
@@ -548,19 +608,7 @@ function HitEffectsGroup({
       const flashOpacity = (1 - progress) * 0.8
       const flashScale = 0.3 + progress * 1.2
 
-      // Flash sphere
-      const flashMat = new THREE.MeshBasicMaterial({
-        color: effect.color,
-        transparent: true,
-        opacity: flashOpacity,
-        depthWrite: false,
-        toneMapped: false
-      })
-      poolRef.current.mats.push(flashMat)
-      const flashMesh = new THREE.Mesh(_sphereGeo, flashMat)
-      flashMesh.position.set(offsetX + effect.x, 0.06, STRIKE_LINE_POS)
-      flashMesh.scale.setScalar(flashScale)
-      group.add(flashMesh)
+      getSphere(effect.color, flashOpacity, flashScale, offsetX + effect.x)
 
       // 4 small particles
       for (let i = 0; i < 4; i++) {
@@ -569,22 +617,14 @@ function HitEffectsGroup({
         const particleY = progress * 0.5
         const pScale = 1 - progress
 
-        const pMat = new THREE.MeshBasicMaterial({
-          color: effect.color,
-          transparent: true,
-          opacity: flashOpacity * 0.6,
-          depthWrite: false,
-          toneMapped: false
-        })
-        poolRef.current.mats.push(pMat)
-        const pMesh = new THREE.Mesh(_boxGeo, pMat)
-        pMesh.position.set(
+        getParticle(
+          effect.color,
+          flashOpacity * 0.6,
+          pScale,
           offsetX + effect.x + Math.cos(angle) * dist,
           0.04 + particleY,
           STRIKE_LINE_POS + Math.sin(angle) * dist
         )
-        pMesh.scale.setScalar(pScale)
-        group.add(pMesh)
       }
     }
   })

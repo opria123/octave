@@ -1,16 +1,13 @@
 // Top toolbar with playback controls and global actions
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useProjectStore, useSettingsStore, getSongStore, useUIStore } from '../stores'
+import { useProjectStore, useSettingsStore, getSongStore, removeSongStore, useUIStore } from '../stores'
 import * as audioService from '../services/audioService'
 import * as playbackController from '../services/playbackController'
 import {
-  parseMidiBase64,
-  parseChartFile,
   serializeMidiBase64,
   serializeChartFile
 } from '../utils/midiParser'
 import { validateChartAsync } from '../utils/chartValidation'
-import type { SongMetadata } from '../types'
 import { SettingsModal } from './SettingsModal'
 import { ExportModal } from './ExportModal'
 import { ValidationPreviewCard } from './ValidationPreviewCard'
@@ -44,7 +41,7 @@ const AUTO_CHART_STAGE_ORDER: Record<string, number> = {
 }
 
 export function Toolbar(): React.JSX.Element {
-  const { activeSongId, setLoadedFolder, addSong, setActiveSong } = useProjectStore()
+  const { activeSongId, setLoadedFolder } = useProjectStore()
   const isExportModalOpen = useUIStore((s) => s.isExportModalOpen)
   const setExportModalOpen = useUIStore((s) => s.setExportModalOpen)
   const validationIssues = useUIStore((s) => s.validationIssues)
@@ -56,9 +53,16 @@ export function Toolbar(): React.JSX.Element {
     leftyFlip,
     enableAutoChart,
     autoChartOutputDir,
+    autoChartDisableOnlineLookup,
+    autoChartDownloadVideo,
+    autoChartKeepStems,
+    autoChartImproveTempo,
+    autoChartSnapDrums,
+    autoChartEnabledTracks,
     updateSettings
   } = useSettingsStore()
   const [isAudioLoaded, setIsAudioLoaded] = useState(false)
+  const [showOpenDropdown, setShowOpenDropdown] = useState(false)
   const [isAutoChartModalOpen, setIsAutoChartModalOpen] = useState(false)
   const [autoChartFiles, setAutoChartFiles] = useState<string[]>([])
   const [autoChartFolders, setAutoChartFolders] = useState<string[]>([])
@@ -99,11 +103,6 @@ export function Toolbar(): React.JSX.Element {
   })
   const [autoChartStemSongs, setAutoChartStemSongs] = useState<StemSong[]>([makeEmptyStemSong()])
   const [autoChartUrls, setAutoChartUrls] = useState<string[]>([EMPTY_AUTO_CHART_URL])
-  const [autoChartDisableOnlineLookup, setAutoChartDisableOnlineLookup] = useState(false)
-  const [autoChartDownloadVideo, setAutoChartDownloadVideo] = useState(true)
-  const [autoChartKeepStems, setAutoChartKeepStems] = useState(false)
-  const [autoChartImproveTempo, setAutoChartImproveTempo] = useState(true)
-  const [autoChartSnapDrums, setAutoChartSnapDrums] = useState(false)
   // Optional single-BPM hint typed by the user, treated as authoritative. Empty
   // = detect by beat-tracking the audio (see strum_worker _beat_track_tempo_map).
   const [autoChartManualBpm, setAutoChartManualBpm] = useState('')
@@ -113,23 +112,6 @@ export function Toolbar(): React.JSX.Element {
   const [autoChartTempoEvents, setAutoChartTempoEvents] = useState<
     Array<{ timeSec: string; bpm: string }>
   >([])
-  const [autoChartEnabledTracks, setAutoChartEnabledTracks] = useState<{
-    drums: boolean
-    guitar: boolean
-    bass: boolean
-    vocals: boolean
-    harmonies: boolean
-    keys: boolean
-    proKeys: boolean
-  }>({
-    drums: true,
-    guitar: true,
-    bass: true,
-    vocals: true,
-    harmonies: true,
-    keys: true,
-    proKeys: true
-  })
   const [autoChartCloseCountdown, setAutoChartCloseCountdown] = useState<number | null>(null)
   const [defaultAutoChartOutputDir, setDefaultAutoChartOutputDir] = useState('')
   const [autoChartErrorCopied, setAutoChartErrorCopied] = useState(false)
@@ -394,77 +376,17 @@ export function Toolbar(): React.JSX.Element {
 
   const loadProjectFolder = useCallback(
     async (folderPath: string): Promise<void> => {
+      // ProjectExplorer owns metadata-first loading and IndexedDB cache validation.
+      // Updating the shared folder path triggers that loader without eagerly parsing
+      // every MIDI/chart on the toolbar action path.
+      updateSettings({ lastOpenedFolder: folderPath })
+      const project = useProjectStore.getState()
+      if (project.loadedFolderPath !== folderPath) {
+        for (const songId of project.songIds) removeSongStore(songId)
+      }
       setLoadedFolder(folderPath)
-      const songFolders = await window.api.scanFolder(folderPath)
-
-      for (const songFolder of songFolders) {
-        try {
-          const iniData = await window.api.readSongIni(songFolder.path)
-
-          const metadata: SongMetadata = {
-            ...(iniData ?? {}),
-            name: (iniData?.name as string) || (iniData?.title as string) || songFolder.name,
-            artist: (iniData?.artist as string) || 'Unknown Artist',
-            album: iniData?.album as string,
-            genre: iniData?.genre as string,
-            year: iniData?.year !== undefined ? String(iniData.year) : undefined,
-            charter: iniData?.charter as string,
-            song_length: iniData?.song_length as number,
-            preview_start_time: iniData?.preview_start_time as number
-          }
-
-          let parsedData: ReturnType<typeof parseMidiBase64> | null = null
-          let sourceFormat: 'midi' | 'chart' = 'midi'
-
-          const midiResult = await window.api.readSongMidi(songFolder.path)
-          if (midiResult) {
-            parsedData =
-              midiResult.type === 'chart'
-                ? parseChartFile(midiResult.data)
-                : parseMidiBase64(midiResult.data)
-            sourceFormat = midiResult.type === 'chart' ? 'chart' : 'midi'
-          }
-
-          const store = getSongStore(songFolder.id)
-          store.getState().loadSong({
-            id: songFolder.id,
-            folderPath: songFolder.path,
-            metadata,
-            notes: parsedData?.notes ?? [],
-            vocalNotes: parsedData?.vocalNotes ?? [],
-            vocalPhrases: parsedData?.vocalPhrases ?? [],
-            starPowerPhrases: parsedData?.starPowerPhrases ?? [],
-            soloSections: parsedData?.soloSections ?? [],
-            laneMarkers: parsedData?.laneMarkers ?? [],
-            songSections: parsedData?.songSections ?? [],
-            tempoEvents: parsedData?.tempoEvents ?? [{ tick: 0, bpm: 120 }],
-            timeSignatures: parsedData?.timeSignatures ?? [
-              { tick: 0, numerator: 4, denominator: 4 }
-            ],
-            videoSync: { clips: [], offsetMs: 0, trimStartMs: 0, trimEndMs: 0 },
-            audioSync: { clips: [] },
-            venueTrack: parsedData?.venueTrack ?? {
-              autoGenerated: false,
-              lighting: [],
-              postProcessing: [],
-              stage: [],
-              performer: [],
-              cameraCuts: []
-            },
-            sourceFormat
-          })
-
-          addSong(songFolder.id)
-        } catch (error) {
-          console.error(`Failed to load song ${songFolder.name}:`, error)
-        }
-      }
-
-      if (songFolders.length > 0) {
-        setActiveSong(songFolders[0].id)
-      }
     },
-    [addSong, setActiveSong, setLoadedFolder]
+    [setLoadedFolder, updateSettings]
   )
 
   const handleOpenFolder = async (): Promise<void> => {
@@ -474,6 +396,16 @@ export function Toolbar(): React.JSX.Element {
       await loadProjectFolder(folderPath)
     } catch (error) {
       console.error('Failed to open folder:', error)
+    }
+  }
+
+  const handleImportPackage = async (): Promise<void> => {
+    try {
+      const folderPath = await window.api.importSongPackage()
+      if (!folderPath) return
+      await loadProjectFolder(folderPath)
+    } catch (error) {
+      console.error('Failed to import song package:', error)
     }
   }
 
@@ -931,10 +863,43 @@ export function Toolbar(): React.JSX.Element {
     <div className="toolbar">
       {/* File actions */}
       <div className="toolbar-group">
-        <button className="toolbar-button" onClick={handleOpenFolder} title="Open Folder">
-          <span className="toolbar-icon">📁</span>
-          <span className="toolbar-label">Open</span>
-        </button>
+        <div className="toolbar-dropdown-wrapper">
+          <button
+            className={`toolbar-button ${showOpenDropdown ? 'active' : ''}`}
+            onClick={() => setShowOpenDropdown(!showOpenDropdown)}
+            title="Open Library / Import Package"
+          >
+            <span className="toolbar-icon">📁</span>
+            <span className="toolbar-label">Open</span>
+          </button>
+          {showOpenDropdown && (
+            <>
+              <div className="toolbar-dropdown-backdrop" onClick={() => setShowOpenDropdown(false)} />
+              <div className="toolbar-dropdown-menu">
+                <button
+                  className="toolbar-dropdown-item"
+                  onClick={async () => {
+                    setShowOpenDropdown(false)
+                    await handleOpenFolder()
+                  }}
+                >
+                  <span className="dropdown-icon">📂</span>
+                  <span className="dropdown-label">Open Song Library Folder</span>
+                </button>
+                <button
+                  className="toolbar-dropdown-item"
+                  onClick={async () => {
+                    setShowOpenDropdown(false)
+                    await handleImportPackage()
+                  }}
+                >
+                  <span className="dropdown-icon">📦</span>
+                  <span className="dropdown-label">Import Song Package (.sng / CON)</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
         <button
           className="toolbar-button"
           onClick={handleSave}
@@ -1972,7 +1937,9 @@ export function Toolbar(): React.JSX.Element {
                             type="checkbox"
                             checked={autoChartDisableOnlineLookup}
                             onChange={(event) =>
-                              setAutoChartDisableOnlineLookup(event.target.checked)
+                              updateSettings({
+                                autoChartDisableOnlineLookup: event.target.checked
+                              })
                             }
                             disabled={autoChartProgress.isRunning}
                           />
@@ -1989,7 +1956,9 @@ export function Toolbar(): React.JSX.Element {
                           <input
                             type="checkbox"
                             checked={autoChartDownloadVideo}
-                            onChange={(event) => setAutoChartDownloadVideo(event.target.checked)}
+                            onChange={(event) =>
+                              updateSettings({ autoChartDownloadVideo: event.target.checked })
+                            }
                             disabled={autoChartProgress.isRunning}
                           />
                           <span>
@@ -2005,7 +1974,9 @@ export function Toolbar(): React.JSX.Element {
                           <input
                             type="checkbox"
                             checked={autoChartKeepStems}
-                            onChange={(event) => setAutoChartKeepStems(event.target.checked)}
+                            onChange={(event) =>
+                              updateSettings({ autoChartKeepStems: event.target.checked })
+                            }
                             disabled={autoChartProgress.isRunning}
                           />
                           <span>
@@ -2022,7 +1993,9 @@ export function Toolbar(): React.JSX.Element {
                           <input
                             type="checkbox"
                             checked={autoChartImproveTempo}
-                            onChange={(event) => setAutoChartImproveTempo(event.target.checked)}
+                            onChange={(event) =>
+                              updateSettings({ autoChartImproveTempo: event.target.checked })
+                            }
                             disabled={autoChartProgress.isRunning}
                           />
                           <span>
@@ -2070,7 +2043,9 @@ export function Toolbar(): React.JSX.Element {
                           <input
                             type="checkbox"
                             checked={autoChartSnapDrums}
-                            onChange={(event) => setAutoChartSnapDrums(event.target.checked)}
+                            onChange={(event) =>
+                              updateSettings({ autoChartSnapDrums: event.target.checked })
+                            }
                             disabled={autoChartProgress.isRunning}
                           />
                           <span>
@@ -2108,14 +2083,16 @@ export function Toolbar(): React.JSX.Element {
                                     style={{ fontSize: 11, padding: '2px 8px' }}
                                     disabled={autoChartProgress.isRunning}
                                     onClick={() =>
-                                      setAutoChartEnabledTracks({
-                                        drums: true,
-                                        guitar: true,
-                                        bass: true,
-                                        vocals: true,
-                                        harmonies: true,
-                                        keys: true,
-                                        proKeys: true
+                                      updateSettings({
+                                        autoChartEnabledTracks: {
+                                          drums: true,
+                                          guitar: true,
+                                          bass: true,
+                                          vocals: true,
+                                          harmonies: true,
+                                          keys: true,
+                                          proKeys: true
+                                        }
                                       })
                                     }
                                   >
@@ -2127,14 +2104,16 @@ export function Toolbar(): React.JSX.Element {
                                     style={{ fontSize: 11, padding: '2px 8px' }}
                                     disabled={autoChartProgress.isRunning}
                                     onClick={() =>
-                                      setAutoChartEnabledTracks({
-                                        drums: false,
-                                        guitar: false,
-                                        bass: false,
-                                        vocals: false,
-                                        harmonies: false,
-                                        keys: false,
-                                        proKeys: false
+                                      updateSettings({
+                                        autoChartEnabledTracks: {
+                                          drums: false,
+                                          guitar: false,
+                                          bass: false,
+                                          vocals: false,
+                                          harmonies: false,
+                                          keys: false,
+                                          proKeys: false
+                                        }
                                       })
                                     }
                                   >
@@ -2178,15 +2157,17 @@ export function Toolbar(): React.JSX.Element {
                                           !autoChartEnabledTracks.vocals)
                                       }
                                       onChange={(event) =>
-                                        setAutoChartEnabledTracks((prev) => {
-                                          const next = {
-                                            ...prev,
-                                            [track.key]: event.target.checked
-                                          }
-                                          // Disabling vocals also disables harmonies.
-                                          if (track.key === 'vocals' && !event.target.checked)
-                                            next.harmonies = false
-                                          return next
+                                        updateSettings({
+                                          autoChartEnabledTracks: (() => {
+                                            const next = {
+                                              ...autoChartEnabledTracks,
+                                              [track.key]: event.target.checked
+                                            }
+                                            // Disabling vocals also disables harmonies.
+                                            if (track.key === 'vocals' && !event.target.checked)
+                                              next.harmonies = false
+                                            return next
+                                          })()
                                         })
                                       }
                                     />

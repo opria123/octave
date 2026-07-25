@@ -27,6 +27,7 @@ Desktop.ini
 __pycache__/
 *.pyc
 .venv/
+venv/
 
 # TypeScript
 *.tsbuildinfo
@@ -34,6 +35,8 @@ __pycache__/
 # Cache
 .cache/
 coverage/
+.learnings/
+build/bin/
 # VitePress
 docs/.vitepress/dist/
 docs/.vitepress/cache/

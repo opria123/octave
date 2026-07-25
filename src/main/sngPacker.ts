@@ -1,6 +1,6 @@
-import { readdir, readFile, rename, unlink } from 'fs/promises'
+import { readdir, rename, unlink } from 'fs/promises'
 import { join } from 'path'
-import { existsSync, statSync, createWriteStream } from 'fs'
+import { existsSync, statSync, createReadStream, createWriteStream } from 'fs'
 import { randomBytes } from 'crypto'
 
 interface SngMetadata {
@@ -211,43 +211,36 @@ export async function packSng(
     writeStream.write(indexBuffer)
     writeStream.write(payloadHeaderBuffer)
 
-    // Write file payloads sequentially (streaming style, low RAM profile)
+    // Write file payloads sequentially without buffering an entire audio/video asset.
     for (const entry of fileEntries) {
       if (writeError) throw writeError
 
       const filePath = join(songDir, entry.name)
-      const rawData = await readFile(filePath)
-      if (rawData.length !== entry.size) {
+      let bytesRead = 0
+      for await (const chunk of createReadStream(filePath)) {
+        const encrypted = Buffer.from(chunk)
+        for (let i = 0; i < encrypted.length; i++) {
+          encrypted[i] ^= keystream[(bytesRead + i) % 256]
+        }
+        bytesRead += encrypted.length
+
+        if (!writeStream.write(encrypted)) {
+          await new Promise<void>((resolve, reject) => {
+            const onDrain = (): void => {
+              writeStream.off('error', onError)
+              resolve()
+            }
+            const onError = (err: Error): void => {
+              writeStream.off('drain', onDrain)
+              reject(err)
+            }
+            writeStream.once('drain', onDrain)
+            writeStream.once('error', onError)
+          })
+        }
+      }
+      if (bytesRead !== entry.size) {
         throw new Error(`File changed size during export: ${entry.name}`)
-      }
-      
-      // Encrypt rawData with keystream relative to each file's start (0-indexed)
-      const encrypted = Buffer.from(rawData)
-      for (let i = 0; i < rawData.length; i++) {
-        encrypted[i] ^= keystream[i % 256]
-      }
-
-      if (writeError) throw writeError
-
-      const canWrite = writeStream.write(encrypted)
-      if (!canWrite) {
-        // Wait for drain event or stream error
-        await new Promise<void>((resolve, reject) => {
-          if (writeError) {
-            reject(writeError)
-            return
-          }
-          const onDrain = (): void => {
-            writeStream.off('error', onError)
-            resolve()
-          }
-          const onError = (err: Error): void => {
-            writeStream.off('drain', onDrain)
-            reject(err)
-          }
-          writeStream.once('drain', onDrain)
-          writeStream.once('error', onError)
-        })
       }
     }
 

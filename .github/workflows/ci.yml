@@ -28,7 +28,9 @@ jobs:
       # Skip postinstall (electron-builder install-app-deps) — native rebuilds
       # are not needed for typecheck or the Vitest suite.
       - name: Install dependencies
-        run: npm ci --ignore-scripts
+        run: |
+          npm ci --ignore-scripts
+          npm rebuild ffmpeg-static
 
       - name: Typecheck
         run: npm run typecheck

@@ -1,6 +1,39 @@
 // Beat Grid - YARG TrackPlayer.cs beat line rendering
 import { useMemo } from 'react'
+import * as THREE from 'three'
 import { TRACK_WIDTH, STRIKE_LINE_POS, HIGHWAY_LENGTH, COLORS } from './constants'
+
+// Reusable static geometries at module level to prevent dynamic allocations
+const beatLineUnitGeo = new THREE.BoxGeometry(TRACK_WIDTH, 0.003, 1) // Depth (Z) is 1, scale dynamically
+const tempoLineGeo = new THREE.BoxGeometry(TRACK_WIDTH, 0.004, 0.06)
+const tempoTabGeo = new THREE.BoxGeometry(0.5, 0.01, 0.2)
+
+// Reusable static basic materials at module level
+const measureMaterial = new THREE.MeshBasicMaterial({
+  color: COLORS.beatlineMeasure,
+  transparent: true,
+  opacity: 0.6
+})
+const strongMaterial = new THREE.MeshBasicMaterial({
+  color: COLORS.beatlineStrong,
+  transparent: true,
+  opacity: 0.4
+})
+const weakMaterial = new THREE.MeshBasicMaterial({
+  color: COLORS.beatlineWeak,
+  transparent: true,
+  opacity: 0.3
+})
+const tempoLineMaterial = new THREE.MeshBasicMaterial({
+  color: '#FF8C00',
+  transparent: true,
+  opacity: 0.8
+})
+const tempoTabMaterial = new THREE.MeshBasicMaterial({
+  color: '#FF8C00',
+  transparent: true,
+  opacity: 0.7
+})
 
 export function BeatGrid({
   currentTick,
@@ -51,28 +84,32 @@ export function BeatGrid({
     <group position={[offsetX, 0, 0]}>
       {beatLines.map((line, i) => {
         const thickness = line.type === 'measure' ? 0.07 : line.type === 'strong' ? 0.05 : 0.03
-        const alpha = line.type === 'measure' ? 0.6 : line.type === 'strong' ? 0.4 : 0.3
-        const color = line.type === 'measure' ? COLORS.beatlineMeasure
-          : line.type === 'strong' ? COLORS.beatlineStrong : COLORS.beatlineWeak
+        const material = line.type === 'measure' ? measureMaterial
+          : line.type === 'strong' ? strongMaterial : weakMaterial
         return (
-          <mesh key={i} position={[0, 0.001, line.z]}>
-            <boxGeometry args={[TRACK_WIDTH, 0.003, thickness]} />
-            <meshBasicMaterial color={color} transparent opacity={alpha} />
-          </mesh>
+          <mesh
+            key={i}
+            geometry={beatLineUnitGeo}
+            position={[0, 0.001, line.z]}
+            scale={[1, 1, thickness]}
+            material={material}
+          />
         )
       })}
       {tempoMarkers.map((marker, i) => (
         <group key={`tempo-${i}`}>
           {/* Orange line across the highway */}
-          <mesh position={[0, 0.002, marker.z]}>
-            <boxGeometry args={[TRACK_WIDTH, 0.004, 0.06]} />
-            <meshBasicMaterial color="#FF8C00" transparent opacity={0.8} />
-          </mesh>
+          <mesh
+            geometry={tempoLineGeo}
+            position={[0, 0.002, marker.z]}
+            material={tempoLineMaterial}
+          />
           {/* Small BPM label tab on the left edge */}
-          <mesh position={[-TRACK_WIDTH / 2 - 0.25, 0.01, marker.z]}>
-            <boxGeometry args={[0.5, 0.01, 0.2]} />
-            <meshBasicMaterial color="#FF8C00" transparent opacity={0.7} />
-          </mesh>
+          <mesh
+            geometry={tempoTabGeo}
+            position={[-TRACK_WIDTH / 2 - 0.25, 0.01, marker.z]}
+            material={tempoTabMaterial}
+          />
         </group>
       ))}
     </group>

@@ -1,15 +1,24 @@
 // Project Explorer - Left panel showing song folder tree
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useProjectStore, useSettingsStore, getSongStore, removeSongStore } from '../stores'
 import * as audioService from '../services/audioService'
 import { parseMidiBase64, parseChartFile } from '../utils/midiParser'
-import type { SongMetadata, Instrument, VideoSync, AudioSync, VenueTrackData } from '../types'
+import type { Instrument, VideoSync, AudioSync, VenueTrackData } from '../types'
+import { subscribeAlbumArtUpdates } from '../utils/albumArtEvents'
+import { readLibraryCache, writeLibraryCache, type CachedLibrarySong } from '../services/libraryCache'
+import {
+  organizeLibrarySongs,
+  type LibraryGroup,
+  type LibrarySort
+} from '../utils/libraryOrganization'
 import './ProjectExplorer.css'
 
 interface SongEntry {
   id: string
   name: string
   artist: string
+  year?: string
+  addedAt?: number
   folderPath: string
   isDirty: boolean
   hasDrums: boolean
@@ -17,6 +26,15 @@ interface SongEntry {
   hasBass: boolean
   hasVocals: boolean
   hasKeys: boolean
+}
+
+function isCurrentLibrarySong(songId: string, folderPath: string, loadVersion: number): boolean {
+  const project = useProjectStore.getState()
+  return (
+    project.libraryLoadVersion === loadVersion &&
+    project.songIds.includes(songId) &&
+    getSongStore(songId).getState().song.folderPath === folderPath
+  )
 }
 
 // Album art cache
@@ -50,6 +68,13 @@ function useAlbumArt(folderPath: string): string | null {
 
     return () => { mounted = false }
   }, [folderPath])
+
+  useEffect(() =>
+    subscribeAlbumArtUpdates((update) => {
+      if (update.folderPath !== folderPath) return
+      albumArtCache.set(folderPath, update.dataUrl)
+      setArtUrl(update.dataUrl)
+    }), [folderPath])
 
   return artUrl
 }
@@ -123,48 +148,59 @@ function SongItem({
 }
 
 export function ProjectExplorer(): React.JSX.Element {
-  const { loadedFolderPath, songIds, activeSongId, setActiveSong, setLoadedFolder, addSong, removeSong } =
+  const { loadedFolderPath, songIds, activeSongId, libraryLoadVersion, setActiveSong, setLoadedFolder, addSong, removeSong } =
     useProjectStore()
   const { lastOpenedFolder, updateSettings } = useSettingsStore()
   const [isLoading, setIsLoading] = useState(false)
   const [showNewSongDialog, setShowNewSongDialog] = useState(false)
   const [newSongName, setNewSongName] = useState('')
   const [newSongAudioPath, setNewSongAudioPath] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [librarySort, setLibrarySort] = useState<LibrarySort>('title')
+  const [libraryGroup, setLibraryGroup] = useState<LibraryGroup>('title-initial')
+  const [songAddedTimes, setSongAddedTimes] = useState<Map<string, number>>(new Map())
+  const loadGenerationRef = useRef(0)
+  const handledLoadVersionRef = useRef(-1)
   // For future folder tree expansion feature
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_expandedFolders, _setExpandedFolders] = useState<Set<string>>(new Set())
 
   // Load a folder's songs (shared between initial load and handleOpenFolder)
-  const loadFolder = useCallback(async (folderPath: string) => {
-    const songFolders = await window.api.scanFolder(folderPath)
-    console.log('Found songs:', songFolders)
+  const loadFolder = useCallback(async (folderPath: string, preferredActiveId?: string | null) => {
+    const generation = ++loadGenerationRef.current
+    setIsLoading(true)
+    const previousProject = useProjectStore.getState()
+    if (previousProject.loadedFolderPath !== folderPath) {
+      for (const songId of previousProject.songIds) removeSongStore(songId)
+      setLoadedFolder(folderPath)
+    }
+    handledLoadVersionRef.current = useProjectStore.getState().libraryLoadVersion
+    const isCurrentLoad = (): boolean =>
+      loadGenerationRef.current === generation &&
+      useProjectStore.getState().loadedFolderPath === folderPath
+    const loadOwnedIds = new Set(useProjectStore.getState().songIds)
 
-    // Only clear state after we've confirmed the scan succeeded
-    setLoadedFolder(folderPath)
-
-    for (const songFolder of songFolders) {
-      try {
-        const iniData = await window.api.readSongIni(songFolder.path)
-
-        // Spread the full ini so per-instrument difficulties (diff_drums,
-        // diff_guitar, ...) and any other custom keys flow through to the
-        // PropertyPanel; then override the typed display fields.
-        const metadata: SongMetadata = {
-          ...(iniData ?? {}),
-          name: (iniData?.name as string) || (iniData?.title as string) || songFolder.name,
-          artist: (iniData?.artist as string) || 'Unknown Artist',
-          album: iniData?.album as string,
-          genre: iniData?.genre as string,
-          year: iniData?.year !== undefined ? String(iniData.year) : undefined,
-          charter: iniData?.charter as string,
-          song_length: iniData?.song_length as number,
-          preview_start_time: iniData?.preview_start_time as number
+    const populateSong = (
+      { id, path, metadata }: CachedLibrarySong,
+      source: 'cache' | 'fresh'
+    ): void => {
+      if (!isCurrentLoad()) return
+      const store = getSongStore(id)
+      const currentState = store.getState()
+      if (currentState.song.folderPath && currentState.song.folderPath !== path) {
+        console.warn(`Ignoring stale library entry with colliding id "${id}" at ${path}`)
+        return
+      }
+      if (currentState.song.folderPath === path) {
+        if (source === 'fresh' && !currentState.isDirty) {
+          store.setState((state) => ({
+            song: { ...state.song, metadata: { ...state.song.metadata, ...metadata } }
+          }))
         }
-
-        const store = getSongStore(songFolder.id)
+      } else {
         store.getState().loadSong({
-          id: songFolder.id,
-          folderPath: songFolder.path,
+          id,
+          folderPath: path,
           metadata,
           notes: [],
           vocalNotes: [],
@@ -180,26 +216,111 @@ export function ProjectExplorer(): React.JSX.Element {
           venueTrack: { autoGenerated: false, lighting: [], postProcessing: [], stage: [], performer: [], cameraCuts: [] },
           sourceFormat: 'midi'
         })
-
-        addSong(songFolder.id)
-      } catch (error) {
-        console.error(`Failed to load song ${songFolder.name}:`, error)
       }
+      addSong(id)
+      loadOwnedIds.add(id)
     }
 
-    if (songFolders.length > 0) {
-      setActiveSong(songFolders[0].id)
+    try {
+      const cachedSongs: CachedLibrarySong[] = await readLibraryCache(folderPath).catch(
+        (): CachedLibrarySong[] => []
+      )
+      if (!isCurrentLoad()) return
+      const cachedById = new Map<string, CachedLibrarySong>(
+        cachedSongs.map((song) => [song.id, song] as const)
+      )
+      setSongAddedTimes(
+        new Map(
+          cachedSongs.flatMap((song) =>
+            song.addedAt === undefined ? [] : ([[song.id, song.addedAt]] as const)
+          )
+        )
+      )
+      for (const cachedSong of cachedSongs) populateSong(cachedSong, 'cache')
+
+      const songFolders = await window.api.scanFolder(folderPath)
+      if (!isCurrentLoad()) return
+      const freshResults = await Promise.all(
+        songFolders.map(async (songFolder): Promise<CachedLibrarySong> => {
+          try {
+            const iniData = await window.api.readSongIni(songFolder.path)
+            return {
+              id: songFolder.id,
+              path: songFolder.path,
+              folderName: songFolder.name,
+              addedAt: songFolder.addedAt,
+              metadata: {
+                ...(iniData ?? {}),
+                name: (iniData?.name as string) || (iniData?.title as string) || songFolder.name,
+                artist: (iniData?.artist as string) || 'Unknown Artist',
+                album: iniData?.album as string,
+                genre: iniData?.genre as string,
+                year: iniData?.year !== undefined ? String(iniData.year) : undefined,
+                charter: iniData?.charter as string,
+                song_length: iniData?.song_length as number,
+                preview_start_time: iniData?.preview_start_time as number
+              }
+            }
+          } catch (error) {
+            console.error(`Failed to read metadata for ${songFolder.name}:`, error)
+            const cachedSong = cachedById.get(songFolder.id)
+            if (cachedSong?.path === songFolder.path) {
+              return { ...cachedSong, addedAt: songFolder.addedAt }
+            }
+            return {
+              id: songFolder.id,
+              path: songFolder.path,
+              folderName: songFolder.name,
+              addedAt: songFolder.addedAt,
+              metadata: { name: songFolder.name, artist: 'Unknown Artist' }
+            }
+          }
+        })
+      )
+      if (!isCurrentLoad()) return
+      const freshSongs = freshResults
+      setSongAddedTimes(new Map(freshSongs.map((song) => [song.id, song.addedAt ?? 0])))
+
+      const freshIds = new Set(freshSongs.map(({ id }) => id))
+      for (const existingId of loadOwnedIds) {
+        if (!freshIds.has(existingId)) {
+          removeSong(existingId)
+          removeSongStore(existingId)
+        }
+      }
+      for (const freshSong of freshSongs) populateSong(freshSong, 'fresh')
+      if (!isCurrentLoad()) return
+      await writeLibraryCache(folderPath, freshSongs).catch((error) => {
+        console.warn('Failed to update library cache:', error)
+      })
+      if (!isCurrentLoad()) return
+
+      const currentActiveId = useProjectStore.getState().activeSongId
+      if (preferredActiveId && freshIds.has(preferredActiveId)) {
+        setActiveSong(preferredActiveId)
+      } else if ((!currentActiveId || !freshIds.has(currentActiveId)) && freshSongs.length > 0) {
+        const firstSong = organizeLibrarySongs(
+          freshSongs.map(({ id, metadata }) => ({ id, name: metadata.name, artist: metadata.artist })),
+          '',
+          'title',
+          'none'
+        )[0].songs[0]
+        setActiveSong(firstSong.id)
+      }
+    } catch (error) {
+      if (isCurrentLoad()) console.error(`Failed to load library ${folderPath}:`, error)
+    } finally {
+      if (loadGenerationRef.current === generation) setIsLoading(false)
     }
-  }, [setLoadedFolder, addSong, setActiveSong])
+  }, [addSong, removeSong, setActiveSong, setLoadedFolder])
 
   // Auto-load last opened folder on startup
   useEffect(() => {
-    if (lastOpenedFolder && !loadedFolderPath && songIds.length === 0) {
-      setIsLoading(true)
-      loadFolder(lastOpenedFolder).finally(() => setIsLoading(false))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Only run on mount
+    const folderPath = loadedFolderPath || lastOpenedFolder
+    if (!folderPath || isLoading) return
+    if (handledLoadVersionRef.current === libraryLoadVersion) return
+    void loadFolder(folderPath)
+  }, [isLoading, lastOpenedFolder, libraryLoadVersion, loadFolder, loadedFolderPath])
 
   // Get song entries with metadata
   const songEntries: SongEntry[] = songIds.map((id) => {
@@ -211,6 +332,8 @@ export function ProjectExplorer(): React.JSX.Element {
       id,
       name: state.song.metadata.name,
       artist: state.song.metadata.artist,
+      year: state.song.metadata.year,
+      addedAt: songAddedTimes.get(id),
       folderPath: state.song.folderPath,
       isDirty: state.isDirty,
       hasDrums: notes.some((n) => n.instrument === 'drums'),
@@ -220,11 +343,17 @@ export function ProjectExplorer(): React.JSX.Element {
       hasKeys: notes.some((n) => n.instrument === 'keys')
     }
   })
+  const organizedSongs = useMemo(
+    () => organizeLibrarySongs(songEntries, searchQuery, librarySort, libraryGroup),
+    [libraryGroup, librarySort, searchQuery, songEntries]
+  )
 
   // Load MIDI notes for a song
   const loadSongMidi = useCallback(async (songId: string, folderPath: string) => {
     try {
+      const loadVersion = useProjectStore.getState().libraryLoadVersion
       const result = await window.api.readSongMidi(folderPath)
+      if (!isCurrentLibrarySong(songId, folderPath, loadVersion)) return
       if (!result) {
         console.warn(`[loadSongMidi] No MIDI/chart data returned for "${folderPath}" — notes.mid/notes.chart may be missing or invalid`)
         return
@@ -281,6 +410,7 @@ export function ProjectExplorer(): React.JSX.Element {
   // Load video sync data for a song (from video.json, or auto-detect video file)
   const loadVideoSync = useCallback(async (songId: string, folderPath: string) => {
     try {
+      const loadVersion = useProjectStore.getState().libraryLoadVersion
       const store = getSongStore(songId)
 
       // Always scan the song folder for a real video file. This wins over any
@@ -288,8 +418,10 @@ export function ProjectExplorer(): React.JSX.Element {
       // (song was moved, or the project was opened from a different machine /
       // staging folder) and would be blocked by the song-file:// sandbox.
       const detected = await window.api.scanVideo(folderPath)
+      if (!isCurrentLibrarySong(songId, folderPath, loadVersion)) return
 
       const videoJson = await window.api.readVideoJson(folderPath)
+      if (!isCurrentLibrarySong(songId, folderPath, loadVersion)) return
       const jsonClips = (videoJson?.clips as VideoSync['clips']) || []
       const jsonOffset = (videoJson?.offsetMs as number) || 0
 
@@ -320,9 +452,11 @@ export function ProjectExplorer(): React.JSX.Element {
 
   const loadAudioSync = useCallback(async (songId: string, folderPath: string) => {
     try {
+      const loadVersion = useProjectStore.getState().libraryLoadVersion
       const store = getSongStore(songId)
 
       const audioJson = await window.api.readAudioJson(folderPath)
+      if (!isCurrentLibrarySong(songId, folderPath, loadVersion)) return
       if (audioJson && Array.isArray(audioJson.clips)) {
         const audioSync: Partial<AudioSync> = {
           clips: (audioJson.clips as AudioSync['clips']) || []
@@ -333,6 +467,7 @@ export function ProjectExplorer(): React.JSX.Element {
       }
 
       const detected = await window.api.readAudio(folderPath)
+      if (!isCurrentLibrarySong(songId, folderPath, loadVersion)) return
       if (detected && detected.length > 0) {
         store.getState().updateAudioSync({
           clips: detected.map((file, index) => ({
@@ -353,8 +488,10 @@ export function ProjectExplorer(): React.JSX.Element {
 
   const loadVenueTrack = useCallback(async (songId: string, folderPath: string) => {
     try {
+      const loadVersion = useProjectStore.getState().libraryLoadVersion
       const store = getSongStore(songId)
       const venueJson = await window.api.readVenueJson(folderPath)
+      if (!isCurrentLibrarySong(songId, folderPath, loadVersion)) return
       if (!venueJson) return
 
       const venueTrack: Partial<VenueTrackData> = {
@@ -429,6 +566,8 @@ export function ProjectExplorer(): React.JSX.Element {
       }
 
       // Clean up existing song stores
+      const preferredActiveId = activeSongId
+      setActiveSong(null)
       for (const id of songIds) {
         removeSongStore(id)
       }
@@ -437,7 +576,7 @@ export function ProjectExplorer(): React.JSX.Element {
       updateSettings({ lastOpenedFolder: folderPath })
 
       // 3. Load the folder
-      await loadFolder(folderPath)
+      await loadFolder(folderPath, preferredActiveId)
     } catch (error) {
       console.error('Failed to open folder:', error)
     } finally {
@@ -451,11 +590,13 @@ export function ProjectExplorer(): React.JSX.Element {
       setIsLoading(true)
 
       // Clean up existing song stores
+      const preferredActiveId = activeSongId
+      setActiveSong(null)
       for (const id of songIds) {
         removeSongStore(id)
       }
 
-      await loadFolder(loadedFolderPath)
+      await loadFolder(loadedFolderPath, preferredActiveId)
     } catch (error) {
       console.error('Failed to refresh folder:', error)
     } finally {
@@ -505,6 +646,7 @@ export function ProjectExplorer(): React.JSX.Element {
       })
 
       addSong(result.id)
+      setSongAddedTimes((current) => new Map(current).set(result.id, Date.now()))
       setActiveSong(result.id)
       setShowNewSongDialog(false)
       setNewSongName('')
@@ -630,24 +772,73 @@ export function ProjectExplorer(): React.JSX.Element {
               </button>
             </div>
 
+            <div className="explorer-library-tools">
+              <input
+                className="explorer-library-search"
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Filter songs or artists"
+                aria-label="Filter song library"
+              />
+              <div className="explorer-library-selects">
+                <select
+                  value={librarySort}
+                  onChange={(event) => setLibrarySort(event.target.value as LibrarySort)}
+                  aria-label="Sort song library"
+                >
+                  <option value="title">Sort: Title</option>
+                  <option value="artist">Sort: Artist</option>
+                  <option value="added-newest">Sort: Added (Newest)</option>
+                  <option value="added-oldest">Sort: Added (Oldest)</option>
+                  <option value="year-newest">Sort: Year (Newest)</option>
+                  <option value="year-oldest">Sort: Year (Oldest)</option>
+                </select>
+                <select
+                  value={libraryGroup}
+                  onChange={(event) => setLibraryGroup(event.target.value as LibraryGroup)}
+                  aria-label="Group song library"
+                >
+                  <option value="title-initial">Group: Title A–Z</option>
+                  <option value="artist">Group: Artist</option>
+                  <option value="year">Group: Year</option>
+                  <option value="none">Group: None</option>
+                </select>
+              </div>
+            </div>
+
             {/* Song list */}
             <div className="explorer-song-list">
               {songEntries.length > 0 ? (
-                songEntries.map((song) => (
-                  <SongItem
-                    key={song.id}
-                    song={song}
-                    isActive={activeSongId === song.id}
-                    onSelect={() => handleSongSelect(song.id)}
-                    onDelete={() => handleDeleteSong(song.id)}
-                  />
-                ))
+                organizedSongs.length > 0 && organizedSongs.some(({ songs }) => songs.length > 0) ? (
+                  organizedSongs.map((group) => (
+                    <div className="explorer-song-group" key={group.label || 'all'}>
+                      {group.label && <div className="explorer-song-group-header">{group.label}</div>}
+                      {group.songs.map((song) => (
+                        <SongItem
+                          key={song.id}
+                          song={song}
+                          isActive={activeSongId === song.id}
+                          onSelect={() => handleSongSelect(song.id)}
+                          onDelete={() => handleDeleteSong(song.id)}
+                        />
+                      ))}
+                    </div>
+                  ))
+                ) : (
+                  <div className="explorer-empty">No songs match “{searchQuery}”</div>
+                )
               ) : (
                 <div className="explorer-empty">
-                  <span>No songs found</span>
+                  <span>{isLoading ? 'Loading library…' : 'No songs found'}</span>
                   <span className="explorer-empty-hint">
-                    Add folders containing song.ini files
+                    {isLoading ? 'Checking the cache and validating song folders' : 'Add folders containing song.ini files'}
                   </span>
+                </div>
+              )}
+              {isLoading && songEntries.length > 0 && (
+                <div className="explorer-cache-status" role="status">
+                  <span className="explorer-cache-spinner" /> Validating library…
                 </div>
               )}
             </div>

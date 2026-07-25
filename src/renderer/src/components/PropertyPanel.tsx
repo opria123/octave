@@ -18,6 +18,7 @@ import type {
   SelectedVenueEventRef
 } from '../types'
 import './PropertyPanel.css'
+import { SongMetadataLookupModal } from './SongMetadataLookupModal'
 
 const VENUE_MIN_DURATION_TICKS = 60
 
@@ -1068,16 +1069,37 @@ function MetadataEditor({
   const [newTempoBpm, setNewTempoBpm] = useState('')
   const [newTimeSigNum, setNewTimeSigNum] = useState('4')
   const [newTimeSigDen, setNewTimeSigDen] = useState('4')
+  const [isMetadataLookupOpen, setIsMetadataLookupOpen] = useState(false)
+  const [albumArtVersion, setAlbumArtVersion] = useState(0)
   return (
     <div className="metadata-editor">
+      {isMetadataLookupOpen && (
+        <SongMetadataLookupModal
+          metadata={metadata}
+          folderPath={folderPath}
+          onApply={(updates, artworkApplied) => {
+            onUpdate(updates)
+            if (artworkApplied) setAlbumArtVersion((version) => version + 1)
+          }}
+          onClose={() => setIsMetadataLookupOpen(false)}
+        />
+      )}
       {/* Album Art at top */}
       <div className="property-section">
         <div className="property-section-title">Album Art</div>
-        <AlbumArt songId={songId} folderPath={folderPath} />
+        <AlbumArt songId={`${songId}-${albumArtVersion}`} folderPath={folderPath} />
       </div>
 
       <div className="property-section">
         <div className="property-section-title">Song Info</div>
+
+        <button
+          type="button"
+          className="property-button property-button-metadata"
+          onClick={() => setIsMetadataLookupOpen(true)}
+        >
+          Find metadata online…
+        </button>
 
         <div className="property-group">
           <label className="property-label">Title</label>

@@ -1,10 +1,43 @@
 // Highway Surface - YARG Track.shadergraph recreation
-import { useMemo, useRef, useContext } from 'react'
+import { useMemo, useRef, useContext, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { TRACK_WIDTH, STRIKE_LINE_POS, HIGHWAY_LENGTH, COLORS, getLaneConfig, isBlackKey, PRO_KEYS_MIN, PRO_KEYS_VISIBLE } from './constants'
 import type { InstrumentRenderType } from './constants'
 import { HighwayAssetsContext } from './AssetProvider'
+
+// Reusable static geometries at module level to prevent GPU garbage/overhead
+const highwaySurfaceGeo = new THREE.PlaneGeometry(TRACK_WIDTH + 0.1, HIGHWAY_LENGTH)
+const trimGeo1 = new THREE.BoxGeometry(0.06, 0.05, HIGHWAY_LENGTH)
+const trimGeo2 = new THREE.BoxGeometry(0.065, 0.006, HIGHWAY_LENGTH)
+const trimGeo3 = new THREE.BoxGeometry(0.015, 0.025, HIGHWAY_LENGTH)
+const unitPlaneGeo = new THREE.PlaneGeometry(1, 1)
+
+// Reusable static materials for key lanes/markers/overlays to stop shader compilation storms
+const whiteKeyMaterial = new THREE.MeshBasicMaterial({
+  color: '#1A1A28',
+  transparent: true,
+  opacity: 0.25,
+  depthWrite: false
+})
+const blackKeyMaterial = new THREE.MeshBasicMaterial({
+  color: '#0A0A14',
+  transparent: true,
+  opacity: 0.6,
+  depthWrite: false
+})
+const cMarkerMaterial = new THREE.MeshBasicMaterial({
+  color: '#A78BFA',
+  transparent: true,
+  opacity: 0.5,
+  depthWrite: false
+})
+const vocalGridMaterial = new THREE.MeshBasicMaterial({
+  color: '#E879F9',
+  transparent: true,
+  opacity: 0.2,
+  depthWrite: false
+})
 
 export function Highway({
   instrumentType,
@@ -78,6 +111,46 @@ export function Highway({
     [assets?.sidePattern, shaderLaneCount]
   )
 
+  const trimMaterial1 = useMemo(() => {
+    return new THREE.MeshStandardMaterial({
+      map: assets?.trackTrimMap ?? null,
+      color: '#888899',
+      metalness: 0.8,
+      roughness: 0.25
+    })
+  }, [assets?.trackTrimMap])
+
+  const trimMaterial2 = useMemo(() => {
+    return new THREE.MeshStandardMaterial({
+      color: '#AAAACC',
+      emissive: '#334466',
+      emissiveIntensity: 0.4,
+      metalness: 0.9,
+      roughness: 0.2
+    })
+  }, [])
+
+  const trimMaterial3 = useMemo(() => {
+    return new THREE.MeshStandardMaterial({
+      color: '#2244AA',
+      emissive: '#3366DD',
+      emissiveIntensity: 0.6,
+      transparent: true,
+      opacity: 0.7,
+      toneMapped: false
+    })
+  }, [])
+
+  // Clean up compiled materials on unmount
+  useEffect(() => {
+    return () => {
+      highwayMaterial.dispose()
+      trimMaterial1.dispose()
+      trimMaterial2.dispose()
+      trimMaterial3.dispose()
+    }
+  }, [highwayMaterial, trimMaterial1, trimMaterial2, trimMaterial3])
+
   useFrame(() => {
     if (shaderRef.current) {
       const scrollVal = (currentTick * pixelsPerTick) / 4.0
@@ -90,6 +163,7 @@ export function Highway({
   return (
     <group position={[offsetX, 0, 0]}>
       <mesh
+        geometry={highwaySurfaceGeo}
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, -0.001, highwayCenterZ]}
         ref={(mesh) => {
@@ -98,42 +172,25 @@ export function Highway({
           }
         }}
         material={highwayMaterial}
-      >
-        <planeGeometry args={[TRACK_WIDTH + 0.1, HIGHWAY_LENGTH]} />
-      </mesh>
+      />
 
       {[-1, 1].map((side) => (
         <group key={side}>
-          <mesh position={[side * trimX, 0.02, highwayCenterZ]}>
-            <boxGeometry args={[0.06, 0.05, HIGHWAY_LENGTH]} />
-            <meshStandardMaterial
-              map={assets?.trackTrimMap ?? null}
-              color="#888899"
-              metalness={0.8}
-              roughness={0.25}
-            />
-          </mesh>
-          <mesh position={[side * trimX, 0.048, highwayCenterZ]}>
-            <boxGeometry args={[0.065, 0.006, HIGHWAY_LENGTH]} />
-            <meshStandardMaterial
-              color="#AAAACC"
-              emissive="#334466"
-              emissiveIntensity={0.4}
-              metalness={0.9}
-              roughness={0.2}
-            />
-          </mesh>
-          <mesh position={[side * (trimX - side * 0.025), 0.01, highwayCenterZ]}>
-            <boxGeometry args={[0.015, 0.025, HIGHWAY_LENGTH]} />
-            <meshStandardMaterial
-              color="#2244AA"
-              emissive="#3366DD"
-              emissiveIntensity={0.6}
-              transparent
-              opacity={0.7}
-              toneMapped={false}
-            />
-          </mesh>
+          <mesh
+            geometry={trimGeo1}
+            position={[side * trimX, 0.02, highwayCenterZ]}
+            material={trimMaterial1}
+          />
+          <mesh
+            geometry={trimGeo2}
+            position={[side * trimX, 0.048, highwayCenterZ]}
+            material={trimMaterial2}
+          />
+          <mesh
+            geometry={trimGeo3}
+            position={[side * (trimX - side * 0.025), 0.01, highwayCenterZ]}
+            material={trimMaterial3}
+          />
         </group>
       ))}
 
@@ -144,17 +201,17 @@ export function Highway({
         const viewBase = proKeysViewStart ?? PRO_KEYS_MIN
         const black = isBlackKey(viewBase + i)
         return (
-          <mesh key={`pk-${i}`} position={[x, 0.0005, highwayCenterZ]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[w - 0.01, HIGHWAY_LENGTH]} />
-            <meshBasicMaterial
-              color={black ? '#0A0A14' : '#1A1A28'}
-              transparent
-              opacity={black ? 0.6 : 0.25}
-              depthWrite={false}
-            />
-          </mesh>
+          <mesh
+            key={`pk-${i}`}
+            geometry={unitPlaneGeo}
+            position={[x, 0.0005, highwayCenterZ]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            scale={[w - 0.01, HIGHWAY_LENGTH, 1]}
+            material={black ? blackKeyMaterial : whiteKeyMaterial}
+          />
         )
       })}
+
       {/* Pro Keys: C note markers (octave boundaries) within viewport */}
       {isProKeys && (() => {
         const viewBase = proKeysViewStart ?? PRO_KEYS_MIN
@@ -164,10 +221,14 @@ export function Highway({
             const laneIdx = pitch - viewBase
             const x = (TRACK_WIDTH / laneCount) * laneIdx - TRACK_WIDTH / 2
             markers.push(
-              <mesh key={`pk-c-${pitch}`} position={[x, 0.001, highwayCenterZ]} rotation={[-Math.PI / 2, 0, 0]}>
-                <planeGeometry args={[0.02, HIGHWAY_LENGTH]} />
-                <meshBasicMaterial color="#A78BFA" transparent opacity={0.5} depthWrite={false} />
-              </mesh>
+              <mesh
+                key={`pk-c-${pitch}`}
+                geometry={unitPlaneGeo}
+                position={[x, 0.001, highwayCenterZ]}
+                rotation={[-Math.PI / 2, 0, 0]}
+                scale={[0.02, HIGHWAY_LENGTH, 1]}
+                material={cMarkerMaterial}
+              />
             )
           }
         }
@@ -179,10 +240,14 @@ export function Highway({
         const frac = (i + 1) / 6
         const x = frac * TRACK_WIDTH - TRACK_WIDTH / 2
         return (
-          <mesh key={`vg-${i}`} position={[x, 0.001, highwayCenterZ]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[0.01, HIGHWAY_LENGTH]} />
-            <meshBasicMaterial color="#E879F9" transparent opacity={0.2} depthWrite={false} />
-          </mesh>
+          <mesh
+            key={`vg-${i}`}
+            geometry={unitPlaneGeo}
+            position={[x, 0.001, highwayCenterZ]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            scale={[0.01, HIGHWAY_LENGTH, 1]}
+            material={vocalGridMaterial}
+          />
         )
       })}
     </group>

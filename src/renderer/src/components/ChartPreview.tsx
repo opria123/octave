@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback, useRef, Suspense, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { PerspectiveCamera } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { useProjectStore, useUIStore, getSongStore } from '../stores'
@@ -104,8 +103,11 @@ function VenueCameraController({
 
     if (camera instanceof THREE.PerspectiveCamera) {
       const targetFov = CAMERA_FOV
-      camera.fov += (targetFov - camera.fov) * 0.18
-      camera.updateProjectionMatrix()
+      const diff = targetFov - camera.fov
+      if (Math.abs(diff) > 0.001) {
+        camera.fov += diff * 0.18
+        camera.updateProjectionMatrix()
+      }
     }
   })
 
@@ -291,15 +293,18 @@ function HighwayWrapper({
   }, [hasVideo])
 
   return (
-    <Canvas shadows gl={glProps} style={hasVideo ? { background: 'transparent' } : undefined} onCreated={handleCreated}>
-      {/* PerspectiveCamera — VenueCameraController takes over position/fov each frame */}
-      <PerspectiveCamera
-        makeDefault
-        position={[0, CAMERA_HEIGHT, STRIKE_LINE_POS + CAMERA_DISTANCE]}
-        fov={CAMERA_FOV}
-        near={0.1}
-        far={150}
-      />
+    <Canvas
+      shadows
+      gl={glProps}
+      camera={{
+        fov: CAMERA_FOV,
+        near: 0.1,
+        far: 150,
+        position: [0, CAMERA_HEIGHT, STRIKE_LINE_POS + CAMERA_DISTANCE]
+      }}
+      style={hasVideo ? { background: 'transparent' } : undefined}
+      onCreated={handleCreated}
+    >
       <VenueCameraController
         hasVocalOverlay={hasVocalOverlay}
         visibleTrackCount={visibleTrackCount}

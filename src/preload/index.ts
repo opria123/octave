@@ -1,13 +1,17 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import type { MetadataArtwork, SongMetadataSearchRequest, SongMetadataSearchResult } from '../shared/songMetadata'
 
 // Custom APIs for renderer
 const api = {
   // Dialog APIs
   openFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:openFolder'),
 
+  importSongPackage: (): Promise<string | null> =>
+    ipcRenderer.invoke('dialog:importSongPackage'),
+
   // Folder APIs
-  scanFolder: (folderPath: string): Promise<Array<{ id: string; path: string; name: string }>> =>
+  scanFolder: (folderPath: string): Promise<Array<{ id: string; path: string; name: string; addedAt: number }>> =>
     ipcRenderer.invoke('folder:scan', folderPath),
 
   // Dialog APIs
@@ -48,6 +52,12 @@ const api = {
   writeSongIni: (songPath: string, metadata: Record<string, unknown>): Promise<boolean> =>
     ipcRenderer.invoke('song:writeIni', songPath, metadata),
 
+  searchSongMetadata: (request: SongMetadataSearchRequest): Promise<SongMetadataSearchResult[]> =>
+    ipcRenderer.invoke('song:searchMetadata', request),
+
+  fetchMetadataArtwork: (artwork: MetadataArtwork): Promise<string | null> =>
+    ipcRenderer.invoke('song:fetchMetadataArtwork', artwork),
+
   readSongMidi: (songPath: string): Promise<{ type: 'midi' | 'chart'; data: string } | null> =>
     ipcRenderer.invoke('song:readMidi', songPath),
 
@@ -63,6 +73,13 @@ const api = {
     outputPath: string
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('song:exportSng', songPath, metadata, outputPath),
+
+  exportCon: (
+    songPath: string,
+    metadata: Record<string, unknown>,
+    outputPath: string
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('song:exportCon', songPath, metadata, outputPath),
 
   fileExists: (filePath: string): Promise<boolean> =>
     ipcRenderer.invoke('fs:fileExists', filePath),

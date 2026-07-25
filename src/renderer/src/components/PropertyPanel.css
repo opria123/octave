@@ -134,6 +134,16 @@
   background-color: var(--danger-color-hover);
 }
 
+.property-button-metadata {
+  margin-bottom: 12px;
+  color: white;
+  background: var(--accent-color);
+}
+
+.property-button-metadata:hover {
+  filter: brightness(1.08);
+}
+
 /* Multi-note editor */
 .multi-note-editor {
   text-align: center;

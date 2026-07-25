@@ -261,6 +261,16 @@ export interface ValidationIssue {
 }
 
 // Application settings
+export interface AutoChartEnabledTracks {
+  drums: boolean
+  guitar: boolean
+  bass: boolean
+  vocals: boolean
+  harmonies: boolean
+  keys: boolean
+  proKeys: boolean
+}
+
 export interface AppSettings {
   autosaveEnabled: boolean
   autosaveIntervalMs: number
@@ -275,6 +285,12 @@ export interface AppSettings {
   waveformAudioSourcePath?: string // Optional audio source path used for waveform rendering (undefined = mixed)
   enableAutoChart: boolean
   autoChartOutputDir?: string
+  autoChartDisableOnlineLookup: boolean
+  autoChartDownloadVideo: boolean
+  autoChartKeepStems: boolean
+  autoChartImproveTempo: boolean
+  autoChartSnapDrums: boolean
+  autoChartEnabledTracks: AutoChartEnabledTracks
   sngLastExportDir?: string
   betaUpdates: boolean // Opt into beta/pre-release auto-updates
   invertPianoRollVerticalScroll: boolean // Reverse vertical wheel direction in the piano roll

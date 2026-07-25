@@ -1,6 +1,6 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net, Menu, session, type MenuItemConstructorOptions } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net, Menu, session } from 'electron'
 import { join, resolve, basename } from 'path'
-import { readdir, readFile, writeFile, stat, rename, copyFile, unlink, mkdir } from 'fs/promises'
+import { readdir, readFile, writeFile, stat, rename, copyFile, unlink, mkdir, open } from 'fs/promises'
 import { existsSync, readFileSync } from 'fs'
 import { execFile, spawn } from 'child_process'
 import { randomUUID } from 'crypto'
@@ -11,6 +11,25 @@ import ffmpeg from 'fluent-ffmpeg'
 import { cancelAutoChart, getStrumRequirementsPath, killAllRunningJobs, openStrumLogsFolder, resolvePythonCommand, runAutoChart } from './strumIntegration/runner'
 import { ensureBootstrappedPython, getRuntimeStatus, isBootstrapTarget } from './strumIntegration/runtimeBootstrap'
 import { packSng } from './sngPacker'
+import { packRb3con } from './conPacker'
+import { importSng } from './import/sngImporter'
+import { importCon } from './import/conImporter'
+import {
+  ImportCancelledError,
+  PartialImportError,
+  type ImportConflictPolicy,
+  type ImportConflictResolver
+} from './import/importPath'
+import {
+  buildMusicBrainzQuery,
+  mergeMetadataResults,
+  parseMusicBrainzSearchResponse,
+  parseTheAudioDbSearchResponse,
+  type MetadataArtwork,
+  type SongMetadataSearchRequest,
+  type SongMetadataSearchResult
+} from '../shared/songMetadata'
+import { createApplicationMenuTemplate } from './applicationMenu'
 
 // Point fluent-ffmpeg at the bundled static binary
 try {
@@ -73,6 +92,11 @@ const RENDERER_CSP = [
   "media-src 'self' song-file: https: http: blob:",
   "connect-src 'self' song-file: https: http: blob:"
 ].join('; ')
+const metadataSearchCache = new Map<
+  string,
+  { expiresAt: number; results: SongMetadataSearchResult[] }
+>()
+let lastMusicBrainzRequestAt = 0
 
 function broadcastUpdaterState(payload: UpdaterState): void {
   const windows = BrowserWindow.getAllWindows()
@@ -252,94 +276,13 @@ function sendMenuCommand(command: string, payload?: unknown): void {
 }
 
 function createApplicationMenu(): void {
-  const template: MenuItemConstructorOptions[] = [
-    {
-      label: 'File',
-      submenu: [
-        {
-          label: 'New',
-          accelerator: 'CmdOrCtrl+N',
-          click: () => sendMenuCommand('file:new-song')
-        },
-        {
-          label: 'Open',
-          accelerator: 'CmdOrCtrl+O',
-          click: () => sendMenuCommand('file:open-folder')
-        },
-        { type: 'separator' },
-        {
-          label: 'Settings',
-          accelerator: 'CmdOrCtrl+,',
-          click: () => sendMenuCommand('file:open-settings')
-        }
-      ]
-    },
-    {
-      label: 'Edit',
-      submenu: [
-        { role: 'undo', label: 'Undo' },
-        { role: 'redo', label: 'Redo' }
-      ]
-    },
-    {
-      label: 'View',
-      submenu: [
-        {
-          label: 'File Explorer',
-          type: 'checkbox',
-          checked: true,
-          click: (item) => sendMenuCommand('view:toggle-panel', { panel: 'explorer', visible: item.checked })
-        },
-        {
-          label: 'Preview',
-          type: 'checkbox',
-          checked: true,
-          click: (item) => sendMenuCommand('view:toggle-panel', { panel: 'preview', visible: item.checked })
-        },
-        {
-          label: 'Properties',
-          type: 'checkbox',
-          checked: true,
-          click: (item) => sendMenuCommand('view:toggle-panel', { panel: 'properties', visible: item.checked })
-        },
-        { type: 'separator' },
-        {
-          label: 'Piano Roll',
-          type: 'checkbox',
-          checked: true,
-          click: (item) => sendMenuCommand('view:toggle-panel', { panel: 'midi', visible: item.checked })
-        },
-        {
-          label: 'Timeline',
-          type: 'checkbox',
-          checked: true,
-          click: (item) => sendMenuCommand('view:toggle-panel', { panel: 'video', visible: item.checked })
-        }
-      ]
-    },
-    {
-      label: 'Help',
-      submenu: [
-        {
-          label: `Version ${app.getVersion()}`,
-          enabled: false
-        },
-        { type: 'separator' },
-        {
-          label: 'GitHub Repository',
-          click: () => {
-            void shell.openExternal('https://github.com/opria123/octave')
-          }
-        },
-        {
-          label: 'Support',
-          click: () => {
-            void shell.openExternal('https://github.com/opria123/octave/issues')
-          }
-        }
-      ]
+  const template = createApplicationMenuTemplate({
+    version: app.getVersion(),
+    sendCommand: sendMenuCommand,
+    openExternal: (url) => {
+      void shell.openExternal(url)
     }
-  ]
+  })
 
   const menu = Menu.buildFromTemplate(template)
   Menu.setApplicationMenu(menu)
@@ -588,6 +531,134 @@ ipcMain.handle('dialog:openFolder', async () => {
   return result.filePaths[0]
 })
 
+// Import song package dialog
+ipcMain.handle('dialog:importSongPackage', async () => {
+  let targetLibrary = allowedProjectPath
+
+  if (!targetLibrary) {
+    // No library folder is open yet - ask to open one
+    const libChoiceResult = await dialog.showMessageBox({
+      type: 'question',
+      buttons: ['Select Library Folder', 'Cancel'],
+      defaultId: 0,
+      title: 'No Library Folder Open',
+      message:
+        'A song library folder must be open to import packages. Would you like to select a song library folder now?'
+    })
+
+    if (libChoiceResult.response === 1) {
+      return null
+    }
+
+    const libResult = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+      title: 'Select Songs Folder'
+    })
+
+    if (libResult.canceled || libResult.filePaths.length === 0) {
+      return null
+    }
+
+    targetLibrary = resolve(libResult.filePaths[0])
+    allowedProjectPath = targetLibrary
+  }
+
+  // Select the package file to import
+  const fileResult = await dialog.showOpenDialog({
+    properties: ['openFile', 'multiSelections'],
+    title: 'Select Song Package Files (.sng or rb3con)',
+    filters: [
+      { name: 'Song Packages', extensions: ['sng', 'con', 'live', 'rb3con'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  })
+
+  if (fileResult.canceled || fileResult.filePaths.length === 0) {
+    // If they just opened the library but cancelled the file selection,
+    // we should still return the library so it gets loaded in the explorer!
+    return targetLibrary
+  }
+
+  const failures: Array<{ filePath: string; error: string }> = []
+  let importedCount = 0
+  let skippedCount = 0
+  let cancelled = false
+  let conflictPolicy: ImportConflictPolicy | null = null
+
+  const resolveConflict: ImportConflictResolver = async (destinationPath) => {
+    if (conflictPolicy) return conflictPolicy
+
+    const conflictResult = await dialog.showMessageBox({
+      type: 'question',
+      buttons: ['Skip', 'Create New', 'Overwrite', 'Cancel'],
+      defaultId: 1,
+      cancelId: 3,
+      title: 'Song Already Exists',
+      message: `A song folder named “${basename(destinationPath)}” already exists.`,
+      detail: 'Choose how to handle this and all other conflicts in the current import operation.'
+    })
+    conflictPolicy = (['skip', 'create-new', 'overwrite', 'cancel'] as const)[
+      conflictResult.response
+    ]
+    return conflictPolicy
+  }
+
+  // Import sequentially to keep disk and memory pressure bounded for large packages.
+  for (const selectedPath of fileResult.filePaths) {
+    try {
+      const fileHandle = await open(selectedPath, 'r')
+      const magicBuffer = Buffer.alloc(6)
+      try {
+        await fileHandle.read(magicBuffer, 0, 6, 0)
+      } finally {
+        await fileHandle.close()
+      }
+
+      const magic6 = magicBuffer.toString('ascii')
+      const magic4 = magicBuffer.subarray(0, 4).toString('ascii')
+      let importedSongs = 0
+      if (magic6 === 'SNGPKG') {
+        importedSongs = (await importSng(selectedPath, targetLibrary, resolveConflict)) ? 1 : 0
+      } else if (magic4 === 'CON ' || magic4 === 'LIVE' || magic4 === 'PIRS') {
+        importedSongs = (await importCon(selectedPath, targetLibrary, resolveConflict)).length
+      } else {
+        throw new Error('Unrecognized package header')
+      }
+      if (importedSongs > 0) importedCount += 1
+      else skippedCount += 1
+    } catch (error) {
+      const partialDirs =
+        error instanceof ImportCancelledError || error instanceof PartialImportError
+          ? error.importedDirs
+          : []
+      if (partialDirs.length > 0) importedCount += 1
+      if (error instanceof ImportCancelledError) {
+        cancelled = true
+        break
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      failures.push({ filePath: selectedPath, error: message })
+      console.error(`Failed to import package file ${selectedPath}:`, error)
+    }
+  }
+
+  const failureDetails = failures
+    .map(({ filePath, error }) => `• ${filePath.split(/[\\/]/).pop()}: ${error}`)
+    .join('\n')
+  await dialog.showMessageBox({
+    type: failures.length === 0 ? 'info' : importedCount > 0 ? 'warning' : 'error',
+    title: cancelled
+      ? 'Import Cancelled'
+      : failures.length === 0
+        ? 'Import Complete'
+        : 'Import Completed with Errors',
+    message: `${importedCount} package${importedCount === 1 ? '' : 's'} imported${skippedCount ? `; ${skippedCount} skipped` : ''}.`,
+    ...(failureDetails ? { detail: failureDetails } : {})
+  })
+
+  return targetLibrary
+})
+
 // Open audio file dialog
 ipcMain.handle('dialog:openAudio', async () => {
   const result = await dialog.showOpenDialog({
@@ -812,18 +883,20 @@ ipcMain.handle('folder:scan', async (_event, folderPath: string) => {
   if (!allowedProjectPath) {
     allowedProjectPath = resolve(folderPath)
   }
-  const songs: Array<{ id: string; path: string; name: string }> = []
+  const songs: Array<{ id: string; path: string; name: string; addedAt: number }> = []
 
   try {
     // Check if the opened folder itself is a song (contains song.ini)
     const selfIniPath = join(folderPath, 'song.ini')
     try {
       await stat(selfIniPath)
+      const folderStat = await stat(folderPath)
       const folderName = folderPath.split(/[\\/]/).pop() || 'song'
       songs.push({
         id: folderName,
         path: folderPath,
-        name: folderName
+        name: folderName,
+        addedAt: folderStat.birthtimeMs || folderStat.ctimeMs
       })
     } catch {
       // Not a song folder itself — scan children
@@ -839,10 +912,12 @@ ipcMain.handle('folder:scan', async (_event, folderPath: string) => {
 
         try {
           await stat(iniPath)
+          const folderStat = await stat(songPath)
           songs.push({
             id: entry.name,
             path: songPath,
-            name: entry.name
+            name: entry.name,
+            addedAt: folderStat.birthtimeMs || folderStat.ctimeMs
           })
         } catch {
           // No song.ini, skip this folder
@@ -921,6 +996,90 @@ ipcMain.handle('song:writeIni', async (_event, songPath: string, metadata: Recor
     console.error('Error writing song.ini:', error)
     return false
   }
+})
+
+ipcMain.handle('song:searchMetadata', async (_event, rawRequest: SongMetadataSearchRequest) => {
+  const requestedArtist = rawRequest.artist.trim()
+  const request = {
+    artist: /^unknown(?: artist)?$/i.test(requestedArtist)
+      ? ''
+      : requestedArtist.slice(0, 120),
+    title: rawRequest.title.trim().slice(0, 160),
+    durationMs: rawRequest.durationMs
+  }
+  if (!request.title) return []
+  const cacheKey = `${request.artist}\n${request.title}\n${request.durationMs ?? ''}`.toLocaleLowerCase()
+  const cached = metadataSearchCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) return cached.results
+
+  const musicBrainzRequest = async (): Promise<SongMetadataSearchResult[]> => {
+    // MusicBrainz asks clients to stay at or below one request per second.
+    // Reserve the slot before sleeping so overlapping searches queue behind
+    // each other instead of firing together.
+    const slot = Math.max(Date.now(), lastMusicBrainzRequestAt + 1000)
+    lastMusicBrainzRequestAt = slot
+    const waitMs = slot - Date.now()
+    if (waitMs > 0) await new Promise((resolveWait) => setTimeout(resolveWait, waitMs))
+    const params = new URLSearchParams({
+      query: buildMusicBrainzQuery(request),
+      fmt: 'json',
+      limit: '15'
+    })
+    const response = await net.fetch(`https://musicbrainz.org/ws/2/recording/?${params}`, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': `OCTAVE/${app.getVersion()} (https://github.com/opria123/octave)`
+      }
+    })
+    if (!response.ok) throw new Error(`MusicBrainz search failed (${response.status}).`)
+    return parseMusicBrainzSearchResponse(await response.json(), request)
+  }
+
+  const theAudioDbRequest = async (): Promise<SongMetadataSearchResult[]> => {
+    if (!request.artist) return []
+    const params = new URLSearchParams({ s: request.artist, t: request.title })
+    const response = await net.fetch(
+      `https://www.theaudiodb.com/api/v1/json/123/searchtrack.php?${params}`
+    )
+    if (!response.ok) throw new Error(`TheAudioDB search failed (${response.status}).`)
+    return parseTheAudioDbSearchResponse(await response.json(), request)
+  }
+
+  const providerResults = await Promise.allSettled([musicBrainzRequest(), theAudioDbRequest()])
+  const successful = providerResults.flatMap((result) =>
+    result.status === 'fulfilled' ? [result.value] : []
+  )
+  if (successful.length === 0) throw new Error('All metadata providers failed.')
+  const results = mergeMetadataResults(...successful)
+  metadataSearchCache.set(cacheKey, { expiresAt: Date.now() + 5 * 60_000, results })
+  return results
+})
+
+ipcMain.handle('song:fetchMetadataArtwork', async (_event, artwork: MetadataArtwork) => {
+  let artworkUrl: string
+  if (artwork.source === 'cover-art-archive') {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(artwork.releaseGroupId)) {
+      return null
+    }
+    artworkUrl = `https://coverartarchive.org/release-group/${artwork.releaseGroupId}/front-500`
+  } else {
+    const url = new URL(artwork.url)
+    if (url.protocol !== 'https:' || !['theaudiodb.com', 'www.theaudiodb.com', 'r2.theaudiodb.com'].includes(url.hostname)) {
+      return null
+    }
+    artworkUrl = url.toString()
+  }
+
+  const response = await net.fetch(artworkUrl, {
+    headers: { 'User-Agent': `OCTAVE/${app.getVersion()} (https://github.com/opria123/octave)` }
+  })
+  if (response.status === 404) return null
+  if (!response.ok) throw new Error(`Cover Art Archive lookup failed (${response.status}).`)
+  const contentType = response.headers.get('content-type')?.split(';')[0]
+  if (contentType !== 'image/jpeg' && contentType !== 'image/png') return null
+  const buffer = Buffer.from(await response.arrayBuffer())
+  if (buffer.length > 10 * 1024 * 1024) throw new Error('Album artwork is too large to import.')
+  return `data:${contentType};base64,${buffer.toString('base64')}`
 })
 
 // Read notes.mid file (also returns chart format info)
@@ -1080,6 +1239,39 @@ ipcMain.handle('song:exportSng', async (_event, songPath: string, metadata: Reco
   }
 })
 
+// Export song to .con (Rock Band 3 STFS) package
+ipcMain.handle(
+  'song:exportCon',
+  async (_event, songPath: string, metadata: Record<string, unknown>, outputPath: string) => {
+    if (!isPathAllowed(songPath)) {
+      return { success: false, error: 'Path to song directory not allowed' }
+    }
+
+    const resolvedOutput = resolve(outputPath)
+    const parentDir = resolve(resolvedOutput, '..')
+    try {
+      const parentStat = await stat(parentDir)
+      if (!parentStat.isDirectory()) {
+        return { success: false, error: 'Output directory does not exist' }
+      }
+    } catch {
+      return { success: false, error: 'Output directory does not exist or is inaccessible' }
+    }
+
+    try {
+      await packRb3con(
+        songPath,
+        metadata as Record<string, string | number | boolean>,
+        resolvedOutput
+      )
+      return { success: true }
+    } catch (error) {
+      console.error('Error packing CON:', error)
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+)
+
 // Check if a file exists
 ipcMain.handle('fs:fileExists', async (_event, filePath: string) => {
   try {
@@ -1199,6 +1391,11 @@ ipcMain.handle('song:writeAlbumArt', async (_event, songPath: string, dataUrl: s
 
     const artPath = join(songPath, `album.${ext}`)
     await writeFile(artPath, buffer)
+    await Promise.allSettled(
+      ['png', 'jpg', 'jpeg']
+        .filter((candidate) => candidate !== ext)
+        .map((candidate) => unlink(join(songPath, `album.${candidate}`)))
+    )
     return true
   } catch (error) {
     console.error('Error writing album art:', error)

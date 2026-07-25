@@ -27,11 +27,69 @@
 }
 
 /* Song list */
+.explorer-library-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 8px 0;
+}
+
+.explorer-library-search,
+.explorer-library-selects select {
+  min-width: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 11px;
+  padding: 6px 8px;
+}
+
+.explorer-library-selects {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
 .explorer-song-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 8px;
+}
+
+.explorer-song-group-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 4px 4px 2px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.explorer-cache-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.explorer-cache-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--accent-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 .explorer-song-item {
