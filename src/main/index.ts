@@ -292,7 +292,11 @@ function createApplicationMenu(): void {
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'song-file',
-    privileges: { stream: true, supportFetchAPI: true }
+    // corsEnabled + the Access-Control-Allow-Origin header in the handler are
+    // required for fetch() from the file:// renderer origin: Chromium in
+    // Electron >= 39.3 blocks cross-origin fetches to custom schemes that are
+    // not CORS-enabled (stems stopped loading after the 39.8 upgrade, #34).
+    privileges: { stream: true, supportFetchAPI: true, corsEnabled: true }
   }
 ])
 
@@ -326,7 +330,18 @@ app.whenReady().then(() => {
     // On macOS/Linux paths start with /, so file:// + /path = file:///path (correct)
     // On Windows we need file:/// + C:/path
     const fileUrl = normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`
-    return net.fetch(fileUrl)
+    return net.fetch(fileUrl).then((response) => {
+      // The renderer's file:// origin makes every song-file fetch cross-origin,
+      // so the response must carry an explicit CORS grant (see
+      // registerSchemesAsPrivileged above).
+      const headers = new Headers(response.headers)
+      headers.set('Access-Control-Allow-Origin', '*')
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers
+      })
+    })
   })
 
   // Default open or close DevTools by F12 in development
