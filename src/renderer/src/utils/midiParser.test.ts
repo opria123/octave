@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { parseMidiBase64, serializeMidiBase64 } from './midiParser'
-import type { Note } from '../types'
+import { parseMidiBase64, serializeMidiBase64, parseChartFile, serializeChartFile } from './midiParser'
+import type { LaneMarker, Note } from '../types'
 
 // Issue #12: open frets and tap notes reverted to green/strums after a
 // save → reopen round-trip because serializeMidiBase64 dropped them.
@@ -58,5 +58,76 @@ describe('open fret / tap note MIDI round-trip', () => {
     )
     expect(twice.notes.find((n) => n.tick === 0)?.lane).toBe('open')
     expect(twice.notes.find((n) => n.tick === 480)?.flags?.isTap).toBe(true)
+  })
+})
+
+// Issue #37: BRE sections and drum rolls disappeared after a save → reopen
+// round-trip because both serializers dropped lane markers entirely.
+describe('lane marker round-trip', () => {
+  const tempo = [{ tick: 0, bpm: 120 }]
+  const timeSig = [{ tick: 0, numerator: 4, denominator: 4 }]
+  const mkNote = (over: Partial<Note>): Note => ({
+    id: 'x',
+    tick: 0,
+    duration: 120,
+    instrument: 'guitar',
+    difficulty: 'expert',
+    lane: 'green',
+    velocity: 100,
+    ...over
+  })
+  const mkMarker = (over: Partial<LaneMarker>): LaneMarker => ({
+    id: 'm',
+    tick: 960,
+    duration: 480,
+    instrument: 'drums',
+    type: 'drumRoll',
+    ...over
+  })
+  // The serializers only emit tracks that contain notes, so seed one per instrument.
+  const notes: Note[] = [
+    mkNote({ instrument: 'drums', lane: 'kick' }),
+    mkNote({ instrument: 'guitar', lane: 'green' })
+  ]
+
+  const findMarker = (
+    markers: LaneMarker[],
+    instrument: string,
+    type: string
+  ): LaneMarker | undefined =>
+    markers.find((m) => m.instrument === instrument && m.type === type)
+
+  it('preserves BRE and drum roll markers across MIDI serialize → parse', () => {
+    const markers: LaneMarker[] = [
+      mkMarker({ tick: 960, type: 'drumRoll' }),
+      mkMarker({ tick: 1920, type: 'bre' }),
+      mkMarker({ tick: 960, instrument: 'guitar', type: 'tremolo' }),
+      mkMarker({ tick: 1920, instrument: 'guitar', type: 'trill' }),
+      mkMarker({ tick: 2880, instrument: 'guitar', type: 'bre' })
+    ]
+    const parsed = parseMidiBase64(
+      serializeMidiBase64(notes, tempo, timeSig, 480, [], [], [], [], [], markers)
+    )
+
+    expect(findMarker(parsed.laneMarkers, 'drums', 'drumRoll')).toMatchObject({ tick: 960, duration: 480 })
+    expect(findMarker(parsed.laneMarkers, 'drums', 'bre')).toMatchObject({ tick: 1920, duration: 480 })
+    expect(findMarker(parsed.laneMarkers, 'guitar', 'tremolo')).toMatchObject({ tick: 960 })
+    expect(findMarker(parsed.laneMarkers, 'guitar', 'trill')).toMatchObject({ tick: 1920 })
+    expect(findMarker(parsed.laneMarkers, 'guitar', 'bre')).toMatchObject({ tick: 2880 })
+    // The BRE companion notes (121-124) must not leak into playable notes.
+    expect(parsed.notes).toHaveLength(notes.length)
+  })
+
+  it('preserves drum fill/roll markers across .chart serialize → parse', () => {
+    const markers: LaneMarker[] = [
+      mkMarker({ tick: 960, type: 'drumRoll' }),
+      mkMarker({ tick: 1920, type: 'bre' })
+    ]
+    const parsed = parseChartFile(
+      serializeChartFile(notes, tempo, timeSig, [], [], [], [], [], {}, 192, markers)
+    )
+
+    expect(findMarker(parsed.laneMarkers, 'drums', 'drumRoll')).toMatchObject({ tick: 960, duration: 480 })
+    expect(findMarker(parsed.laneMarkers, 'drums', 'bre')).toMatchObject({ tick: 1920, duration: 480 })
   })
 })

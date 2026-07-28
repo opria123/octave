@@ -481,11 +481,15 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
         continue
       }
 
-      // Lane markers
+      // Lane markers. RB/CH .mid convention: notes 120-124 mark a BRE / drum
+      // fill across all five lanes (120 carries the marker, 121-124 are its
+      // companions); on PART DRUMS 126/127 are single/double drum rolls while
+      // on other instruments 126 is tremolo and 127 is trill.
       let laneMarkerType: LaneMarkerType | null = null
-      if (noteNumber === 126) laneMarkerType = 'trill'
-      else if (noteNumber === 127) laneMarkerType = 'tremolo'
-      else if (noteNumber === 120 && (instrument === 'drums')) laneMarkerType = 'bre'
+      if (noteNumber === 126) laneMarkerType = instrument === 'drums' ? 'drumRoll' : 'tremolo'
+      else if (noteNumber === 127) laneMarkerType = instrument === 'drums' ? 'drumRoll' : 'trill'
+      else if (noteNumber === 120) laneMarkerType = 'bre'
+      else if (noteNumber >= 121 && noteNumber <= 124) continue // BRE companion lanes of 120
       else if (noteNumber === 103 && (instrument === 'drums')) laneMarkerType = 'discoFlip'
       else if (noteNumber === 65 && (instrument === 'drums')) laneMarkerType = 'drumRoll'
       if (laneMarkerType) {
@@ -1168,6 +1172,20 @@ export function parseChartFile(chartText: string): ParsedMidiData {
         continue
       }
 
+      // Drum lane markers: S 64 = fill/BRE, S 65 = drum roll, S 66 = double
+      // drum roll. Read from the expert section only — mirrors how they are
+      // written and avoids duplicates when charts repeat them per difficulty.
+      if (type === 'drums' && difficulty === 'expert') {
+        const specialMatch = line.match(/^\s*(\d+)\s*=\s*S\s+(6[456])\s+(\d+)/)
+        if (specialMatch) {
+          const tick = Math.round(parseInt(specialMatch[1], 10) * tickScale)
+          const duration = Math.round(parseInt(specialMatch[3], 10) * tickScale)
+          const markerType: LaneMarkerType = specialMatch[2] === '64' ? 'bre' : 'drumRoll'
+          laneMarkers.push({ id: uuidv4(), tick, duration, instrument, type: markerType })
+          continue
+        }
+      }
+
       // Solo: tick = E solo / tick = E soloend (some charts)
       // Also check for solo markers via S type (less common)
     }
@@ -1274,7 +1292,7 @@ export function serializeChartFile(
   songSections: SongSection[] = [],
   metadata: Record<string, unknown> = {},
   resolution = 192,
-  _laneMarkers: LaneMarker[] = [],
+  laneMarkers: LaneMarker[] = [],
   venueTrack: VenueTrackData = createEmptyVenueTrack()
 ): string {
   const tickScale = resolution / 480 // Convert from internal 480 PPQ to chart resolution
@@ -1421,6 +1439,18 @@ export function serializeChartFile(
         const duration = scaleTick(sp.duration)
         entries.push({ tick, text: `${tick} = S 2 ${duration}` })
       }
+      // Drum lane markers: .chart encodes a fill/BRE as S 64 and a drum roll
+      // as S 65. Trill/tremolo/disco flip have no .chart representation.
+      if (isDrums) {
+        for (const marker of laneMarkers) {
+          if (marker.instrument !== instrument) continue
+          const specialCode = marker.type === 'bre' ? 64 : marker.type === 'drumRoll' ? 65 : null
+          if (specialCode === null) continue
+          const tick = scaleTick(marker.tick)
+          const duration = scaleTick(marker.duration)
+          entries.push({ tick, text: `${tick} = S ${specialCode} ${duration}` })
+        }
+      }
     }
 
     // Sort by tick
@@ -1485,7 +1515,7 @@ export function serializeMidiBase64(
   vocalPhrases: VocalPhrase[] = [],
   soloSections: SoloSection[] = [],
   songSections: SongSection[] = [],
-  _laneMarkers: LaneMarker[] = [],
+  laneMarkers: LaneMarker[] = [],
   venueTrack: VenueTrackData = createEmptyVenueTrack()
 ): string {
   const midi = new Midi()
@@ -1605,6 +1635,22 @@ export function serializeMidiBase64(
             durationTicks: Math.max(solo.duration, 1),
             velocity: 1.0
           })
+        }
+      }
+      // Lane markers (see the parse-side mapping): BRE spans notes 120-124,
+      // drum rolls are 126 on PART DRUMS, tremolo/trill are 126/127 elsewhere.
+      // Disco flip has no note representation (it's a [mix N drums0d] text
+      // event) and is not serialized yet.
+      for (const marker of laneMarkers) {
+        if (marker.instrument !== instrumentName || marker.type === 'discoFlip') continue
+        const durationTicks = Math.max(marker.duration, 1)
+        if (marker.type === 'bre') {
+          for (let breNote = 120; breNote <= 124; breNote++) {
+            track.addNote({ midi: breNote, ticks: marker.tick, durationTicks, velocity: 1.0 })
+          }
+        } else {
+          const markerNote = marker.type === 'trill' && instrumentName !== 'drums' ? 127 : 126
+          track.addNote({ midi: markerNote, ticks: marker.tick, durationTicks, velocity: 1.0 })
         }
       }
     }

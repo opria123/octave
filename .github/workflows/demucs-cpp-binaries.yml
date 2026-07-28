@@ -20,13 +20,14 @@ on:
         required: false
         default: 'main'
   push:
-    branches: [master, main]
+    branches: [master, main, beta]
     paths:
       - '.github/workflows/demucs-cpp-binaries.yml'
       - 'src/main/strumIntegration/demucsCppBootstrap.ts'
+      - 'scripts/bundle_macos_dylibs.py'
 
 env:
-  BIN_VERSION: '2'
+  BIN_VERSION: '3'
   UPSTREAM_REPO: 'sevagh/demucs.cpp'
   UPSTREAM_REF: ${{ github.event.inputs.upstream_ref || 'main' }}
 
@@ -202,13 +203,22 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path build | Out-Null
           cd build
-          # Use ClangCL toolset — ships with VS 2022 on windows-latest and
-          # accepts the GCC-style warning flags (-Wall, -Wextra, ...) that
-          # upstream's CMakeLists.txt adds unconditionally. MSVC's cl.exe
-          # rejects them.
+          # Pick the CMake generator that matches the Visual Studio actually
+          # installed on the runner. windows-latest migrated from VS 2022 to
+          # VS 2026, so a hard-coded generator breaks whenever the image
+          # rolls over.
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsMajor = ((& $vswhere -latest -products * -property installationVersion) -split '\.')[0]
+          $generator = @{ '17' = 'Visual Studio 17 2022'; '18' = 'Visual Studio 18 2026' }[$vsMajor]
+          if (-not $generator) { throw "No CMake generator mapping for Visual Studio major version '$vsMajor'" }
+          Write-Host "Using generator: $generator"
+          # Use ClangCL toolset — ships with Visual Studio on windows-latest
+          # and accepts the GCC-style warning flags (-Wall, -Wextra, ...)
+          # that upstream's CMakeLists.txt adds unconditionally. MSVC's
+          # cl.exe rejects them.
           # Pass /EHsc explicitly: ClangCL under MSBuild does not enable
           # C++ exceptions by default, but libnyquist uses try/throw.
-          cmake -G "Visual Studio 17 2022" -A x64 -T ClangCL `
+          cmake -G "$generator" -A x64 -T ClangCL `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_CXX_FLAGS="/EHsc" `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_TOOLCHAIN" `
@@ -263,13 +273,11 @@ jobs:
               fi
             done
           elif [ "${{ matrix.platform }}" = "darwin" ]; then
-            # Copy libomp + openblas dylibs and rewrite RPATH to look in the
-            # tarball's own directory.
-            for dylib_dir in "$LIBOMP_PATH/lib" "$OPENBLAS_PATH/lib"; do
-              cp "$dylib_dir"/libomp*.dylib staged/ 2>/dev/null || true
-              cp "$dylib_dir"/libopenblas*.dylib staged/ 2>/dev/null || true
-            done
-            install_name_tool -add_rpath "@executable_path" "staged/${{ matrix.exe }}" || true
+            python3 scripts/test_bundle_macos_dylibs.py
+            python3 scripts/bundle_macos_dylibs.py "staged/${{ matrix.exe }}" \
+              --search "$OPENBLAS_PATH/lib" \
+              --search "$LIBOMP_PATH/lib" \
+              --search "$(brew --prefix gcc)/lib/gcc/current"
           fi
 
       - name: Create tarball
@@ -281,7 +289,7 @@ jobs:
           echo "ASSET=$ASSET" >> "$GITHUB_ENV"
 
       - name: Ensure release exists
-        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -295,7 +303,7 @@ jobs:
           fi
 
       - name: Upload to release
-        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
