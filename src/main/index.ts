@@ -1439,17 +1439,16 @@ ipcMain.handle('song:importAudio', async (_event, songPath: string, audioSourceP
 })
 
 // Read audio files - returns audio stems found in the song folder.
-// `song.{ogg,opus,mp3,wav}` (the full mix) is excluded from the timeline
-// when other stems are present — Clone Hero / YARG keep song.ogg around for
-// menu previews, but loading it alongside the per-instrument stems would
-// double the audio. When song.* is the only audio file, it's returned so
-// the editor still has playback.
+// `song.{ogg,opus,mp3,wav}` is always included alongside the per-instrument
+// stems: in the CH/YARG convention song.ogg is the backing/catch-all track
+// (the Demucs "other" stem in auto-charted songs) and the games mix it with
+// every stem at playback, so the editor does the same (issue #45). Legacy
+// OCTAVE exports wrote a silent song.ogg next to the stems — mixing that in
+// is harmless.
 ipcMain.handle('song:readAudio', async (_event, songPath: string) => {
   if (!isPathAllowed(songPath)) return null
   const audioExtensions = ['.ogg', '.mp3', '.opus', '.wav']
-  const fullMixBaseNames = new Set(['song'])
-  const fullMixCandidates: { filePath: string; filename: string }[] = []
-  const stemResults: { filePath: string; filename: string }[] = []
+  const results: { filePath: string; filename: string }[] = []
 
   try {
     const entries = await readdir(songPath)
@@ -1464,18 +1463,12 @@ ipcMain.handle('song:readAudio', async (_event, songPath: string) => {
       } catch {
         continue
       }
-      const baseName = entry.substring(0, lastDot).toLowerCase()
-      if (fullMixBaseNames.has(baseName)) {
-        fullMixCandidates.push({ filePath: audioPath, filename: entry })
-      } else {
-        stemResults.push({ filePath: audioPath, filename: entry })
-      }
+      results.push({ filePath: audioPath, filename: entry })
     }
   } catch {
     // Folder not readable
   }
 
-  const results = stemResults.length > 0 ? stemResults : fullMixCandidates
   return results.length > 0 ? results : null
 })
 

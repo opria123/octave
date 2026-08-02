@@ -62,7 +62,7 @@ PRESPLIT_STEM_REGISTRY: dict[Path, dict[str, Path]] = {}
 # OctaveVocalsCharter.detect_harmonies override.
 HARMONY_OVERRIDE_REGISTRY: dict[Path, Path] = {}
 # Maps a song-mix Path to extra audio files (uncharted) that should be
-# merged into other.ogg alongside the user-supplied "other" stem (if any)
+# merged into song.ogg alongside the user-supplied "other" stem (if any)
 # so all uncharted musical content plays back in-game. Populated by
 # collect_audio_sources(); consumed by OctaveBatchPipeline.convert_to_ogg.
 EXTRAS_REGISTRY: dict[Path, list[Path]] = {}
@@ -1036,22 +1036,37 @@ def build_pipeline(
             # users report as "all stems are half a beat off").
             export_kwargs = dict(kwargs)
             # CH/YARG mix song.ogg + every per-instrument stem together at
-            # playback. When we have pre-split stems, writing a full mix to
-            # song.ogg would double every instrument in-game. Replace
-            # song.ogg with a silent track of matching duration so the games
-            # still find the file (some menu / preview paths require it) but
-            # don't double the audio. The per-stem oggs carry the real audio.
+            # playback, and neither game loads an "other.ogg" — song.ogg IS
+            # the backing/catch-all track. So the "other" stem (plus any
+            # uncharted extras) must be written to song.ogg itself; writing
+            # it anywhere else leaves the song silent in-game (issue #45).
+            # Only when the recognised per-instrument oggs already carry all
+            # the audio do we write a silent song.ogg of matching duration
+            # (some menu / preview paths require the file to exist, but a
+            # real full mix there would double every instrument in-game).
             preset = PRESPLIT_STEM_REGISTRY.get(input_resolved) or {}
             extras = EXTRAS_REGISTRY.get(input_resolved) or []
             backing = BACKING_VOCALS_REGISTRY.get(input_resolved) or {}
             # Keep-stems: when the user asked to retain the Demucs-separated
-            # stems, treat them like pre-split stems so each one is exported as
-            # a per-instrument ogg and song.ogg is written silent (avoids
-            # CH/YARG doubling song.ogg + every stem).
+            # stems, treat them like pre-split stems so each one is exported
+            # as a per-instrument ogg.
             if not preset and KEEP_STEMS:
                 preset = SEPARATED_STEM_REGISTRY.get(input_resolved) or {}
-            has_full_coverage = bool(preset) or bool(extras) or bool(backing)
-            if has_full_coverage:
+            song_sources: list[Path] = []
+            if preset.get("other") is not None:
+                song_sources.append(preset["other"])
+            song_sources.extend(extras)
+            if song_sources:
+                try:
+                    if len(song_sources) == 1:
+                        super().convert_to_ogg(song_sources[0], output_path, **export_kwargs)
+                    else:
+                        self._octave_export_combined_ogg(song_sources, output_path, **export_kwargs)
+                    logger.info("  Exported song.ogg from the 'other' stem" + (" + extras" if extras else ""))
+                except Exception as exc:
+                    logger.warning(f"  ⚠ Failed to write song.ogg from stems, falling back to full mix: {exc}")
+                    super().convert_to_ogg(input_path, output_path, *args, **kwargs)
+            elif preset or backing:
                 try:
                     self._octave_write_silent_ogg(input_path, output_path, **export_kwargs)
                     logger.info("  Wrote silent song.ogg (per-stem oggs carry the audio)")
@@ -1088,15 +1103,15 @@ def build_pipeline(
             # When the user supplied pre-split stems for this mix, also export
             # each stem as `{stem}.ogg` alongside song.ogg so Clone Hero / YARG
             # can mute the corresponding instrument when notes are missed.
-            # Extras (uncharted audio) get merged into other.ogg since "other"
-            # is the catch-all uncharted bucket in CH/YARG.
+            # The "other" stem is NOT exported here — it (plus any extras)
+            # already went into song.ogg above, the only filename the games
+            # load for backing audio.
             # Map our internal stem names to the filenames recognised by
             # Clone Hero / YARG.
             stem_filenames = {
                 "drums": "drums.ogg",
                 "bass": "bass.ogg",
                 "vocals": "vocals.ogg",
-                "other": "other.ogg",
                 "guitar": "guitar.ogg",
                 "piano": "keys.ogg",
             }
@@ -1106,23 +1121,10 @@ def build_pipeline(
                     continue
                 dest = song_folder / dest_name
                 try:
-                    if stem_name == "other" and extras:
-                        # Merge user's other stem with extras into other.ogg.
-                        self._octave_export_combined_ogg([src_path, *extras], dest, **export_kwargs)
-                        logger.info(f"  Exported stem (with extras): {dest.name}")
-                    else:
-                        super().convert_to_ogg(src_path, dest, **export_kwargs)
-                        logger.info(f"  Exported stem: {dest.name}")
+                    super().convert_to_ogg(src_path, dest, **export_kwargs)
+                    logger.info(f"  Exported stem: {dest.name}")
                 except Exception as exc:
                     logger.warning(f"  ⚠ Failed to export stem {dest_name}: {exc}")
-
-            # No "other" stem but extras present → export extras as other.ogg.
-            if "other" not in preset and extras:
-                try:
-                    self._octave_export_combined_ogg(extras, song_folder / "other.ogg", **export_kwargs)
-                    logger.info("  Exported extras as: other.ogg")
-                except Exception as exc:
-                    logger.warning(f"  ⚠ Failed to export other.ogg: {exc}")
 
         def _octave_write_silent_ogg(self, ref_path: Path, dest: Path, **convert_kwargs) -> None:
             """Write a silent ogg matching the reference audio's duration.
@@ -1757,7 +1759,8 @@ def collect_audio_sources(payload: dict[str, Any], cache_dir: Path, run_id: str)
     # and exported as vocals_1.ogg / vocals_2.ogg via BACKING_VOCALS_REGISTRY.
     #
     # "extras" is a list of additional uncharted audio files/URLs. They are
-    # summed into the auto-mix and exported as crowd.ogg for in-game playback.
+    # summed into the auto-mix and merged into song.ogg (the games' backing
+    # track) for in-game playback.
     stem_songs = payload.get("stemSongs") or []
     if stem_songs:
         import numpy as _np
@@ -1823,7 +1826,7 @@ def collect_audio_sources(payload: dict[str, Any], cache_dir: Path, run_id: str)
                 crowd_path = _resolve_stem(crowd_raw, f"{song_name}/crowd")
 
             # Extras: uncharted audio summed into the auto-mix and merged
-            # into other.ogg for in-game playback.
+            # into song.ogg (the games' backing track) for in-game playback.
             extras_paths: list[Path] = []
             for ex_idx, raw_val in enumerate(extras_inputs):
                 if not raw_val or not str(raw_val).strip():
@@ -1984,10 +1987,19 @@ def _strip_pro_keys_tracks(midi_path: Path) -> int:
 
 
 STAR_POWER_NOTE = 116
+# Drum fill / activation lanes and the Big Rock Ending live on MIDI notes
+# 120-124. Moonscraper models them as Starpower objects (ProDrums_Activation)
+# and .chart export writes them as S 64, so leaving them behind makes charts
+# still show "Star Power" in other editors after the 116 phrases are gone.
+# They only exist to trigger Overdrive anyway, so the starPower=false toggle
+# removes them too (issue #42 follow-up).
+ACTIVATION_LANE_NOTES = frozenset(range(120, 125))
+STAR_POWER_STRIP_NOTES = frozenset({STAR_POWER_NOTE}) | ACTIVATION_LANE_NOTES
 
 
 def _strip_star_power_phrases(midi_path: Path) -> int:
-    """Remove every Star Power / Overdrive phrase (MIDI note 116) from the
+    """Remove every Star Power / Overdrive phrase (MIDI note 116) and every
+    drum fill / activation lane / BRE marker (MIDI notes 120-124) from the
     instrument and vocal tracks of notes.mid in place. This honors the
     user's `starPower=false` toggle (issue #42). Returns the number of
     events removed."""
@@ -2008,7 +2020,7 @@ def _strip_star_power_phrases(midi_path: Path) -> int:
         new_track = mido.MidiTrack()
         carry = 0
         for msg in track:
-            if msg.type in ('note_on', 'note_off') and getattr(msg, 'note', None) == STAR_POWER_NOTE:
+            if msg.type in ('note_on', 'note_off') and getattr(msg, 'note', None) in STAR_POWER_STRIP_NOTES:
                 removed += 1
                 carry += msg.time
                 continue
@@ -3004,7 +3016,7 @@ def run_pipeline(payload: dict[str, Any]) -> int:
                         emit_progress(
                             run_id,
                             "merge",
-                            f"Stripped {removed} Star Power phrase(s) from {notes_mid.name}",
+                            f"Stripped {removed} Star Power / activation-lane event(s) from {notes_mid.name}",
                             percent=min(96, source_start_percent + 65),
                             current_item=source.name,
                         )

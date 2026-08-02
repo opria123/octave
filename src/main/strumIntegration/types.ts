@@ -48,7 +48,8 @@ export interface AutoChartRunOptions {
    *
    * `extras` is a list of additional audio files/URLs that are NOT
    * charted. They are summed into the auto-mixed full mix and merged
-   * into other.ogg so players hear them during playback.
+   * into song.ogg (the games' backing track) so players hear them
+   * during playback.
    *
    * `crowd` is an optional single audio file exported directly as
    * crowd.ogg (CH/YARG play this as ambient crowd noise). Not included
