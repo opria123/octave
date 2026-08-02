@@ -56,6 +56,7 @@ export function Toolbar(): React.JSX.Element {
     autoChartDisableOnlineLookup,
     autoChartDownloadVideo,
     autoChartKeepStems,
+    autoChartStarPower,
     autoChartImproveTempo,
     autoChartSnapDrums,
     autoChartEnabledTracks,
@@ -656,6 +657,7 @@ export function Toolbar(): React.JSX.Element {
         disableOnlineLookup: autoChartDisableOnlineLookup,
         skipHarmonies: !autoChartEnabledTracks.harmonies,
         keepStems: autoChartKeepStems,
+        starPower: autoChartStarPower,
         autoTempo: autoChartImproveTempo,
         snapDrums: autoChartSnapDrums,
         enabledTracks: autoChartEnabledTracks,
@@ -689,6 +691,7 @@ export function Toolbar(): React.JSX.Element {
     autoChartFolders,
     autoChartImproveTempo,
     autoChartKeepStems,
+    autoChartStarPower,
     autoChartSnapDrums,
     autoChartStemFolders,
     autoChartStemSongs,
@@ -1985,6 +1988,24 @@ export function Toolbar(): React.JSX.Element {
                               Export the separated stems (drums, bass, vocals, etc.) as
                               per-instrument oggs in each song folder instead of discarding them.
                               Lets you remix or mute instruments in-game.
+                            </small>
+                          </span>
+                        </label>
+
+                        <label className="settings-checkbox-row">
+                          <input
+                            type="checkbox"
+                            checked={autoChartStarPower}
+                            onChange={(event) =>
+                              updateSettings({ autoChartStarPower: event.target.checked })
+                            }
+                            disabled={autoChartProgress.isRunning}
+                          />
+                          <span>
+                            Generate Star Power phrases
+                            <small style={{ display: 'block', opacity: 0.7 }}>
+                              Uncheck to create charts without any Star Power / Overdrive
+                              phrases. You can always add your own later in the editor.
                             </small>
                           </span>
                         </label>

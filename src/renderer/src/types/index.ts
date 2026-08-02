@@ -288,6 +288,7 @@ export interface AppSettings {
   autoChartDisableOnlineLookup: boolean
   autoChartDownloadVideo: boolean
   autoChartKeepStems: boolean
+  autoChartStarPower: boolean // Generate Star Power phrases in auto-charted songs (issue #42)
   autoChartImproveTempo: boolean
   autoChartSnapDrums: boolean
   autoChartEnabledTracks: AutoChartEnabledTracks

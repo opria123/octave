@@ -1983,6 +1983,45 @@ def _strip_pro_keys_tracks(midi_path: Path) -> int:
     return removed
 
 
+STAR_POWER_NOTE = 116
+
+
+def _strip_star_power_phrases(midi_path: Path) -> int:
+    """Remove every Star Power / Overdrive phrase (MIDI note 116) from the
+    instrument and vocal tracks of notes.mid in place. This honors the
+    user's `starPower=false` toggle (issue #42). Returns the number of
+    events removed."""
+    try:
+        import mido
+    except Exception:
+        return 0
+    mid = mido.MidiFile(str(midi_path))
+    removed = 0
+    for track in mid.tracks:
+        name = ""
+        for msg in track:
+            if msg.is_meta and msg.type == 'track_name':
+                name = str(getattr(msg, 'name', ''))
+                break
+        if not name.startswith("PART "):
+            continue
+        new_track = mido.MidiTrack()
+        carry = 0
+        for msg in track:
+            if msg.type in ('note_on', 'note_off') and getattr(msg, 'note', None) == STAR_POWER_NOTE:
+                removed += 1
+                carry += msg.time
+                continue
+            if carry:
+                msg = msg.copy(time=msg.time + carry)
+                carry = 0
+            new_track.append(msg)
+        track[:] = new_track
+    if removed > 0:
+        mid.save(str(midi_path))
+    return removed
+
+
 def _retime_midi_to_tempo_map(midi_path: Path, init_bpm: float, tempo_map: list[tuple[float, float]]) -> None:
     """Rewrite a STRUM-generated notes.mid (written with constant `init_bpm`)
     so it uses `tempo_map` while preserving each event's real-world time.
@@ -2807,6 +2846,10 @@ def run_pipeline(payload: dict[str, Any]) -> int:
     global INCLUDE_PRO_KEYS
     INCLUDE_PRO_KEYS = bool((enabled_tracks or {}).get('proKeys', True))
 
+    # Star Power generation toggle (community-requested, issue #42). On by
+    # default; when off, note-116 phrases are stripped from the finished chart.
+    generate_star_power = bool(payload.get("starPower", True))
+
     # Keep Demucs-separated stems as per-instrument oggs instead of discarding
     # them (community-requested). Off by default to preserve prior behaviour.
     global KEEP_STEMS
@@ -2954,6 +2997,19 @@ def run_pipeline(payload: dict[str, Any]) -> int:
                         )
                 except Exception as exc:
                     errors.append(f"{source.name}: pro-keys strip failed: {exc}")
+            if not generate_star_power and notes_mid.exists():
+                try:
+                    removed = _strip_star_power_phrases(notes_mid)
+                    if removed:
+                        emit_progress(
+                            run_id,
+                            "merge",
+                            f"Stripped {removed} Star Power phrase(s) from {notes_mid.name}",
+                            percent=min(96, source_start_percent + 65),
+                            current_item=source.name,
+                        )
+                except Exception as exc:
+                    errors.append(f"{source.name}: star-power strip failed: {exc}")
             if USER_TEMPO_MAP:
                 try:
                     if notes_mid.exists():

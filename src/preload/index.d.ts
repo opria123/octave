@@ -86,6 +86,7 @@ interface ChartEditorAPI {
     disableOnlineLookup?: boolean
     skipHarmonies?: boolean
     keepStems?: boolean
+    starPower?: boolean
     snapDrums?: boolean
     snapDrumsDivision?: number
     snapDrumsWindowMs?: number

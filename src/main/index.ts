@@ -762,6 +762,7 @@ ipcMain.handle('strum:start', async (_event, options: {
   disableOnlineLookup?: boolean
   skipHarmonies?: boolean
   keepStems?: boolean
+  starPower?: boolean
   snapDrums?: boolean
   snapDrumsDivision?: number
   snapDrumsWindowMs?: number
@@ -794,6 +795,7 @@ ipcMain.handle('strum:start', async (_event, options: {
     disableOnlineLookup: options.disableOnlineLookup,
     skipHarmonies: options.skipHarmonies,
     keepStems: options.keepStems,
+    starPower: options.starPower,
     snapDrums: options.snapDrums,
     snapDrumsDivision: options.snapDrumsDivision,
     snapDrumsWindowMs: options.snapDrumsWindowMs,

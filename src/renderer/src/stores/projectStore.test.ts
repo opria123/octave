@@ -25,6 +25,7 @@ describe('Auto-Chart settings', () => {
       autoChartDisableOnlineLookup: true,
       autoChartDownloadVideo: false,
       autoChartKeepStems: true,
+      autoChartStarPower: false,
       autoChartImproveTempo: false,
       autoChartSnapDrums: true,
       autoChartEnabledTracks: {
@@ -42,6 +43,7 @@ describe('Auto-Chart settings', () => {
       autoChartDisableOnlineLookup: true,
       autoChartDownloadVideo: false,
       autoChartKeepStems: true,
+      autoChartStarPower: false,
       autoChartImproveTempo: false,
       autoChartSnapDrums: true,
       autoChartEnabledTracks: {
@@ -60,6 +62,7 @@ describe('Auto-Chart settings', () => {
       autoChartDisableOnlineLookup: true,
       autoChartDownloadVideo: false,
       autoChartKeepStems: true,
+      autoChartStarPower: false,
       autoChartImproveTempo: false,
       autoChartSnapDrums: true,
       autoChartEnabledTracks: {

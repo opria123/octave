@@ -79,6 +79,12 @@ export interface AutoChartRunOptions {
    */
   keepStems?: boolean
   /**
+   * When false, Star Power / Overdrive phrases (MIDI note 116) are stripped
+   * from the generated chart so songs come out without any Star Power.
+   * Default true (generate Star Power as before).
+   */
+  starPower?: boolean
+  /**
    * When true, drum onsets that already land within `snapDrumsWindowMs` of a
    * 1/`snapDrumsDivision` grid line are snapped onto it, removing onset-timing
    * jitter (the "drums off by a 32nd note" complaint) while leaving genuinely

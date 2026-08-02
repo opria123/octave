@@ -81,6 +81,7 @@ const defaultSettings: AppSettings = {
   autoChartDisableOnlineLookup: false,
   autoChartDownloadVideo: true,
   autoChartKeepStems: false,
+  autoChartStarPower: true,
   autoChartImproveTempo: true,
   autoChartSnapDrums: false,
   autoChartEnabledTracks: {
