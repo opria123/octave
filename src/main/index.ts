@@ -29,6 +29,7 @@ import {
   type SongMetadataSearchRequest,
   type SongMetadataSearchResult
 } from '../shared/songMetadata'
+import { parseIniFile, serializeIniFile } from '../shared/iniFile'
 import { createApplicationMenuTemplate } from './applicationMenu'
 
 // Point fluent-ffmpeg at the bundled static binary
@@ -1471,48 +1472,6 @@ ipcMain.handle('song:readAudio', async (_event, songPath: string) => {
 
   return results.length > 0 ? results : null
 })
-
-// Parse INI file content
-function parseIniFile(content: string): Record<string, string | number> {
-  const result: Record<string, string | number> = {}
-  const lines = content.split(/\r?\n/)
-  let inSongSection = false
-
-  for (const line of lines) {
-    const trimmed = line.trim()
-
-    // Section header
-    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      inSongSection = trimmed.toLowerCase() === '[song]'
-      continue
-    }
-
-    // Key-value pair
-    if (inSongSection && trimmed.includes('=')) {
-      const [key, ...valueParts] = trimmed.split('=')
-      const value = valueParts.join('=').trim()
-
-      // Try to parse as number
-      const numValue = parseFloat(value)
-      result[key.trim()] = isNaN(numValue) ? value : numValue
-    }
-  }
-
-  return result
-}
-
-// Serialize metadata to INI format
-function serializeIniFile(metadata: Record<string, unknown>): string {
-  const lines = ['[song]']
-
-  for (const [key, value] of Object.entries(metadata)) {
-    if (value !== undefined && value !== null && value !== '') {
-      lines.push(`${key} = ${value}`)
-    }
-  }
-
-  return lines.join('\n')
-}
 
 // ============================================
 // Video Import IPC Handlers

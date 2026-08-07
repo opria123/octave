@@ -22,13 +22,21 @@ export interface LibrarySongGroup<T extends LibrarySongSummary> {
 
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' })
 
-function initialGroup(value: string): string {
-  const first = value.trim().charAt(0).toLocaleUpperCase()
+// Song metadata originates in song.ini and in the on-disk library cache, so a
+// numeric title ("1979") or a stale cache entry can hand us a non-string here.
+// Grouping the library must never be able to take the whole app down.
+function text(value: unknown): string {
+  if (typeof value === 'string') return value
+  return value === undefined || value === null ? '' : String(value)
+}
+
+function initialGroup(value: unknown): string {
+  const first = text(value).trim().charAt(0).toLocaleUpperCase()
   return /^[A-Z]$/.test(first) ? first : '#'
 }
 
-function numericYear(year?: string): number | null {
-  const match = year?.match(/\d{4}/)
+function numericYear(year?: unknown): number | null {
+  const match = text(year).match(/\d{4}/)
   return match ? Number(match[0]) : null
 }
 
@@ -38,24 +46,27 @@ export function organizeLibrarySongs<T extends LibrarySongSummary>(
   sort: LibrarySort,
   group: LibraryGroup
 ): LibrarySongGroup<T>[] {
-  const normalizedQuery = query.trim().toLowerCase()
+  const normalizedQuery = text(query).trim().toLowerCase()
   const filtered = normalizedQuery
     ? songs.filter(({ name, artist }) =>
-        `${name}\n${artist}`.toLowerCase().includes(normalizedQuery)
+        `${text(name)}\n${text(artist)}`.toLowerCase().includes(normalizedQuery)
       )
     : songs
 
   const sorted = [...filtered].sort((left, right) => {
     let primary = 0
-    if (sort === 'artist') primary = collator.compare(left.artist, right.artist)
+    if (sort === 'artist') primary = collator.compare(text(left.artist), text(right.artist))
     else if (sort === 'added-newest') primary = (right.addedAt ?? -Infinity) - (left.addedAt ?? -Infinity)
     else if (sort === 'added-oldest') primary = (left.addedAt ?? Infinity) - (right.addedAt ?? Infinity)
     else if (sort === 'year-newest') primary = (numericYear(right.year) ?? -Infinity) - (numericYear(left.year) ?? -Infinity)
     else if (sort === 'year-oldest') primary = (numericYear(left.year) ?? Infinity) - (numericYear(right.year) ?? Infinity)
-    else primary = collator.compare(left.name, right.name)
+    else primary = collator.compare(text(left.name), text(right.name))
     if (primary !== 0) return primary
-    const secondary = sort === 'artist' ? collator.compare(left.name, right.name) : collator.compare(left.artist, right.artist)
-    return secondary || collator.compare(left.id, right.id)
+    const secondary =
+      sort === 'artist'
+        ? collator.compare(text(left.name), text(right.name))
+        : collator.compare(text(left.artist), text(right.artist))
+    return secondary || collator.compare(text(left.id), text(right.id))
   })
 
   if (group === 'none') return [{ label: '', songs: sorted }]
@@ -64,7 +75,7 @@ export function organizeLibrarySongs<T extends LibrarySongSummary>(
   for (const song of sorted) {
     const label =
       group === 'artist'
-        ? song.artist.trim() || 'Unknown Artist'
+        ? text(song.artist).trim() || 'Unknown Artist'
         : group === 'year'
           ? String(numericYear(song.year) ?? 'Unknown Year')
           : initialGroup(song.name)

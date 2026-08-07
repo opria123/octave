@@ -69,4 +69,22 @@ describe('organizeLibrarySongs', () => {
       'Unknown Year'
     ])
   })
+
+  // A numeric title in song.ini, or a stale library cache written before that
+  // was fixed, must never be able to take the whole app down.
+  it('tolerates non-string metadata without throwing', () => {
+    const poisoned = [
+      { id: '1', name: 1979 as unknown as string, artist: 99 as unknown as string, year: 1979 as unknown as string },
+      { id: '2', name: 'Apple', artist: 'Alpha', year: '2020' }
+    ]
+
+    for (const group of ['none', 'title-initial', 'artist', 'year'] as const) {
+      expect(() => organizeLibrarySongs(poisoned, '', 'title', group)).not.toThrow()
+      expect(() => organizeLibrarySongs(poisoned, '19', 'artist', group)).not.toThrow()
+    }
+
+    expect(
+      organizeLibrarySongs(poisoned, '', 'title', 'title-initial').map((g) => g.label)
+    ).toEqual(['#', 'A'])
+  })
 })
