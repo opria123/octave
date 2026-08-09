@@ -39,7 +39,9 @@ See the [Keyboard Shortcuts reference](/reference/keyboard-shortcuts) for the fu
 
 The difficulty tabs above the lanes let you author Expert / Hard / Medium / Easy independently. The active difficulty is what's edited and displayed in the [Chart Preview](/guide/chart-preview).
 
-> **Tip:** Use *Generate from Expert* in the toolbar overflow to bootstrap lower difficulties from your Expert chart, then tweak.
+Each difficulty is charted by hand — OCTAVE has no automatic difficulty reduction, so there is no one-click way to derive Hard / Medium / Easy from your Expert chart.
+
+> **Note:** Copy / paste keeps each note on the difficulty it was copied from. Pasting Expert notes while a lower difficulty tab is active adds them back to Expert, not to the tab you're viewing.
 
 ## Copy / paste & undo
 
@@ -59,4 +61,6 @@ The difficulty tabs above the lanes let you author Expert / Hard / Medium / Easy
 
 ## Lane swap
 
-For 5-fret instruments, the **Swap Lanes** popover (toolbar overflow) mirrors the chart left-to-right — useful when adapting a chart to a southpaw layout.
+The **Swap Lanes** button in the editor toolbar opens a popover where you pick an instrument and two of its lanes, then swap every note between them. It covers guitar / bass / keys (open, green, red, yellow, blue, orange), drums (kick, snare, and the tom / cymbal variants) and Pro Guitar / Pro Bass strings 1–6; Pro Keys and vocals aren't supported.
+
+The **All difficulties** checkbox is ticked by default, so the swap applies to every difficulty. Untick it to limit the swap to the difficulty you're currently editing.
