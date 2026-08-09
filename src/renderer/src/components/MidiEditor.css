@@ -565,6 +565,38 @@
   accent-color: var(--accent-color);
 }
 
+/* Generate from Expert popover — reuses the swap popover shell, adds grouping
+   labels and the overwrite warning. */
+.midi-generate-popover {
+  max-height: 70vh;
+  overflow-y: auto;
+  gap: 6px;
+}
+
+.midi-generate-section-label {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.midi-generate-section-label:first-child {
+  margin-top: 0;
+}
+
+.midi-generate-warning {
+  margin-top: 4px;
+  padding: 8px;
+  border-radius: 6px;
+  background: rgba(255, 176, 32, 0.12);
+  border: 1px solid rgba(255, 176, 32, 0.4);
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .midi-swap-popover-actions {
   display: flex;
   gap: 6px;

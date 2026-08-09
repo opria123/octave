@@ -39,7 +39,29 @@ See the [Keyboard Shortcuts reference](/reference/keyboard-shortcuts) for the fu
 
 The difficulty tabs above the lanes let you author Expert / Hard / Medium / Easy independently. The active difficulty is what's edited and displayed in the [Chart Preview](/guide/chart-preview).
 
-> **Tip:** Use *Generate from Expert* in the toolbar overflow to bootstrap lower difficulties from your Expert chart, then tweak.
+Songs produced by [Auto-Chart](/guide/auto-chart) already arrive with all four difficulties filled in. For charts you wrote by hand, or imported with only an Expert track, use **Generate from Expert**.
+
+> **Note:** Copy / paste keeps each note on the difficulty it was copied from. Pasting Expert notes while a lower difficulty tab is active adds them back to Expert, not to the tab you're viewing.
+
+### Generate from Expert
+
+The **Generate from Expert** button in the piano-roll toolbar derives Hard / Medium / Easy from your Expert chart, using the same reduction rules Auto-Chart applies. Tick the instruments and the difficulties you want, then hit Generate.
+
+It covers drums, guitar, bass, keys, Pro Keys and Pro Guitar / Bass. Vocals are absent because CH / RB have no per-difficulty vocal charts. An instrument with no Expert notes is skipped rather than blanked.
+
+What the rules do, broadly:
+
+| Instrument | Hard | Medium | Easy |
+|------------|------|--------|------|
+| Drums | Drops ghost notes and very fast repeats, thins busy hi-hat | Kick to a basic pulse (no double kick), hi-hat halved, toms only on accents | Kick and snare only, very sparse |
+| Guitar / Bass | Thins dense runs, caps frets at blue, no taps | No 3-note chords, thins harder, strum-only | Single notes, capped at yellow, sparsest |
+| Keys / Pro Keys | Drops every 4th note | Every other note, voicings cut to two | Every 3rd note, one voice per onset |
+| Pro Guitar / Bass | Voicings capped at four strings | Capped at two strings | Single low string per onset — frets are never transposed |
+
+Two things worth knowing before you run it:
+
+- **It replaces, it doesn't merge.** Any hand-authored work on the difficulties you tick is discarded for the instruments you tick. The popover tells you how many notes that is before you commit, and `Ctrl/Cmd+Z` puts them back in one step.
+- **Reduction is gap-based, so slow songs reduce less.** The thresholds are in milliseconds, not beats. On a sparse or slow chart, Hard can come out identical to Expert simply because no passage is dense enough to thin. Treat the output as a starting point to tweak, not a finished chart.
 
 ## Copy / paste & undo
 
@@ -59,4 +81,6 @@ The difficulty tabs above the lanes let you author Expert / Hard / Medium / Easy
 
 ## Lane swap
 
-For 5-fret instruments, the **Swap Lanes** popover (toolbar overflow) mirrors the chart left-to-right — useful when adapting a chart to a southpaw layout.
+The **Swap Lanes** button in the piano-roll toolbar opens a popover where you pick an instrument and two of its lanes, then swap every note between them. It covers guitar / bass / keys (open, green, red, yellow, blue, orange), drums (kick, snare, and the tom / cymbal variants) and Pro Guitar / Pro Bass strings 1–6; Pro Keys and vocals aren't supported.
+
+The **All difficulties** checkbox is ticked by default, so the swap applies to every difficulty. Untick it to limit the swap to the difficulty you're currently editing.

@@ -7,6 +7,11 @@ import {
   snapEntriesToGrid,
   SNAP_TO_GRID_TOLERANCE_FRACTION
 } from '../utils/snapToGrid'
+import {
+  generateFromExpert as reduceFromExpert,
+  type GenerateFromExpertOptions,
+  type GenerateFromExpertResult
+} from '../utils/difficultyReduction'
 import type {
   SongData,
   SongEditorState,
@@ -28,6 +33,9 @@ import type {
   SongSection
 } from '../types'
 
+/** What `generateFromExpert` produced, minus the notes themselves (already applied). */
+export type GenerateFromExpertSummary = Omit<GenerateFromExpertResult, 'notes'>
+
 // Song store state interface
 interface SongStoreState extends SongEditorState {
   // Clipboard (not in undo history)
@@ -41,6 +49,7 @@ interface SongStoreState extends SongEditorState {
   deleteSelectedNotes: () => void
   swapLanes: (instrument: Instrument, laneA: string, laneB: string, difficulty?: Difficulty | 'all') => void
   snapNotesToGrid: (division?: number, toleranceTicks?: number) => void
+  generateFromExpert: (options?: GenerateFromExpertOptions) => GenerateFromExpertSummary
 
   // Selection actions
   selectNote: (noteId: string, addToSelection?: boolean) => void
@@ -198,7 +207,7 @@ const createDefaultEditorState = (song: SongData): SongEditorState => ({
 })
 
 // Store creator function
-const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
+const createSongStoreSlice: StateCreator<SongStoreState> = (set, get) => {
   const defaultSong = createDefaultSong('default', '')
   const defaultState = createDefaultEditorState(defaultSong)
 
@@ -271,6 +280,31 @@ const createSongStoreSlice: StateCreator<SongStoreState> = (set) => {
           isDirty: true
         }
       }),
+
+    // Derive Hard / Medium / Easy from the Expert chart, replacing whatever was
+    // on those difficulties for the instruments involved. The reduction rules
+    // are a port of the ones STRUM runs during Auto-Chart (see
+    // utils/difficultyReduction.ts) so a hand-authored chart ends up with the
+    // same shape of lower difficulties an auto-charted one gets.
+    //
+    // Destructive by design: callers must confirm with the user first, because
+    // any hand-tweaked Hard/Medium/Easy work for the targeted instruments is
+    // discarded. It lands as one entry in the undo history, so Ctrl+Z restores
+    // the previous difficulties in full.
+    generateFromExpert: (options = {}) => {
+      const state = get()
+      const result = reduceFromExpert(state.song.notes, state.song.tempoEvents, options)
+      const { notes, ...summary } = result
+
+      set({
+        song: { ...state.song, notes },
+        // Selected ids may point at notes that were just replaced.
+        selectedNoteIds: [],
+        isDirty: true
+      })
+
+      return summary
+    },
 
     // Snap notes to the nearest grid line for the given division (defaults to the
     // active snap division). When notes are selected, only those are snapped;

@@ -3,6 +3,11 @@ import { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } fr
 import { useProjectStore, getSongStore, useSettingsStore, useUIStore } from '../stores'
 import type { Note, NoteFlags, NoteModifiers, Instrument, DrumLane, GuitarLane, Difficulty, EditingTool, StarPowerPhrase, SoloSection, LaneMarker, LaneMarkerType, VocalNote, VocalPhrase, HarmonyPart,TempoEvent } from '../types'
 import { PRO_KEYS_MIN, PRO_KEYS_MAX, SUSTAIN_THRESHOLD_MID, SUSTAIN_THRESHOLD_CHART } from '../types'
+import {
+  DERIVED_DIFFICULTIES,
+  REDUCIBLE_INSTRUMENTS,
+  type DerivedDifficulty
+} from '../utils/difficultyReduction'
 import { getAudioDuration, getAudioSources, onAudioLoaded, playPitchPreview, stopPitchPreview } from '../services/audioService'
 import { buildTickAlignedWaveformPeaks } from '../services/waveformService'
 import './MidiEditor.css'
@@ -2324,6 +2329,62 @@ function SnapSelector({
   )
 }
 
+// Where a toolbar popover is pinned. Popovers use fixed positioning so the
+// toolbar's own scrolling can't clip them.
+interface PopoverAnchor {
+  left: number
+  top?: number
+  bottom?: number
+}
+
+/**
+ * Toolbar popover plumbing: open state, and an anchor that keeps the popover
+ * on screen. The piano-roll toolbar sits at the bottom of the window, so a
+ * popover opening downward gets cut off — after it renders we measure it and
+ * flip it above the button when it would overflow. Measuring beats estimating
+ * from the content, which silently breaks as soon as the popover grows.
+ */
+function useToolbarPopover(): {
+  open: boolean
+  setOpen: (open: boolean) => void
+  toggle: () => void
+  anchor: PopoverAnchor | null
+  buttonRef: React.RefObject<HTMLButtonElement | null>
+  popoverRef: React.RefObject<HTMLDivElement | null>
+} {
+  const [open, setOpen] = useState(false)
+  const [anchor, setAnchor] = useState<PopoverAnchor | null>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
+
+  const toggle = (): void => {
+    if (open) {
+      setOpen(false)
+      return
+    }
+    const rect = buttonRef.current?.getBoundingClientRect()
+    // Open downward first; the layout effect below flips it if that clips.
+    if (rect) setAnchor({ left: rect.left, top: rect.bottom + 4 })
+    setOpen(true)
+  }
+
+  useLayoutEffect(() => {
+    if (!open || !popoverRef.current || !buttonRef.current) return
+    const rect = buttonRef.current.getBoundingClientRect()
+    const clipped = rect.bottom + 4 + popoverRef.current.offsetHeight > window.innerHeight
+    setAnchor((prev) => {
+      if (!prev) return prev
+      // Already in the right place — returning prev keeps this from looping.
+      if (clipped === (prev.bottom !== undefined)) return prev
+      return clipped
+        ? { left: rect.left, bottom: window.innerHeight - rect.top + 4 }
+        : { left: rect.left, top: rect.bottom + 4 }
+    })
+  })
+
+  return { open, setOpen, toggle, anchor, buttonRef, popoverRef }
+}
+
 // Per-instrument lane sets used by the Swap Lanes tool.
 const SWAP_LANE_OPTIONS: Record<Instrument, string[]> = {
   guitar: ['open', 'green', 'red', 'yellow', 'blue', 'orange'],
@@ -2347,9 +2408,7 @@ function SwapLanesTool({
   activeDifficulty: Difficulty
   defaultInstrument: Instrument
 }): React.JSX.Element {
-  const [open, setOpen] = useState(false)
-  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null)
-  const buttonRef = useRef<HTMLButtonElement>(null)
+  const { open, setOpen, toggle: togglePopover, anchor, buttonRef, popoverRef } = useToolbarPopover()
   const [instrument, setInstrument] = useState<Instrument>(
     SWAP_LANE_OPTIONS[defaultInstrument].length > 0 ? defaultInstrument : 'guitar'
   )
@@ -2366,16 +2425,6 @@ function SwapLanesTool({
     if (!next.includes(laneB)) setLaneB(next[2] ?? next[0] ?? '')
   }, [instrument, laneA, laneB])
 
-  const togglePopover = (): void => {
-    if (open) {
-      setOpen(false)
-      return
-    }
-    const rect = buttonRef.current?.getBoundingClientRect()
-    if (rect) setPopoverPos({ top: rect.bottom + 4, left: rect.left })
-    setOpen(true)
-  }
-
   return (
     <div className="midi-swap-tool" style={{ position: 'relative' }}>
       <button
@@ -2387,15 +2436,11 @@ function SwapLanesTool({
         <span>↔</span>
         <span>Swap Lanes</span>
       </button>
-      {open && popoverPos && (
+      {open && anchor && (
         <div
+          ref={popoverRef}
           className="midi-swap-popover"
-          style={{
-            position: 'fixed',
-            top: popoverPos.top,
-            left: popoverPos.left,
-            zIndex: 1000
-          }}
+          style={{ position: 'fixed', ...anchor, zIndex: 1000 }}
         >
           <label className="midi-swap-popover-row">
             <span>Instrument</span>
@@ -2451,6 +2496,150 @@ function SwapLanesTool({
               }}
             >
               Swap
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const INSTRUMENT_LABELS: Partial<Record<Instrument, string>> = {
+  drums: 'Drums',
+  guitar: 'Guitar',
+  bass: 'Bass',
+  keys: 'Keys',
+  proKeys: 'Pro Keys',
+  proGuitar: 'Pro Guitar',
+  proBass: 'Pro Bass'
+}
+
+const DIFFICULTY_LABELS: Record<DerivedDifficulty, string> = {
+  hard: 'Hard',
+  medium: 'Medium',
+  easy: 'Easy'
+}
+
+// Generate from Expert — derive lower difficulties using the same reduction
+// rules STRUM applies during Auto-Chart. Destructive for the difficulties it
+// writes, so the popover names exactly what will be overwritten before running.
+function GenerateFromExpertTool({
+  notes,
+  onGenerate
+}: {
+  notes: Note[]
+  onGenerate: (instruments: Instrument[], targets: DerivedDifficulty[]) => void
+}): React.JSX.Element {
+  const { open, setOpen, toggle: togglePopover, anchor, buttonRef, popoverRef } = useToolbarPopover()
+
+  // Only instruments that actually have an Expert chart can be reduced.
+  const available = useMemo(
+    () =>
+      REDUCIBLE_INSTRUMENTS.filter((i) =>
+        notes.some((n) => n.instrument === i && n.difficulty === 'expert')
+      ),
+    [notes]
+  )
+
+  const [selectedInstruments, setSelectedInstruments] = useState<Set<Instrument>>(new Set())
+  const [selectedTargets, setSelectedTargets] = useState<Set<DerivedDifficulty>>(
+    new Set(DERIVED_DIFFICULTIES)
+  )
+
+  // Default to every instrument that has an Expert chart, refreshed whenever the
+  // set changes underneath us (import, auto-chart, or charting a new instrument).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedInstruments(new Set(available))
+  }, [available])
+
+  // Notes that this run would destroy — existing work on the targeted pairs.
+  const overwriteCount = useMemo(
+    () =>
+      notes.filter(
+        (n) =>
+          selectedInstruments.has(n.instrument) &&
+          n.difficulty !== 'expert' &&
+          selectedTargets.has(n.difficulty as DerivedDifficulty)
+      ).length,
+    [notes, selectedInstruments, selectedTargets]
+  )
+
+  const toggle = <T,>(set: Set<T>, value: T): Set<T> => {
+    const next = new Set(set)
+    if (next.has(value)) next.delete(value)
+    else next.add(value)
+    return next
+  }
+
+  const canRun = selectedInstruments.size > 0 && selectedTargets.size > 0
+
+  return (
+    <div className="midi-generate-tool" style={{ position: 'relative' }}>
+      <button
+        ref={buttonRef}
+        className="edit-tool-button"
+        onClick={togglePopover}
+        disabled={available.length === 0}
+        title={
+          available.length === 0
+            ? 'Chart something on Expert first — lower difficulties are derived from it'
+            : 'Derive Hard / Medium / Easy from the Expert chart'
+        }
+      >
+        <span>⇩</span>
+        <span>Generate from Expert</span>
+      </button>
+      {open && anchor && (
+        <div
+          ref={popoverRef}
+          className="midi-swap-popover midi-generate-popover"
+          style={{ position: 'fixed', ...anchor, zIndex: 1000 }}
+        >
+          <div className="midi-generate-section-label">Instruments</div>
+          {available.map((instrument) => (
+            <label key={instrument} className="midi-swap-popover-checkbox">
+              <input
+                type="checkbox"
+                checked={selectedInstruments.has(instrument)}
+                onChange={() =>
+                  setSelectedInstruments((s) => toggle(s, instrument))
+                }
+              />
+              <span>{INSTRUMENT_LABELS[instrument] ?? instrument}</span>
+            </label>
+          ))}
+
+          <div className="midi-generate-section-label">Difficulties to write</div>
+          {DERIVED_DIFFICULTIES.map((difficulty) => (
+            <label key={difficulty} className="midi-swap-popover-checkbox">
+              <input
+                type="checkbox"
+                checked={selectedTargets.has(difficulty)}
+                onChange={() => setSelectedTargets((s) => toggle(s, difficulty))}
+              />
+              <span>{DIFFICULTY_LABELS[difficulty]}</span>
+            </label>
+          ))}
+
+          {overwriteCount > 0 && (
+            <div className="midi-generate-warning">
+              Replaces {overwriteCount} existing note{overwriteCount === 1 ? '' : 's'} on the
+              selected difficulties. Undo (Ctrl+Z) restores them.
+            </div>
+          )}
+
+          <div className="midi-swap-popover-actions">
+            <button onClick={() => setOpen(false)}>Cancel</button>
+            <button
+              className="primary"
+              disabled={!canRun}
+              onClick={() => {
+                onGenerate([...selectedInstruments], [...selectedTargets])
+                setOpen(false)
+              }}
+            >
+              Generate
             </button>
           </div>
         </div>
@@ -3824,6 +4013,12 @@ export function MidiEditor(): React.JSX.Element {
           defaultInstrument={Array.from(visibleInstruments)[0] ?? 'guitar'}
           onSwap={(instrument, laneA, laneB, scope) =>
             songStore?.getState().swapLanes(instrument, laneA, laneB, scope)
+          }
+        />
+        <GenerateFromExpertTool
+          notes={notes}
+          onGenerate={(instruments, targets) =>
+            songStore?.getState().generateFromExpert({ instruments, targets })
           }
         />
         <div className="midi-zoom-controls">
