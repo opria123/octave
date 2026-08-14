@@ -6,11 +6,13 @@ import { cloneDefaultHotkeys } from '../utils/hotkeys'
 
 interface ProjectStore extends ProjectState {
   libraryLoadVersion: number
+  pendingActiveSongId: string | null
   // Actions
   setLoadedFolder: (path: string | null) => void
   addSong: (songId: string) => void
   removeSong: (songId: string) => void
   setActiveSong: (songId: string | null) => void
+  setPendingActiveSong: (songId: string | null) => void
   clearProject: () => void
 }
 
@@ -20,6 +22,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
   songIds: [],
   activeSongId: null,
   libraryLoadVersion: 0,
+  pendingActiveSongId: null,
 
   // Actions
   setLoadedFolder: (path) =>
@@ -30,6 +33,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
             loadedFolderPath: path,
             songIds: [],
             activeSongId: null,
+            pendingActiveSongId: null,
             libraryLoadVersion: state.libraryLoadVersion + 1
           }
     ),
@@ -49,13 +53,16 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
 
   setActiveSong: (songId) => set({ activeSongId: songId }),
 
+  setPendingActiveSong: (songId) => set({ pendingActiveSongId: songId }),
+
   clearProject: () =>
     set((state) => ({
       loadedFolderPath: null,
       songIds: [],
       activeSongId: null,
+      pendingActiveSongId: null,
       libraryLoadVersion: state.libraryLoadVersion + 1
-    }))
+    })),
 }))
 
 // App settings store (persisted)

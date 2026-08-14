@@ -9,6 +9,7 @@ import {
   type DerivedDifficulty
 } from '../utils/difficultyReduction'
 import { getAudioDuration, getAudioSources, onAudioLoaded, playPitchPreview, stopPitchPreview } from '../services/audioService'
+import { VocalPitchPlaybackToggle } from './VocalPitchPlaybackToggle'
 import { buildTickAlignedWaveformPeaks } from '../services/waveformService'
 import './MidiEditor.css'
 
@@ -103,29 +104,6 @@ const MIDI_EDITOR_CONFIG = {
 
 // MIDI note names for vocal pitch display
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-
-// Toggle for sounding vocal note pitches while the song plays (issue #10).
-function VocalPitchPlaybackToggle(): React.JSX.Element {
-  const enabled = useUIStore((s) => s.vocalPitchPlayback)
-  const toggle = useUIStore((s) => s.toggleVocalPitchPlayback)
-  return (
-    <button
-      title={enabled
-        ? 'Pitch playback on: vocal note pitches sound while the song plays'
-        : 'Pitch playback off: click to hear vocal note pitches while the song plays'}
-      style={{
-        fontSize: 10, padding: '1px 5px', border: 'none', borderRadius: 3,
-        cursor: 'pointer', lineHeight: 1.4,
-        backgroundColor: enabled ? '#E879F9' : 'rgba(255,255,255,0.15)',
-        color: enabled ? '#000' : '#ccc',
-        boxShadow: enabled ? '0 0 6px #E879F980' : 'none'
-      }}
-      onClick={toggle}
-    >
-      🔊
-    </button>
-  )
-}
 
 function midiNoteName(midi: number): string {
   return `${NOTE_NAMES[midi % 12]}${Math.floor(midi / 12) - 1}`

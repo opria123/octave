@@ -278,7 +278,7 @@ export async function resolvePythonCommand(runId?: string): Promise<PythonComman
 
 function splitLines(chunk: string, remainder: string): { lines: string[]; remainder: string } {
   const combined = remainder + chunk
-  const parts = combined.split(/\r?\n/)
+  const parts = combined.split(/\r\n|\r|\n/)
   return {
     lines: parts.slice(0, -1),
     remainder: parts.at(-1) ?? ''
@@ -589,6 +589,21 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
             lastProgressPercent = Math.max(lastProgressPercent, event.percent)
           }
         })) {
+          // Check if it's a tqdm progress line (e.g. " 10%|██      |")
+          const tqdmMatch = line.match(/(\d+)%\|/)
+          if (tqdmMatch) {
+            const stagePercent = parseInt(tqdmMatch[1], 10)
+            const percent = normalizeGlobalPercent(lastProgressStage, stagePercent)
+            broadcast('strum:progress', {
+              runId,
+              stage: lastProgressStage,
+              message: line.trim(),
+              percent
+            } satisfies AutoChartProgressEvent)
+            lastProgressPercent = Math.max(lastProgressPercent, percent)
+            continue
+          }
+
           const parsed = parseAutoChartProgressLine(runId, line)
           if (parsed) {
             const incomingRank = getStageRank(parsed.stage)

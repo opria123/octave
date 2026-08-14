@@ -46,6 +46,7 @@ export function useAutosave(): void {
         || venueTrack.stage.length > 0
         || venueTrack.performer.length > 0
         || venueTrack.cameraCuts.length > 0
+        || venueTrack.preservedTextEvents?.length
       ) {
         await window.api.writeVenueJson(state.song.folderPath, venueTrack)
       }

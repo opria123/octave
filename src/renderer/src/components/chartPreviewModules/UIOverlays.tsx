@@ -5,6 +5,7 @@ import type { Instrument, Difficulty, NoteModifiers, VocalNote, VocalPhrase, Har
 import type { EditingTool } from './types'
 import { getAudioSources, onAudioLoaded, playPitchPreview, stopPitchPreview, seek as seekAudio } from '../../services/audioService'
 import { resolveVenuePlaybackState } from './venuePlayback'
+import { VocalPitchPlaybackToggle } from '../VocalPitchPlaybackToggle'
 
 function formatVenueLabel(value: string): string {
   return value
@@ -961,6 +962,8 @@ export function VocalTrackOverlay({ songId }: { songId: string }): React.JSX.Ele
             ))}
           </span>
         )}
+        {/* Hear charted pitches during playback (issues #10, #58) */}
+        <VocalPitchPlaybackToggle showLabel />
       </div>
       <div
         ref={contentRef}

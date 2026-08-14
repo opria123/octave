@@ -171,26 +171,36 @@ function createEmptyVenueTrack(): VenueTrackData {
   }
 }
 
-function parseVenueTextEvent(venueTrack: VenueTrackData, tick: number, eventText: string): void {
+function preserveMidiTextEvent(
+  venueTrack: VenueTrackData,
+  track: 'EVENTS' | 'VENUE',
+  tick: number,
+  text: string
+): void {
+  if (!venueTrack.preservedTextEvents) venueTrack.preservedTextEvents = []
+  venueTrack.preservedTextEvents.push({ id: uuidv4(), track, tick, text })
+}
+
+function parseVenueTextEvent(venueTrack: VenueTrackData, tick: number, eventText: string): boolean {
   const text = eventText.trim()
-  if (!text) return
+  if (!text) return false
 
   const lightingMatch = text.match(/^\[lighting \((.+)\)]$/i)
   if (lightingMatch) {
     venueTrack.lighting.push({ id: uuidv4(), tick, type: lightingMatch[1].trim() })
-    return
+    return true
   }
 
   const simpleLighting = text.match(/^\[(verse|chorus)]$/i)
   if (simpleLighting) {
     venueTrack.lighting.push({ id: uuidv4(), tick, type: simpleLighting[1] })
-    return
+    return true
   }
 
   const postProcessingMatch = text.match(/^\[(.+\.pp)]$/i)
   if (postProcessingMatch) {
     venueTrack.postProcessing.push({ id: uuidv4(), tick, type: postProcessingMatch[1] })
-    return
+    return true
   }
 
   const performerMatch = text.match(/^venue_performer\s+(spotlight|singalong)(?:\s+(guitar|bass|drums|vocals|keys))?(?:\s+(\d+))?$/i)
@@ -202,19 +212,22 @@ function parseVenueTextEvent(venueTrack: VenueTrackData, tick: number, eventText
       performer: performerMatch[2]?.toLowerCase() as VenuePerformerEvent['performer'],
       duration: performerMatch[3] ? parseInt(performerMatch[3], 10) : 480
     })
-    return
+    return true
   }
 
   const stageMatch = text.match(/^\[(FogOn|FogOff|bonusfx|bonusfx_optional|first|next|prev)]$/i)
   if (stageMatch) {
     venueTrack.stage.push({ id: uuidv4(), tick, effect: stageMatch[1] })
-    return
+    return true
   }
 
   const cameraMatch = text.match(/^\[(coop_[^\]]+|directed_[^\]]+|cam_[^\]]+)]$/i)
   if (cameraMatch) {
     venueTrack.cameraCuts.push({ id: uuidv4(), tick, subject: cameraMatch[1] })
+    return true
   }
+
+  return false
 }
 
 function parseVenueNote(venueTrack: VenueTrackData, noteNumber: number, tick: number, duration: number): void {
@@ -619,8 +632,10 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
           continue
         }
 
-        if (rawTrackName === VENUE_TRACK_NAME) {
-          parseVenueTextEvent(venueTrack, tick, rawText)
+        if (rawTrackName === 'EVENTS') {
+          preserveMidiTextEvent(venueTrack, 'EVENTS', tick, rawText)
+        } else if (rawTrackName === VENUE_TRACK_NAME && !parseVenueTextEvent(venueTrack, tick, rawText)) {
+          preserveMidiTextEvent(venueTrack, 'VENUE', tick, rawText)
         }
         continue
       }
@@ -655,6 +670,7 @@ export function parseMidiBase64(midiBase64: string): ParsedMidiData {
   venueTrack.stage.sort((a, b) => a.tick - b.tick)
   venueTrack.performer.sort((a, b) => a.tick - b.tick)
   venueTrack.cameraCuts.sort((a, b) => a.tick - b.tick)
+  venueTrack.preservedTextEvents?.sort((a, b) => a.tick - b.tick)
 
   // ── Parse Pro Keys Tracks ───────────────────────────────────────────
   for (const track of midi.tracks) {
@@ -1911,7 +1927,7 @@ export function serializeMidiBase64(
   }
 
   // ── Serialize Song Section Marker Track (EVENTS) ──────────────────
-  if (songSections.length > 0) {
+  if (songSections.length > 0 || venueTrack.preservedTextEvents?.some((event) => event.track === 'EVENTS')) {
     type RawEvent = RawMidiEvent & { absTick: number }
     const events: RawEvent[] = []
     events.push({ type: 'trackName', text: 'EVENTS', deltaTime: 0, absTick: 0 } as RawEvent)
@@ -1919,7 +1935,13 @@ export function serializeMidiBase64(
     for (const sec of songSections) {
       const name = String(sec.name || '').trim()
       if (!name) continue
-      events.push({ type: 'marker', text: `[section ${name}]`, deltaTime: 0, absTick: Math.max(0, sec.tick) } as RawEvent)
+      // Rock Band 3 and Onyx recognize section commands as MIDI text
+      // meta-events (0x01), not marker meta-events (0x06).
+      events.push({ type: 'text', text: `[section ${name}]`, deltaTime: 0, absTick: Math.max(0, sec.tick) } as RawEvent)
+    }
+    for (const event of venueTrack.preservedTextEvents ?? []) {
+      if (event.track !== 'EVENTS') continue
+      events.push({ type: 'text', text: event.text, deltaTime: 0, absTick: Math.max(0, event.tick) } as RawEvent)
     }
 
     events.sort((a, b) => a.absTick - b.absTick)
@@ -1940,6 +1962,7 @@ export function serializeMidiBase64(
     || venueTrack.stage.length > 0
     || venueTrack.performer.length > 0
     || venueTrack.cameraCuts.length > 0
+    || venueTrack.preservedTextEvents?.some((event) => event.track === 'VENUE')
 
   if (hasVenueEvents) {
     type RawEvent = RawMidiEvent & { absTick: number }
@@ -1947,7 +1970,13 @@ export function serializeMidiBase64(
     events.push({ type: 'trackName', text: VENUE_TRACK_NAME, deltaTime: 0, absTick: 0 } as RawEvent)
 
     for (const event of buildVenueTextEvents({ ...venueTrack, performer: [] })) {
-      events.push({ type: 'marker', text: event.text, deltaTime: 0, absTick: Math.max(0, event.tick) } as RawEvent)
+      // RB3 VENUE commands use MIDI text meta-events. Writing them as markers
+      // leaves them unrecognized by Onyx and other RB3 tooling.
+      events.push({ type: 'text', text: event.text, deltaTime: 0, absTick: Math.max(0, event.tick) } as RawEvent)
+    }
+    for (const event of venueTrack.preservedTextEvents ?? []) {
+      if (event.track !== 'VENUE') continue
+      events.push({ type: 'text', text: event.text, deltaTime: 0, absTick: Math.max(0, event.tick) } as RawEvent)
     }
 
     for (const performerEvent of venueTrack.performer) {

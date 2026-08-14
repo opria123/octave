@@ -897,10 +897,6 @@ ipcMain.handle('dialog:openLyricsFile', async () => {
 
 // Scan folder for song directories (folders containing song.ini)
 ipcMain.handle('folder:scan', async (_event, folderPath: string) => {
-  // Set allowedProjectPath so auto-reloaded folders also get security boundary
-  if (!allowedProjectPath) {
-    allowedProjectPath = resolve(folderPath)
-  }
   const songs: Array<{ id: string; path: string; name: string; addedAt: number }> = []
 
   try {
@@ -944,6 +940,14 @@ ipcMain.handle('folder:scan', async (_event, folderPath: string) => {
     }
   } catch (error) {
     console.error('Error scanning folder:', error)
+    throw error
+  }
+
+  // Only establish the security boundary after a successful scan. This lets a
+  // failed saved-folder scan fall back to a valid folder without leaving paths
+  // pinned to the missing or inaccessible location.
+  if (!allowedProjectPath) {
+    allowedProjectPath = resolve(folderPath)
   }
 
   return songs
