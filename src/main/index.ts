@@ -10,6 +10,7 @@ import icon from '../../resources/icon.png?asset'
 import ffmpeg from 'fluent-ffmpeg'
 import { cancelAutoChart, getStrumRequirementsPath, killAllRunningJobs, openStrumLogsFolder, resolvePythonCommand, runAutoChart } from './strumIntegration/runner'
 import { ensureBootstrappedPython, getRuntimeStatus, isBootstrapTarget } from './strumIntegration/runtimeBootstrap'
+import { ensureFreshYtDlp, isYtDlpBlockedError } from './strumIntegration/ytDlpRefresh'
 import { packSng } from './sngPacker'
 import { packRb3con } from './conPacker'
 import { importSng } from './import/sngImporter'
@@ -1600,7 +1601,12 @@ ipcMain.handle('video:download-url', async (event, songPath: string, url: string
   }
   const args = [...pythonCmd.baseArgs, '-m', 'yt_dlp', ...ytDlpArgs]
 
-  return new Promise<{ success: boolean; filePath?: string; error?: string }>((resolvePromise) => {
+  // YouTube breaks stale yt-dlp builds every few weeks (HTTP 403 on the
+  // media URL). Do a throttled in-place upgrade first, and if the download is
+  // still rejected, force a refresh and retry once with the newer build.
+  await ensureFreshYtDlp(pythonCmd)
+
+  const attemptDownload = (): Promise<{ success: boolean; filePath?: string; error?: string }> => new Promise((resolvePromise) => {
     console.log('[yt-dlp] Starting download:', url)
     const proc = execFile(pythonCmd.command, args, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error) {
@@ -1668,6 +1674,24 @@ ipcMain.handle('video:download-url', async (event, songPath: string, url: string
       })
     }
   })
+
+  let result = await attemptDownload()
+  if (!result.success && result.error && isYtDlpBlockedError(result.error)) {
+    const refresh = await ensureFreshYtDlp(pythonCmd, { force: true })
+    if (refresh.changed) {
+      console.log(`[yt-dlp] Download rejected; retrying with yt-dlp ${refresh.version}`)
+      event.sender.send('video:download-progress', 0)
+      result = await attemptDownload()
+    } else {
+      const versionNote = refresh.version ? ` (yt-dlp ${refresh.version})` : ''
+      result = {
+        ...result,
+        error: `${result.error}\n\nyt-dlp is already the newest available build${versionNote}. `
+          + 'YouTube may have changed something upstream has not fixed yet — try again later.'
+      }
+    }
+  }
+  return result
 })
 
 // Get audio waveform data - returns peak amplitude samples for visualization

@@ -31,6 +31,7 @@ Demucs needs ~4 GB of free RAM for stem separation. If your machine doesn't have
 ## YouTube URL fails
 
 `yt-dlp` rejects the URL. Common causes:
+- **`HTTP Error 403: Forbidden` / `unable to download video data`** — YouTube changed something on their end and the installed `yt-dlp` is out of date. OCTAVE upgrades `yt-dlp` inside its Python runtime automatically (a throttled check before every URL run, plus a forced refresh-and-retry when a download is rejected), so usually just running the job again is enough. If it still fails right after an update, upstream `yt-dlp` hasn't caught up with YouTube yet — wait a day and retry, or download the audio yourself and pass the file in. The auto-refresh can be disabled with the `OCTAVE_YTDLP_AUTO_REFRESH=0` environment variable.
 - Age-restricted or region-locked video — try downloading the audio yourself and passing the file in.
 - `yt-dlp` cache out of date — delete `<user-data>/python-runtime/yt-dlp-cache/`.
 - No internet (offline mode is on but you didn't pre-download the audio).

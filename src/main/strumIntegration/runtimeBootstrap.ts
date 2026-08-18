@@ -123,7 +123,7 @@ function emitProgress(runId: string | undefined, message: string, percent?: numb
   console.log(`[BOOTSTRAP] ${message}`)
 }
 
-function getRuntimeRoot(): string {
+export function getRuntimeRoot(): string {
   return join(app.getPath('userData'), 'python-runtime')
 }
 

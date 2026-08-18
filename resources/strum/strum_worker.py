@@ -1711,13 +1711,39 @@ def download_youtube_audio(url: str, target_dir: Path, run_id: str) -> Path:
             percent = int((downloaded / total) * 100) if total else None
             emit_progress(run_id, "download", f"Downloading media URL: {url}", percent=percent, current_item=url)
 
+    class _YtDlpLogger:
+        """Route yt-dlp warnings/errors into the OCTAVE run log.
+
+        With quiet=True yt-dlp would otherwise swallow diagnostics such as
+        "No supported JavaScript runtime could be found" or "... requires a PO
+        token", which are exactly what's needed to debug a failed download.
+        """
+
+        def debug(self, message: str) -> None:  # noqa: D401 - yt-dlp protocol
+            # yt-dlp routes its own info lines through debug() prefixed
+            # with "[debug] "; only surface the non-debug ones, and skip the
+            # per-chunk "[download]  12.3% ..." lines (the progress hook
+            # already reports those).
+            if message.startswith(("[debug] ", "[download] ")):
+                return
+            print(f"[yt-dlp] {message}", file=sys.stderr, flush=True)
+
+        def info(self, message: str) -> None:
+            print(f"[yt-dlp] {message}", file=sys.stderr, flush=True)
+
+        def warning(self, message: str) -> None:
+            emit_progress(run_id, "download", f"yt-dlp: {message}", current_item=url)
+
+        def error(self, message: str) -> None:
+            emit_progress(run_id, "download", f"yt-dlp: {message}", current_item=url)
+
     output_template = str(target_dir / "%(title).180B-%(id)s.%(ext)s")
     options = {
         "format": "bestaudio/best",
         "noplaylist": True,
         "outtmpl": output_template,
         "quiet": True,
-        "no_warnings": True,
+        "logger": _YtDlpLogger(),
         "progress_hooks": [hook],
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
@@ -1725,8 +1751,25 @@ def download_youtube_audio(url: str, target_dir: Path, run_id: str) -> Path:
             "preferredquality": "192",
         }],
     }
-    with yt_dlp.YoutubeDL(options) as downloader:
-        downloader.extract_info(url, download=True)
+    try:
+        with yt_dlp.YoutubeDL(options) as downloader:
+            downloader.extract_info(url, download=True)
+    except Exception as exc:  # yt_dlp.utils.DownloadError and friends
+        detail = str(exc).strip()
+        version = getattr(getattr(yt_dlp, "version", None), "__version__", "unknown")
+        # Keep the raw yt-dlp text (e.g. "HTTP Error 403: Forbidden") intact:
+        # the OCTAVE runner pattern-matches it to decide whether to refresh
+        # yt-dlp and retry the run.
+        if re.search(r"HTTP Error 403|403: Forbidden|unable to download video data", detail, re.IGNORECASE):
+            hint = (
+                "YouTube rejected the request, which usually means YouTube changed something "
+                "and yt-dlp needs an update. OCTAVE refreshes yt-dlp automatically and retries; "
+                "if it keeps failing, upstream yt-dlp has not caught up yet - try again later, "
+                "or download the audio yourself and pass the file in."
+            )
+        else:
+            hint = "If the video is private, age-restricted or region-locked, download the audio yourself and pass the file in."
+        raise IntegrationError(f"yt-dlp {version} could not download {url}: {detail} {hint}") from exc
 
     after = [entry.resolve() for entry in target_dir.iterdir() if entry.resolve() not in before and entry.is_file()]
     for candidate in sorted(after, key=lambda path: path.stat().st_mtime, reverse=True):

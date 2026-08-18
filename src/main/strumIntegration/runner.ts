@@ -8,6 +8,7 @@ import { ensureBootstrappedPython, isBootstrapTarget } from './runtimeBootstrap'
 import { ensureDemucsCpp } from './demucsCppBootstrap'
 import { ensureWhisperCpp } from './whisperCppBootstrap'
 import { detectAccelerator } from './runtimeBootstrap'
+import { ensureFreshYtDlp, isYtDlpBlockedError } from './ytDlpRefresh'
 import type { AutoChartProgressEvent, AutoChartRunOptions, AutoChartRunResult, AutoChartStage } from './types'
 
 const EVENT_PREFIX = '__OCTAVE_EVENT__'
@@ -309,7 +310,8 @@ function normalizeGlobalPercent(stage: AutoChartStage, stagePercent: number): nu
 function handleStructuredEvent(
   line: string,
   completion: { result?: AutoChartRunResult; error?: string },
-  onProgress?: (event: AutoChartProgressEvent) => void
+  onProgress?: (event: AutoChartProgressEvent) => void,
+  suppressErrorBroadcast?: (message: string) => boolean
 ): boolean {
   if (!line.startsWith(EVENT_PREFIX)) {
     return false
@@ -367,7 +369,13 @@ function handleStructuredEvent(
 
     if (kind === 'error') {
       completion.error = String(payload.message ?? 'STRUM worker failed.')
-      broadcast('strum:error', payload)
+      // The caller may want to retry (e.g. after refreshing yt-dlp) — in that
+      // case hold the error back so the renderer doesn't flip into its
+      // terminal error state; runAutoChart's rejection path still surfaces it
+      // if the retry doesn't happen or also fails.
+      if (!suppressErrorBroadcast?.(completion.error)) {
+        broadcast('strum:error', payload)
+      }
       return true
     }
   } catch {
@@ -384,7 +392,68 @@ function handlePlainLine(runId: string, line: string): void {
   }
 }
 
+function isRemoteUrl(value: unknown): boolean {
+  return typeof value === 'string' && /^https?:\/\//i.test(value.trim())
+}
+
+/**
+ * True when the run will download something with yt-dlp (URL inputs, or
+ * stem-song entries whose stems/extras are URLs).
+ */
+function hasRemoteInputs(options: Omit<AutoChartRunOptions, 'cacheDir'>): boolean {
+  if ((options.urls ?? []).some(isRemoteUrl)) return true
+  for (const song of options.stemSongs ?? []) {
+    if (Object.values(song.stems ?? {}).some(isRemoteUrl)) return true
+    if ((song.extras ?? []).some(isRemoteUrl)) return true
+  }
+  return false
+}
+
 export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'>): Promise<AutoChartRunResult> {
+  const remote = hasRemoteInputs(options)
+  try {
+    return await runAutoChartOnce(options, { allowYtDlpRetry: remote, refreshYtDlp: remote })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!remote || !isYtDlpBlockedError(message)) throw error
+
+    // YouTube rejected the download. Nine times out of ten this means YouTube
+    // changed something and the installed yt-dlp is stale — force a refresh
+    // and, if that produced a newer build, run again. Downloads happen at the
+    // very start of a run, so nothing expensive is lost by retrying.
+    const runId = options.runId
+    warnStrum(runId, `yt-dlp download was rejected (${message.split('\n')[0]}); refreshing yt-dlp and retrying.`)
+    const python = await findPythonCommand(runId)
+    const refresh = await ensureFreshYtDlp(python, {
+      runId,
+      // The renderer is already showing the 'download' stage; lower-ranked
+      // ('bootstrap') events would be dropped.
+      stage: 'download',
+      force: true,
+      reason: 'YouTube rejected the download; checking for a yt-dlp update...'
+    })
+    if (!refresh.changed) {
+      const versionNote = refresh.version ? ` (yt-dlp ${refresh.version})` : ''
+      throw new Error(
+        `${message}\n\nyt-dlp is already the newest available build${versionNote}. `
+        + 'YouTube may have changed something upstream has not fixed yet — try again later, '
+        + 'or download the audio yourself and pass the file in.'
+      )
+    }
+    broadcast('strum:progress', {
+      runId,
+      stage: 'download',
+      message: `yt-dlp updated to ${refresh.version} — retrying download...`
+    } satisfies AutoChartProgressEvent)
+    // yt-dlp was just refreshed; don't run the throttled check again.
+    return await runAutoChartOnce(options, { allowYtDlpRetry: false, refreshYtDlp: false })
+  }
+}
+
+async function runAutoChartOnce(
+  options: Omit<AutoChartRunOptions, 'cacheDir'>,
+  { allowYtDlpRetry, refreshYtDlp }: { allowYtDlpRetry: boolean; refreshYtDlp: boolean }
+): Promise<AutoChartRunResult> {
   const python = await findPythonCommand(options.runId)
   const runId = options.runId
   const cacheDir = join(app.getPath('userData'), 'cache', 'strum')
@@ -409,6 +478,13 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
     message: 'Starting STRUM auto-chart run...',
     percent: 0
   } satisfies AutoChartProgressEvent)
+
+  // URL inputs go through yt-dlp, which YouTube breaks every few weeks. Do a
+  // (throttled) in-place upgrade before spawning the worker so users get the
+  // current build without a full runtime re-provision. Never fatal.
+  if (refreshYtDlp) {
+    await ensureFreshYtDlp(python, { runId })
+  }
 
   // Best-effort: provision demucs.cpp before spawning the worker so the
   // separate_stems step uses the native binary instead of the Python
@@ -519,6 +595,9 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
     let stdoutRemainder = ''
     let stderrRemainder = ''
     const completion: { result?: AutoChartRunResult; error?: string } = {}
+    // Hold back the worker's own error broadcast when runAutoChart may still
+    // refresh yt-dlp and retry; the final rejection path re-broadcasts it.
+    const suppressYtDlpError = (message: string): boolean => allowYtDlpRetry && isYtDlpBlockedError(message)
     let lastOutputAt = Date.now()
     let lastProgressPercent = 0
     let lastProgressStage: AutoChartStage = 'bootstrap'
@@ -588,7 +667,7 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
           if (typeof event.percent === 'number') {
             lastProgressPercent = Math.max(lastProgressPercent, event.percent)
           }
-        })) {
+        }, suppressYtDlpError)) {
           // Check if it's a tqdm progress line (e.g. " 10%|██      |")
           const tqdmMatch = line.match(/(\d+)%\|/)
           if (tqdmMatch) {
@@ -666,13 +745,13 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
         if (verboseDebug) {
           logStrum(runId, `stdout(remainder)> ${stdoutRemainder}`)
         }
-        handleStructuredEvent(stdoutRemainder, completion) || handlePlainLine(runId, stdoutRemainder)
+        handleStructuredEvent(stdoutRemainder, completion, undefined, suppressYtDlpError) || handlePlainLine(runId, stdoutRemainder)
       }
       if (stderrRemainder) {
         if (verboseDebug) {
           logStrum(runId, `stderr(remainder)> ${stderrRemainder}`)
         }
-        handleStructuredEvent(stderrRemainder, completion) || handlePlainLine(runId, stderrRemainder)
+        handleStructuredEvent(stderrRemainder, completion, undefined, suppressYtDlpError) || handlePlainLine(runId, stderrRemainder)
       }
 
       if (signal === 'SIGTERM') {
