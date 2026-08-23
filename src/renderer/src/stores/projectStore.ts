@@ -126,10 +126,16 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'chart-editor-settings',
-      merge: (persisted, current) => ({
-        ...current,
-        ...(persisted as Partial<SettingsStore>)
-      })
+      merge: (persisted, current) => {
+        const persistedSettings = persisted as Partial<SettingsStore>
+        return {
+          ...current,
+          ...persistedSettings,
+          // Deep-merge hotkeys so actions added in newer versions keep their
+          // defaults for users with an older persisted hotkey map.
+          hotkeys: { ...cloneDefaultHotkeys(), ...(persistedSettings?.hotkeys ?? {}) }
+        }
+      }
     }
   )
 )

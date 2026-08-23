@@ -15,13 +15,13 @@
 // users who never chart vocals.
 
 import { app, BrowserWindow } from 'electron'
-import { execFile } from 'child_process'
 import { existsSync, readFileSync, createWriteStream } from 'fs'
 import { mkdir, rm, writeFile, chmod } from 'fs/promises'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
 import { Readable } from 'stream'
 import type { AutoChartProgressEvent } from './types'
+import { extractTarGz } from './extractTarGz'
 import { detectAccelerator } from './runtimeBootstrap'
 
 // Bump together with the binary release version. Each bump invalidates
@@ -196,16 +196,6 @@ async function downloadFile(
     }
   })
   await pipeline(nodeStream, out)
-}
-
-async function extractTarGz(archivePath: string, destDir: string): Promise<void> {
-  await mkdir(destDir, { recursive: true })
-  await new Promise<void>((resolve, reject) => {
-    execFile('tar', ['-xzf', archivePath, '-C', destDir], (err) => {
-      if (err) reject(err)
-      else resolve()
-    })
-  })
 }
 
 let inflight: Promise<{ binaryPath: string; modelPath: string }> | null = null

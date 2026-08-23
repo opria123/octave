@@ -184,6 +184,32 @@ export function useKeyboardShortcuts(): void {
       if (!isCtrlOrCmd && !isInputElement(e.target as HTMLElement) && songStore) {
         const state = songStore.getState()
 
+        // Shift+Left/Right: extend or shrink selected note durations by one snap division
+        if (matchesHotkey(e, hotkeys.extendNote) || matchesHotkey(e, hotkeys.shrinkNote)) {
+          const snapTicks = 480 / state.snapDivision
+          const delta = matchesHotkey(e, hotkeys.extendNote) ? snapTicks : -snapTicks
+          if (state.selectedNoteIds.length > 0) {
+            e.preventDefault()
+            for (const id of state.selectedNoteIds) {
+              const note = state.song.notes.find((n) => n.id === id)
+              // Floor at 0: a zero-length guitar/bass/keys note is a strum
+              if (note) songStore.getState().updateNote(id, { duration: Math.max(0, note.duration + delta) })
+            }
+            return
+          }
+          if (state.selectedVocalNoteIds.length > 0) {
+            e.preventDefault()
+            for (const id of state.selectedVocalNoteIds) {
+              const note = state.song.vocalNotes.find((n) => n.id === id)
+              // Floor at one snap division: zero-length vocal notes aren't valid
+              if (note) {
+                songStore.getState().updateVocalNote(id, { duration: Math.max(snapTicks, note.duration + delta) })
+              }
+            }
+            return
+          }
+        }
+
         // Left/Right: nudge selected notes (or vocal notes) by one snap division in time
         if (matchesHotkey(e, hotkeys.nudgeLeft) || matchesHotkey(e, hotkeys.nudgeRight)) {
           const snapTicks = 480 / state.snapDivision

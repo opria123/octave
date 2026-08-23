@@ -18,7 +18,7 @@
 // setup from minutes to seconds. This module's public API stays the same.
 
 import { app, BrowserWindow } from 'electron'
-import { execFile, spawn } from 'child_process'
+import { spawn } from 'child_process'
 import { existsSync, readFileSync, createWriteStream } from 'fs'
 import { mkdir, rm, writeFile } from 'fs/promises'
 import { createHash } from 'crypto'
@@ -26,6 +26,7 @@ import { join } from 'path'
 import { pipeline } from 'stream/promises'
 import { Readable } from 'stream'
 import type { AutoChartProgressEvent } from './types'
+import { extractTarGz } from './extractTarGz'
 
 // Pinned python-build-standalone release. Bump in lockstep with
 // requirements.txt if the wheel set requires a newer Python.
@@ -248,18 +249,6 @@ async function downloadFile(url: string, destination: string, runId: string | un
     }
   })
   await pipeline(nodeStream, out)
-}
-
-async function extractTarGz(archivePath: string, destDir: string): Promise<void> {
-  await mkdir(destDir, { recursive: true })
-  // tar is built into Windows 10 1803+, macOS, and Linux. -xzf works
-  // identically across all three.
-  await new Promise<void>((resolve, reject) => {
-    execFile('tar', ['-xzf', archivePath, '-C', destDir], (err) => {
-      if (err) reject(err)
-      else resolve()
-    })
-  })
 }
 
 function runStreaming(

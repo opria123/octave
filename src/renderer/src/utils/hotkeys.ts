@@ -22,6 +22,8 @@ export const DEFAULT_HOTKEYS: AppHotkeys = {
   nudgeRight: 'ArrowRight',
   nudgeUp: 'ArrowUp',
   nudgeDown: 'ArrowDown',
+  extendNote: 'Shift+ArrowRight',
+  shrinkNote: 'Shift+ArrowLeft',
   toggleCymbalOrTap: 'S',
   toggleGhostOrHopo: 'G',
   toggleAccent: 'F',
@@ -53,6 +55,8 @@ export const HOTKEY_ACTION_LABELS: Record<HotkeyAction, string> = {
   nudgeRight: 'Nudge Right',
   nudgeUp: 'Nudge Up / Fret +1',
   nudgeDown: 'Nudge Down / Fret -1',
+  extendNote: 'Extend Note Duration',
+  shrinkNote: 'Shrink Note Duration',
   toggleCymbalOrTap: 'Toggle Cymbal/Tap',
   toggleGhostOrHopo: 'Toggle Ghost/HOPO',
   toggleAccent: 'Toggle Accent',
@@ -73,7 +77,7 @@ export const HOTKEY_GROUPS: Array<{ title: string; actions: HotkeyAction[] }> = 
   },
   {
     title: 'Movement',
-    actions: ['nudgeLeft', 'nudgeRight', 'nudgeUp', 'nudgeDown']
+    actions: ['nudgeLeft', 'nudgeRight', 'nudgeUp', 'nudgeDown', 'extendNote', 'shrinkNote']
   },
   {
     title: 'Modifiers',

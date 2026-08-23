@@ -14,13 +14,13 @@
 // than at app launch.
 
 import { app, BrowserWindow } from 'electron'
-import { execFile } from 'child_process'
 import { existsSync, readFileSync, createWriteStream } from 'fs'
 import { mkdir, rm, writeFile, chmod } from 'fs/promises'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
 import { Readable } from 'stream'
 import type { AutoChartProgressEvent } from './types'
+import { extractTarGz } from './extractTarGz'
 
 // Bump together with the binary release version. Each bump invalidates
 // the on-disk cache so users get the new binary on next launch.
@@ -172,16 +172,6 @@ async function downloadFile(
     }
   })
   await pipeline(nodeStream, out)
-}
-
-async function extractTarGz(archivePath: string, destDir: string): Promise<void> {
-  await mkdir(destDir, { recursive: true })
-  await new Promise<void>((resolve, reject) => {
-    execFile('tar', ['-xzf', archivePath, '-C', destDir], (err) => {
-      if (err) reject(err)
-      else resolve()
-    })
-  })
 }
 
 let inflight: Promise<{ binaryPath: string; weightsPath: string }> | null = null

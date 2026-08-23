@@ -1405,6 +1405,7 @@ function VocalNotes({
   onNoteClick,
   onLyricChange,
   onGridMouseDown,
+  onSustainResize,
   starPowerPhrases
 }: {
   vocalNotes: VocalNote[]
@@ -1418,6 +1419,7 @@ function VocalNotes({
   onNoteClick: (noteId: string, modifiers: { ctrl: boolean; shift: boolean; alt: boolean }) => void
   onLyricChange: (noteId: string, lyric: string) => void
   onGridMouseDown: (e: React.MouseEvent<HTMLElement>) => void
+  onSustainResize: (noteId: string, e: React.MouseEvent) => void
   starPowerPhrases: StarPowerPhrase[]
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -1720,7 +1722,31 @@ function VocalNotes({
     }
   }, [editingLyric, onLyricChange])
 
-  // Cursor: show grab when hovering over a selected vocal note
+  // Mousedown: intercept right-edge resize drags before the grid handler
+  // sees the event (issue #64 — extend existing vocal notes by dragging).
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect()
+        const mx = e.clientX - rect.left
+        const my = e.clientY - rect.top
+        for (let i = visibleNotes.length - 1; i >= 0; i--) {
+          const { note, x, y, w, h } = visibleNotes[i]
+          if (my >= y && my <= y + h && mx >= x + w - SUSTAIN_HANDLE_WIDTH && mx <= x + w + 2) {
+            e.stopPropagation()
+            e.preventDefault()
+            onSustainResize(note.id, e)
+            return
+          }
+        }
+      }
+      onGridMouseDown(e)
+    },
+    [visibleNotes, onSustainResize, onGridMouseDown]
+  )
+
+  // Cursor: ew-resize on note right edge, grab when hovering a selected vocal note
   const handleCursorMove = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       const canvas = canvasRef.current
@@ -1728,6 +1754,14 @@ function VocalNotes({
       const rect = canvas.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
+      // Right-edge hover (any note, not just selected)
+      for (let i = visibleNotes.length - 1; i >= 0; i--) {
+        const { x, y, w, h } = visibleNotes[i]
+        if (my >= y && my <= y + h && mx >= x + w - SUSTAIN_HANDLE_WIDTH && mx <= x + w + 2) {
+          canvas.style.cursor = 'ew-resize'
+          return
+        }
+      }
       const selectedSet = new Set(selectedNoteIds)
       if (selectedSet.size === 0) { canvas.style.cursor = ''; return }
       for (let i = visibleNotes.length - 1; i >= 0; i--) {
@@ -1749,7 +1783,7 @@ function VocalNotes({
         className="midi-notes-canvas"
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
-        onMouseDown={onGridMouseDown}
+        onMouseDown={handleMouseDown}
         onMouseMove={handleCursorMove}
         style={{ pointerEvents: 'auto' }}
       />
@@ -2128,6 +2162,8 @@ function MidiShortcutHelpButton(): React.JSX.Element {
             <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.undo}</kbd></div><span className="shortcut-desc">Undo</span></div>
             <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.redo}</kbd></div><span className="shortcut-desc">Redo</span></div>
             <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.deleteSelection}</kbd></div><span className="shortcut-desc">Delete selected</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.extendNote}</kbd></div><span className="shortcut-desc">Extend note duration</span></div>
+            <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.shrinkNote}</kbd></div><span className="shortcut-desc">Shrink note duration</span></div>
             <div className="shortcut-row"><div className="shortcut-keys"><kbd>{hotkeys.createStarPower}</kbd></div><span className="shortcut-desc">Star Power from selection</span></div>
             <div className="shortcut-row"><div className="shortcut-keys"><kbd>Esc</kbd></div><span className="shortcut-desc">Clear selection</span></div>
           </div>
@@ -3411,6 +3447,28 @@ export function MidiEditor(): React.JSX.Element {
     [songStore]
   )
 
+  // Handle vocal note right-edge resize drag (initiated from VocalNotes canvas)
+  const handleVocalSustainResize = useCallback(
+    (noteId: string, e: React.MouseEvent) => {
+      if (!songStore) return
+      const note = (songStore.getState().song.vocalNotes || []).find((n) => n.id === noteId)
+      if (!note) return
+      const rect = (e.target as HTMLElement).closest('.midi-grid-area')?.getBoundingClientRect()
+      if (!rect) return
+      gridDragRef.current = {
+        mode: 'resize-sustain',
+        startTick: note.tick,
+        startX: e.clientX - rect.left,
+        noteId,
+        instrument: 'vocals',
+        rect,
+        lanes: [],
+        resizeOriginalDuration: note.duration
+      }
+    },
+    [songStore]
+  )
+
   // Handle mousedown on vocal grid - pitch-based note placement
   const handleVocalGridMouseDown = useCallback(
     (e: React.MouseEvent<HTMLElement>) => {
@@ -3723,8 +3781,14 @@ export function MidiEditor(): React.JSX.Element {
         }
       } else if (drag.mode === 'resize-sustain' && drag.noteId) {
         const snappedTick = snapToGrid(currentTick, snapDivision, 480)
-        const duration = Math.max(0, snappedTick - drag.startTick)
-        songStore.getState().updateNote(drag.noteId, { duration })
+        if (drag.instrument === 'vocals') {
+          // Floor at one snap division: zero-length vocal notes aren't valid
+          const duration = Math.max(480 / snapDivision, snappedTick - drag.startTick)
+          songStore.getState().updateVocalNote(drag.noteId, { duration })
+        } else {
+          const duration = Math.max(0, snappedTick - drag.startTick)
+          songStore.getState().updateNote(drag.noteId, { duration })
+        }
       } else if (drag.mode === 'select') {
         const startTick = Math.min(drag.startTick, currentTick)
         const endTick = Math.max(drag.startTick, currentTick)
@@ -4400,6 +4464,7 @@ export function MidiEditor(): React.JSX.Element {
                           onNoteClick={handleNoteClick}
                           onLyricChange={(noteId, lyric) => songStore?.getState().updateVocalNote(noteId, { lyric })}
                           onGridMouseDown={handleVocalGridMouseDown}
+                          onSustainResize={handleVocalSustainResize}
                           starPowerPhrases={starPowerPhrases}
                         />
                       ) : isProKeys ? (

@@ -339,6 +339,8 @@ export type HotkeyAction =
   | 'nudgeRight'
   | 'nudgeUp'
   | 'nudgeDown'
+  | 'extendNote'
+  | 'shrinkNote'
   | 'toggleCymbalOrTap'
   | 'toggleGhostOrHopo'
   | 'toggleAccent'
