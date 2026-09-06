@@ -1,0 +1,67 @@
+{
+  "format": "octave-strum-acceptance/v1",
+  "evidence": "real-catalog-execution",
+  "quality_claim": false,
+  "stages": [
+    {
+      "name": "probe",
+      "status": "passed"
+    },
+    {
+      "name": "pipelines",
+      "status": "passed"
+    },
+    {
+      "name": "inspect-catalog",
+      "status": "passed"
+    },
+    {
+      "name": "prepare",
+      "status": "passed"
+    },
+    {
+      "name": "train",
+      "status": "passed"
+    },
+    {
+      "name": "inspect-candidate",
+      "status": "passed"
+    },
+    {
+      "name": "discover-candidate",
+      "status": "passed"
+    },
+    {
+      "name": "evaluate",
+      "status": "passed"
+    },
+    {
+      "name": "package",
+      "status": "rejected-as-required"
+    },
+    {
+      "name": "profile-validate",
+      "status": "rejected-as-required"
+    },
+    {
+      "name": "chart-preflight",
+      "status": "rejected-as-required"
+    },
+    {
+      "name": "chart-run",
+      "status": "rejected-as-required"
+    }
+  ],
+  "runtime": {
+    "id": "strum-0.1.0+git.b32fa0a0943a",
+    "version": "0.1.0",
+    "source_revision": "b32fa0a0943a75184999edfe87c4ce38225d833f",
+    "source_dirty": false,
+    "python": "3.14.7"
+  },
+  "protocol_version": 1,
+  "canonical_quality_gate": "failed",
+  "artifact_path_audit": "passed",
+  "positive_chart_execution": "not-reached-quality-gate-failed",
+  "status": "passed"
+}

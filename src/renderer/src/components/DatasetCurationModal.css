@@ -1,0 +1,952 @@
+.dataset-curation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10020;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.68);
+}
+.dataset-curation-modal {
+  width: min(980px, 100%);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+}
+.dataset-curation-modal > header {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 16px;
+  min-height: 72px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+.dataset-curation-modal > footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+.training-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: start;
+  padding: 20px max(46px, 9%);
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, var(--bg-secondary));
+  border-bottom: 1px solid var(--border-color);
+}
+.training-header .training-steps {
+  position: absolute;
+  top: 19px;
+  left: 50%;
+  width: min(620px, calc(100% - 340px));
+  padding: 0;
+  background: transparent;
+  border: 0;
+  transform: translateX(-50%);
+}
+.dataset-curation-modal .training-header .training-steps button {
+  grid-template-rows: 34px 14px;
+  gap: 2px;
+  min-height: 52px;
+}
+.dataset-curation-modal .training-header .training-steps button::after {
+  top: 16px;
+  left: calc(50% + 17px);
+  width: calc(100% - 34px);
+}
+.training-header .training-step-orb {
+  grid-row: 1;
+  width: 34px;
+  height: 34px;
+}
+.training-header .training-step-orb svg {
+  width: 16px;
+  height: 16px;
+}
+.training-header .training-step-label {
+  grid-row: 2;
+  font-size: 10px;
+}
+.training-header .dataset-close {
+  grid-column: 2;
+  grid-row: 1;
+}
+.dataset-curation-modal .training-steps button {
+  position: relative;
+  display: grid;
+  grid-template-rows: 42px 16px;
+  align-content: start;
+  justify-items: center;
+  gap: 7px;
+  min-height: 65px;
+  padding: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  text-transform: capitalize;
+}
+.dataset-curation-modal .training-steps button::after {
+  position: absolute;
+  z-index: 0;
+  top: 20px;
+  left: calc(50% + 21px);
+  width: calc(100% - 42px);
+  height: 3px;
+  content: '';
+  background: color-mix(in srgb, var(--text-secondary) 26%, transparent);
+  border-radius: 999px;
+}
+.training-step {
+  position: relative;
+  min-width: 0;
+}
+.training-step > button {
+  width: 100%;
+}
+.dataset-curation-modal .training-steps .training-step:last-child button::after {
+  content: none;
+}
+.training-step-blocker {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 6px);
+  left: 50%;
+  width: max-content;
+  max-width: 220px;
+  padding: 7px 9px;
+  color: #f6d99c;
+  background: var(--bg-primary);
+  border: 1px solid rgba(191, 143, 50, 0.42);
+  border-radius: 5px;
+  box-shadow: var(--shadow-lg);
+  font-size: 11px;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -4px);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+.training-step.blocked:hover .training-step-blocker,
+.training-step.blocked:focus-visible .training-step-blocker {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.training-step-orb {
+  position: relative;
+  z-index: 1;
+  width: 42px;
+  height: 42px;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 2px solid color-mix(in srgb, var(--text-secondary) 65%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.22);
+}
+.training-step-orb svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+.training-step-label {
+  position: relative;
+  z-index: 1;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.training-steps button.active {
+  color: #79b8ff;
+}
+.dataset-curation-modal .training-steps button.active .training-step-orb {
+  color: #79b8ff;
+  background: color-mix(in srgb, #58a6ff 16%, var(--bg-secondary));
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 4px color-mix(in srgb, #58a6ff 16%, transparent);
+}
+.training-steps button.complete {
+  color: var(--success-color);
+}
+.dataset-curation-modal .training-steps button.complete .training-step-orb {
+  color: #102817;
+  background: var(--success-color);
+  border-color: var(--success-color);
+}
+.dataset-curation-modal .training-steps button.complete::after {
+  background: var(--success-color);
+}
+.dataset-curation-modal .training-steps button.active::after {
+  background: linear-gradient(
+    90deg,
+    #58a6ff,
+    color-mix(in srgb, var(--text-secondary) 26%, transparent)
+  );
+}
+.dataset-curation-modal .training-steps button.complete:has(+ .training-step button.active)::after {
+  background: linear-gradient(90deg, var(--success-color), #58a6ff);
+}
+.dataset-curation-modal > footer {
+  border-top: 1px solid var(--border-color);
+  border-bottom: 0;
+}
+.dataset-curation-modal > footer.training-learn-footer {
+  justify-content: flex-end;
+}
+
+.training-panel-heading,
+.training-runtime-card,
+.training-artifact-list > button,
+.training-artifact-list > div {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.training-panel-heading {
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.training-panel-heading > div {
+  min-width: 0;
+}
+.training-panel-heading h3,
+.training-step-panel h3 {
+  margin: 0 0 7px;
+}
+.training-panel-heading p,
+.training-step-panel > p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.training-runtime-card {
+  padding: 12px 14px;
+  margin: 18px 0;
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, var(--bg-secondary));
+}
+.training-learn-runtime {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0;
+  padding: 11px 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, var(--bg-secondary));
+}
+.training-learn-runtime > div {
+  display: grid;
+  gap: 3px;
+}
+.training-learn-runtime small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.training-runtime-card > div,
+.training-artifact-list span:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.training-runtime-card small,
+.training-artifact-list small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.training-runtime-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.training-runtime-actions .dataset-secondary {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.training-runtime-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--text-muted);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--text-muted) 14%, transparent);
+}
+.training-runtime-dot.ready {
+  background: var(--success-color);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--success-color) 16%, transparent);
+}
+.training-control,
+.training-config-grid label {
+  display: grid;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.training-control {
+  margin: 18px 0;
+}
+.training-control select,
+.training-config-grid input,
+.training-config-grid select {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+.training-config-grid .training-toggle-control {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  padding: 8px 10px;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.training-config-grid .training-toggle-control input {
+  width: 16px;
+  min-height: 16px;
+  padding: 0;
+  accent-color: var(--accent-color);
+}
+.training-inspection-grid,
+.training-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+.training-checkpoint-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0 2px;
+}
+.training-checkpoint-summary > div {
+  display: grid;
+  gap: 4px;
+  min-height: 64px;
+  padding: 11px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: color-mix(in srgb, #58a6ff 7%, var(--bg-tertiary));
+}
+.training-checkpoint-summary span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.training-checkpoint-summary strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.training-inspection-grid > div {
+  display: grid;
+  gap: 4px;
+  min-height: 68px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+}
+.training-inspection-grid span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.training-inspection-grid strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.training-inline-note {
+  margin: 0 0 16px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.training-runtime-warning {
+  margin-top: -8px;
+  color: #f6d99c;
+}
+.training-step-panel .dataset-primary {
+  margin-top: 4px;
+}
+.training-artifact-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 22px;
+}
+.training-artifact-list h4 {
+  margin: 0 0 3px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.training-artifact-list > button,
+.training-artifact-list > div {
+  width: 100%;
+  justify-content: space-between;
+  padding: 10px 12px;
+  color: var(--text-primary);
+  text-align: left;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+}
+.training-artifact-list > button:hover,
+.training-artifact-list > button.selected {
+  border-color: color-mix(in srgb, #58a6ff 72%, var(--border-color));
+  background: color-mix(in srgb, #58a6ff 10%, var(--bg-tertiary));
+}
+.training-status-ready,
+.training-status-neutral {
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.training-status-ready {
+  color: #b8f3cd;
+  background: color-mix(in srgb, var(--success-color) 20%, transparent);
+}
+.training-status-neutral {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+}
+.training-deploy-blocked {
+  margin: 18px 0;
+  padding: 14px;
+  color: #f6d99c;
+  background: color-mix(in srgb, #8b661d 22%, var(--bg-tertiary));
+  border: 1px solid color-mix(in srgb, #c98f22 42%, var(--border-color));
+  border-radius: 8px;
+}
+.training-deploy-blocked p {
+  margin: 6px 0 0;
+  color: #e7c98b;
+  line-height: 1.45;
+}
+.training-profile-summary {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0 2px;
+  color: #b8f3cd;
+  font-size: 12px;
+}
+
+@media (max-width: 680px) {
+  .training-inspection-grid,
+  .training-config-grid,
+  .training-checkpoint-summary {
+    grid-template-columns: 1fr;
+  }
+  .training-runtime-card,
+  .training-panel-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .training-runtime-actions {
+    margin-left: 0;
+  }
+}
+.dataset-curation-modal h2,
+.dataset-curation-modal h3 {
+  margin: 0;
+}
+.dataset-curation-modal h2 {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 20px;
+}
+.dataset-curation-modal h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dataset-curation-modal h2 span,
+.dataset-heading-icon {
+  display: inline-grid;
+  place-items: center;
+  margin: 0;
+  line-height: 1;
+  filter: saturate(1.15);
+}
+.dataset-curation-modal h3 {
+  font-size: 14px;
+}
+.dataset-curation-modal p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.dataset-curation-modal main .training-step-summary {
+  margin: 0 0 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.dataset-curation-modal main {
+  overflow-y: auto;
+  padding: 18px 20px;
+}
+.dataset-section {
+  margin-top: 20px;
+}
+.dataset-section:first-child {
+  margin-top: 0;
+}
+.dataset-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 9px;
+}
+.dataset-section-actions {
+  display: flex;
+  gap: 8px;
+}
+.dataset-song-list,
+.dataset-package-list {
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  max-height: 190px;
+  overflow: auto;
+}
+.dataset-song-list label,
+.dataset-package-list label {
+  display: flex;
+  gap: 10px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+  cursor: pointer;
+}
+.dataset-artwork {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  object-fit: cover;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+}
+.dataset-artwork-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  font-size: 18px;
+}
+.dataset-song-list label:last-child,
+.dataset-package-list label:last-child {
+  border-bottom: 0;
+}
+.dataset-package-group + .dataset-package-group {
+  border-top: 1px solid var(--border-color);
+}
+.dataset-package-group > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+.dataset-package-group > header strong,
+.dataset-package-group > header small {
+  display: block;
+}
+.dataset-package-group > header small {
+  margin-top: 2px;
+  color: var(--text-secondary);
+}
+.dataset-package-actions {
+  display: flex;
+  gap: 8px;
+}
+.dataset-package-inventory {
+  padding: 7px 11px;
+  margin: 0;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 68%, var(--bg-tertiary));
+  border-bottom: 1px solid var(--border-color);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.dataset-song-list label.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.dataset-song-list strong {
+  display: block;
+  font-weight: 600;
+}
+.dataset-song-list small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-secondary);
+}
+.dataset-empty {
+  padding: 12px;
+}
+.dataset-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.dataset-details h3 {
+  grid-column: 1 / -1;
+}
+.dataset-details label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.dataset-catalog-parent,
+.dataset-editor-fields {
+  grid-column: 1 / -1;
+}
+.dataset-editor-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.dataset-editor-fields label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.dataset-details input {
+  min-width: 0;
+  padding: 8px 9px;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+}
+.dataset-harmony-sources {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 10px;
+  margin-top: 0;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-secondary);
+}
+.dataset-harmony-sources label,
+.dataset-harmony-provenance label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.dataset-harmony-sources input,
+.dataset-harmony-sources select {
+  min-width: 0;
+  padding: 8px 9px;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+}
+.dataset-harmony-provenance {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.dataset-output {
+  display: flex;
+  gap: 8px;
+}
+.dataset-output input {
+  flex: 1;
+}
+.dataset-catalog-picker {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
+  max-height: 150px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+}
+.dataset-catalog-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.dataset-catalog-select {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  text-align: left;
+}
+.dataset-catalog-select small {
+  color: var(--text-secondary);
+}
+.dataset-catalog-row.selected .dataset-catalog-select {
+  border-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 20%, var(--bg-tertiary));
+}
+.dataset-curation-modal button {
+  padding: 7px 11px;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+}
+.dataset-curation-modal button > span:first-child {
+  display: inline-block;
+  min-width: 1em;
+  color: var(--accent-color);
+  font-weight: 700;
+}
+.dataset-icon-button {
+  display: grid !important;
+  place-items: center;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  padding: 0 !important;
+}
+.dataset-icon-button > span:first-child {
+  font-size: 18px;
+}
+.dataset-curation-modal button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.dataset-close {
+  font-size: 22px !important;
+  line-height: 1;
+}
+.dataset-primary {
+  color: #1f1a13 !important;
+  background: var(--accent-color) !important;
+  border-color: transparent !important;
+}
+.dataset-message {
+  margin-bottom: 12px !important;
+  padding: 9px 11px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+.dataset-message.error {
+  color: #ffb8b8;
+  background: rgba(190, 45, 45, 0.18);
+}
+.dataset-message.success {
+  color: #b8e8c7;
+  background: rgba(45, 150, 80, 0.15);
+}
+.dataset-message.progress {
+  color: #b8d9ff;
+  background: rgba(50, 115, 185, 0.18);
+}
+.dataset-library-loading {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-height: 142px;
+  padding: 18px;
+  color: var(--text-secondary);
+  text-align: center;
+  background: linear-gradient(
+    135deg,
+    var(--bg-tertiary),
+    color-mix(in srgb, var(--accent-color) 7%, var(--bg-tertiary))
+  );
+}
+.dataset-library-loading strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.dataset-library-loading small {
+  font-size: 11px;
+}
+.dataset-loading-orbit {
+  width: 25px;
+  height: 25px;
+  border: 3px solid color-mix(in srgb, var(--accent-color) 22%, transparent);
+  border-top-color: var(--accent-color);
+  border-radius: 50%;
+  animation: dataset-spin 0.75s linear infinite;
+}
+.dataset-spin {
+  animation: dataset-spin 0.75s linear infinite;
+}
+@keyframes dataset-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.dataset-message.warning {
+  grid-column: 1 / -1;
+  color: #f6d99c;
+  background: rgba(160, 110, 25, 0.18);
+}
+.training-step-panel {
+  display: grid;
+  gap: 14px;
+  max-width: 580px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+}
+.training-learn {
+  display: grid;
+  gap: 16px;
+}
+.training-learn-intro {
+  display: grid;
+  gap: 6px;
+}
+.training-learn-intro p {
+  margin: 0;
+  font-size: 13px;
+}
+.training-learn-path {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.training-learn-path li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-tertiary);
+}
+.training-learn-path li > span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 12%, var(--bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--accent-color) 32%, var(--border-color));
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+}
+.training-learn-path strong {
+  display: block;
+  font-size: 12px;
+}
+.training-learn-path p {
+  margin: 2px 0 0;
+  font-size: 11px;
+}
+.training-use-notice {
+  padding: 12px;
+  color: #f6d99c;
+  background: rgba(160, 110, 25, 0.18);
+  border: 1px solid rgba(191, 143, 50, 0.3);
+  border-radius: 7px;
+}
+.training-use-notice strong {
+  display: block;
+  color: #ffe7ac;
+  font-size: 12px;
+}
+.training-use-notice p {
+  margin: 3px 0 0;
+  color: inherit;
+  font-size: 12px;
+}
+.training-step-panel dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.training-step-panel dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.training-step-panel dt,
+.training-step-panel dd {
+  margin: 0;
+}
+.training-step-panel dt {
+  color: var(--text-secondary);
+}
+@media (max-width: 760px) {
+  .training-header .training-steps {
+    position: static;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    margin-top: 8px;
+    transform: none;
+  }
+}
+@media (max-width: 620px) {
+  .training-steps {
+    padding-inline: 16px;
+  }
+  .dataset-curation-modal .training-steps button {
+    min-height: 65px;
+  }
+  .dataset-details,
+  .dataset-editor-fields,
+  .training-learn-path {
+    grid-template-columns: 1fr;
+  }
+  .dataset-harmony-provenance {
+    grid-template-columns: 1fr;
+  }
+  .dataset-curation-modal footer {
+    align-items: start;
+    flex-direction: column;
+  }
+  .dataset-section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

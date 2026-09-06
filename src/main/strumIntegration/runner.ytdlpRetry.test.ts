@@ -60,11 +60,10 @@ class FakeChild extends EventEmitter {
   }
 }
 
+const execFileMock = vi.fn()
+
 vi.mock('child_process', () => ({
-  execFile: (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
-    // findPythonCommand probes candidates with `--version`; accept the first.
-    cb(null)
-  },
+  execFile: (...args: unknown[]) => execFileMock(...args),
   spawn: (_cmd: string, args: string[]) => {
     spawnCalls.push(args)
     const child = new FakeChild()
@@ -96,7 +95,12 @@ vi.mock('child_process', () => ({
   }
 }))
 
-import { runAutoChart } from './runner'
+import {
+  cancelProfileUrlMaterialization,
+  materializeProfileUrlAudio,
+  resolvePythonCommand,
+  runAutoChart
+} from './runner'
 
 const YT_403 =
   'yt-dlp 2026.03.17 could not download https://youtu.be/x: ERROR: unable to download video data: HTTP Error 403: Forbidden'
@@ -115,13 +119,50 @@ beforeEach(() => {
   outcomes.length = 0
   spawnCalls.length = 0
   refreshMock.mockReset()
+  execFileMock.mockImplementation(
+    (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => cb(null)
+  )
 })
 
 afterEach(() => {
   vi.useRealTimers()
+  delete process.env.OCTAVE_STRUM_PYTHON
 })
 
 describe('runAutoChart yt-dlp refresh + retry', () => {
+  it('uses OCTAVE managed Python in development when no candidate has STRUM dependencies', async () => {
+    process.env.OCTAVE_STRUM_PYTHON = 'bare-development-python'
+    execFileMock.mockImplementation(
+      (_cmd: string, args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
+        cb(args.includes('-c') ? new Error('module unavailable') : null)
+      }
+    )
+
+    await expect(resolvePythonCommand('bootstrap-dev-runtime')).resolves.toEqual({
+      command: 'unused',
+      baseArgs: []
+    })
+  })
+
+  it('does not spawn yt-dlp when cancellation wins during its managed refresh', async () => {
+    let releaseRefresh: (() => void) | undefined
+    refreshMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseRefresh = resolve
+        })
+    )
+
+    const materialization = materializeProfileUrlAudio('materialize-cancel', 'https://youtu.be/x')
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalledTimes(1))
+
+    await expect(cancelProfileUrlMaterialization('materialize-cancel')).resolves.toBe(true)
+    releaseRefresh?.()
+
+    await expect(materialization).rejects.toThrow(/cancelled/)
+    expect(spawnCalls).toHaveLength(0)
+  })
+
   it('refreshes before a URL run, and retries once after a 403 when the refresh produced a newer build', async () => {
     refreshMock
       // proactive (throttled) check before the run

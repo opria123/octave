@@ -1,0 +1,48 @@
+{
+  "format": "octave-strum-ui-acceptance/v1",
+  "quality_claim": false,
+  "stages": [
+    {
+      "name": "runtime-and-catalog-inspection",
+      "status": "passed"
+    },
+    {
+      "name": "prepare-completed",
+      "status": "passed"
+    },
+    {
+      "name": "training-terminal-and-candidate-registration",
+      "status": "passed"
+    },
+    {
+      "name": "training-cancellation-without-candidate",
+      "status": "passed"
+    },
+    {
+      "name": "evaluation-completed",
+      "status": "passed"
+    },
+    {
+      "name": "quality-gate-rejected-package",
+      "status": "passed"
+    },
+    {
+      "name": "opaque-nondeployable-artifacts-and-failure-history",
+      "status": "passed"
+    },
+    {
+      "name": "positive-packaged-profile-default",
+      "status": "passed"
+    },
+    {
+      "name": "positive-octave-transform-midi",
+      "status": "passed"
+    },
+    {
+      "name": "restart-preserves-history-and-default",
+      "status": "passed"
+    }
+  ],
+  "real_catalog_quality_gate_status": "failed",
+  "status": "passed"
+}

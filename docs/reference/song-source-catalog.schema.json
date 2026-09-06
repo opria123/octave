@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octavestudio.tools/schemas/song-source-catalog/v1/catalog.schema.json",
+  "title": "OCTAVE Song Source Catalog v1",
+  "description": "Portable catalog manifest for locally materialized rhythm-game song sources.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "format", "catalog_id", "records"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "format": { "const": "octave-song-source-catalog/v1" },
+    "catalog_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "records": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\]+\\.jsonl$"
+    },
+    "curation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provenance", "license"],
+      "properties": {
+        "provenance": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "license": { "type": "string", "minLength": 1, "maxLength": 512 }
+      }
+    },
+    "created_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product", "version"],
+      "properties": {
+        "product": { "const": "octave" },
+        "version": { "type": "string", "minLength": 1 },
+        "source_revision": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_id", "sha256", "relative_path", "byte_length"],
+      "properties": {
+        "asset_id": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "relative_path": {
+          "type": "string",
+          "pattern": "^assets/sha256/[a-f0-9]{64}/[A-Za-z0-9._-]+$"
+        },
+        "byte_length": { "type": "integer", "minimum": 0 },
+        "media_type": { "type": "string", "minLength": 1 }
+      }
+    },
+    "instrumentCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "difficulties", "track_names"],
+      "properties": {
+        "status": { "enum": ["present", "absent", "unsupported"] },
+        "difficulties": {
+          "type": "array",
+          "items": { "enum": ["easy", "medium", "hard", "expert"] },
+          "uniqueItems": true
+        },
+        "track_names": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "status": { "const": "present" },
+            "difficulties": { "minItems": 1 },
+            "track_names": { "minItems": 1 }
+          }
+        },
+        {
+          "properties": {
+            "status": { "enum": ["absent", "unsupported"] },
+            "difficulties": { "maxItems": 0 },
+            "track_names": { "maxItems": 0 }
+          }
+        }
+      ]
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "import", "rights", "metadata", "chart"],
+      "properties": {
+        "source_id": { "type": "string", "pattern": "^octave-src-[a-z0-9][a-z0-9-]{7,127}$" },
+        "import": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "adapter_version"],
+          "properties": {
+            "kind": { "enum": ["sng", "rb3con", "zip", "song_folder"] },
+            "adapter_version": { "type": "string", "minLength": 1 },
+            "container_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["code"],
+                "properties": {
+                  "code": { "type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,127}$" }
+                }
+              }
+            }
+          }
+        },
+        "rights": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["training_use", "provenance", "license"],
+          "properties": {
+            "training_use": { "const": "allowed" },
+            "provenance": { "$ref": "#/$defs/safeText" },
+            "license": { "$ref": "#/$defs/safeText" }
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "$ref": "#/$defs/safeText" },
+            "artist": { "$ref": "#/$defs/safeText" },
+            "album": { "$ref": "#/$defs/safeText" },
+            "genre": { "$ref": "#/$defs/safeText" },
+            "year": { "$ref": "#/$defs/safeText" },
+            "charter": { "$ref": "#/$defs/safeText" }
+          }
+        },
+        "chart": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["notes_midi", "instruments"],
+          "properties": {
+            "notes_midi": { "$ref": "#/$defs/asset" },
+            "instruments": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "drums": { "$ref": "#/$defs/instrumentCoverage" },
+                "guitar": { "$ref": "#/$defs/instrumentCoverage" },
+                "bass": { "$ref": "#/$defs/instrumentCoverage" },
+                "keys": { "$ref": "#/$defs/instrumentCoverage" },
+                "vocals": { "$ref": "#/$defs/instrumentCoverage" },
+                "pro_keys": { "$ref": "#/$defs/instrumentCoverage" },
+                "pro_guitar": { "$ref": "#/$defs/instrumentCoverage" },
+                "pro_bass": { "$ref": "#/$defs/instrumentCoverage" }
+              }
+            }
+          }
+        },
+        "audio": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mix": { "$ref": "#/$defs/asset" },
+            "drums": { "$ref": "#/$defs/asset" },
+            "guitar": { "$ref": "#/$defs/asset" },
+            "bass": { "$ref": "#/$defs/asset" },
+            "keys": { "$ref": "#/$defs/asset" },
+            "vocals": { "$ref": "#/$defs/asset" },
+            "harm1": { "$ref": "#/$defs/asset" },
+            "harm2": { "$ref": "#/$defs/asset" },
+            "harm3": { "$ref": "#/$defs/asset" },
+            "other": { "$ref": "#/$defs/asset" }
+          }
+        }
+      }
+    },
+    "safeText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!.*(?:^|\\s)(?:file:|https?:|smb:|/|[A-Za-z]:[\\\\/]))[^\\\\\\r\\n]+$"
+    }
+  }
+}

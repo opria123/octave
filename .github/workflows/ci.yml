@@ -11,6 +11,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: test
@@ -37,3 +40,46 @@ jobs:
 
       - name: Test
         run: npm test
+
+  worker-acceptance:
+    name: Pinned STRUM pipeline acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      # The companion PR is not merged upstream yet. Pin the reviewed fork
+      # commit; never test against a floating development branch.
+      - uses: actions/checkout@v4
+        with:
+          repository: AshMartian/strum
+          ref: 65bfb3043bdb5ea1e8f98df1c494ba1f3ccba70e
+          path: .acceptance-strum
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: .acceptance-strum/pyproject.toml
+      - name: Install CPU worker
+        run: |
+          python -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install './.acceptance-strum[dev]'
+      - name: Verify pinned worker contracts and installed wheel
+        working-directory: .acceptance-strum
+        env:
+          WANDB_MODE: disabled
+          OMP_NUM_THREADS: '1'
+        run: python -m pytest -q
+      - name: Execute real training, promotion, and MIDI generation
+        env:
+          WANDB_MODE: disabled
+          OMP_NUM_THREADS: '1'
+        run: |
+          python scripts/acceptance/strum_pipeline.py --strum-root .acceptance-strum --output "$RUNNER_TEMP/strum-positive" --synthetic-identity --epochs 100
+          python -c 'import json, os; from pathlib import Path; report = json.loads((Path(os.environ["RUNNER_TEMP"]) / "strum-positive/report.json").read_text()); assert report["positive_chart_execution"] == "passed"; assert report["quality_claim"] is False'
+      - name: Retain path-free execution report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: strum-synthetic-execution-report
+          path: ${{ runner.temp }}/strum-positive/report.json

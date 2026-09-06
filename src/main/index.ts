@@ -1,6 +1,16 @@
 import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net, Menu, session } from 'electron'
 import { join, resolve, basename } from 'path'
-import { readdir, readFile, writeFile, stat, rename, copyFile, unlink, mkdir, open } from 'fs/promises'
+import {
+  readdir,
+  readFile,
+  writeFile,
+  stat,
+  rename,
+  copyFile,
+  unlink,
+  mkdir,
+  open
+} from 'fs/promises'
 import { existsSync, readFileSync } from 'fs'
 import { execFile, spawn } from 'child_process'
 import { randomUUID } from 'crypto'
@@ -8,13 +18,68 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater, type UpdateDownloadedEvent } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
 import ffmpeg from 'fluent-ffmpeg'
-import { cancelAutoChart, getStrumRequirementsPath, killAllRunningJobs, openStrumLogsFolder, resolvePythonCommand, runAutoChart } from './strumIntegration/runner'
-import { ensureBootstrappedPython, getRuntimeStatus, isBootstrapTarget } from './strumIntegration/runtimeBootstrap'
+import {
+  cancelAutoChart,
+  getStrumRequirementsPath,
+  killAllRunningJobs,
+  openStrumLogsFolder,
+  resolvePythonCommand,
+  runAutoChart
+} from './strumIntegration/runner'
+import {
+  cancelTrainingJob,
+  cancelDefaultAutoChartProfile,
+  chooseAndRunTrainingTransform,
+  composeSavedAutoChartProfiles,
+  chooseDeveloperTrainingRuntime,
+  chooseInstalledTrainingRuntime,
+  chooseCheckpointFolder,
+  enableDetectedDeveloperTrainingRuntime,
+  inspectDiscoveredCheckpoint,
+  inspectTrainingCheckpoint,
+  inspectTrainingCatalog,
+  killAllTrainingJobs,
+  listTrainingArtifacts,
+  listPromotionJobs,
+  listTrainingPipelines,
+  probeTrainingRuntime,
+  runDefaultAutoChartProfile,
+  saveDiscoveredAutoChartProfile,
+  startPromotionJob,
+  startTrainingPrepare,
+  startTrainingRun
+} from './strumIntegration/training'
+import {
+  ensureBootstrappedPython,
+  getRuntimeStatus,
+  isBootstrapTarget
+} from './strumIntegration/runtimeBootstrap'
 import { ensureFreshYtDlp, isYtDlpBlockedError } from './strumIntegration/ytDlpRefresh'
 import { packSng } from './sngPacker'
 import { packRb3con } from './conPacker'
 import { importSng } from './import/sngImporter'
 import { importCon } from './import/conImporter'
+import {
+  buildSongSourceCatalogAudioEnrichmentRevision,
+  buildSongSourceCatalog,
+  listCatalogHarmonyTargets,
+  listDatasetLibrarySongs,
+  listSongSourceCatalogs,
+  materializeCatalogHarmonySource,
+  summarizeDatasetSource,
+  type DatasetCatalogSource,
+  type DatasetSourceSummary,
+  type SongSourceCatalogWriteMode
+} from './import/sngTrainingExporter'
+import {
+  getDatasetPackageInventorySessionReviewEntries,
+  getDatasetPackageInventorySessionResult,
+  isDatasetPackageInventorySessionComplete,
+  MAX_DATASET_PACKAGE_INVENTORY_DEADLINE_MS,
+  runDatasetPackageInventorySession
+} from './import/packageSourceInventory'
+import { discoverDatasetPackageSources } from './import/packageSourceDiscovery'
+import { PackageInventoryCursorStore } from './import/packageInventoryCursor'
 import {
   ImportCancelledError,
   PartialImportError,
@@ -68,6 +133,7 @@ if (!gotSingleInstanceLock) {
 app.on('before-quit', () => {
   try {
     killAllRunningJobs()
+    killAllTrainingJobs()
   } catch (error) {
     console.warn('[Quit] Failed to terminate STRUM workers:', error)
   }
@@ -75,9 +141,151 @@ app.on('before-quit', () => {
 
 // Track the currently opened project folder for path validation
 let allowedProjectPath: string | null = null
+const datasetSources = new Map<string, DatasetCatalogSource>()
+const datasetHarmonyAudioSources = new Map<string, { sourcePath: string }>()
+// Source locations remain private to main. A renderer holds only this opaque
+// group ID and can request an aggregate preparation inventory for it.
+const datasetPackageGroups = new Map<string, DatasetCatalogSource[]>()
+const datasetPackageCandidateGroups = new Map<string, string>()
+const completedDatasetPackageInventories = new Set<string>()
+const datasetPackageDiscoveryControllers = new Map<number, AbortController>()
+const datasetPackageInventoryControllers = new Map<string, AbortController>()
+const datasetPackageInventoryCursors = new PackageInventoryCursorStore()
+const datasetCatalogParents = new Map<string, string>()
+const approvedDatasetPackageIds = new Set<string>()
+const DATASET_CATALOG_PARENT_KEY = 'dataset-catalog-parent.json'
+
+function redactDatasetDisplayName(value: string): string {
+  const withoutControls = Array.from(value.normalize('NFKC'), (character) => {
+    const codePoint = character.codePointAt(0) ?? 0
+    return codePoint <= 0x1f || codePoint === 0x7f ? ' ' : character
+  }).join('')
+  const normalized = withoutControls
+    .replace(/(?:https?|smb|file):\/\/\S+/gi, '[redacted]')
+    .replace(/[\\/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 128)
+  return normalized || 'Selected audio'
+}
+
+type DatasetCatalogParentBookmark = {
+  parentId: string
+  name: string
+  path: string
+}
+
+type PackageReviewCandidateDto = {
+  candidateId: string
+  groupId: string
+  kind: 'sng' | 'rb3con' | 'zip'
+  songCount: number
+  metadata: Record<string, string>
+  midiValid: true
+  instruments: Record<string, { status: 'present'; difficulties: string[]; trackNames: string[] }>
+  trainingUse: 'review_required'
+  warnings: Array<{ code: string }>
+  isStrumGenerated: false
+  /** Safe filter only; actual track names, hashes, and locations stay private. */
+  canonicalVocalMidi: boolean
+  duplicateMidi: boolean
+}
+
+function clearPackageReviewCandidates(groupId: string): void {
+  for (const [candidateId, candidateGroupId] of datasetPackageCandidateGroups) {
+    if (candidateGroupId !== groupId) continue
+    datasetSources.delete(candidateId)
+    datasetPackageCandidateGroups.delete(candidateId)
+    approvedDatasetPackageIds.delete(candidateId)
+  }
+  completedDatasetPackageInventories.delete(groupId)
+}
+
+function createPackageReviewCandidates(
+  groupId: string,
+  entries: ReturnType<typeof getDatasetPackageInventorySessionReviewEntries>
+): PackageReviewCandidateDto[] {
+  clearPackageReviewCandidates(groupId)
+  return entries.map((entry) => {
+    const candidateId = randomUUID()
+    datasetSources.set(candidateId, {
+      ...entry.source,
+      entryId: entry.entryId,
+      packageReview: {
+        containerSha256: entry.containerSha256,
+        midiSha256: entry.midiSha256,
+        entryLocator: entry.entryLocator
+      }
+    })
+    datasetPackageCandidateGroups.set(candidateId, groupId)
+    return {
+      candidateId,
+      groupId,
+      kind: entry.source.kind as 'sng' | 'rb3con' | 'zip',
+      songCount: 1,
+      metadata: {},
+      midiValid: true,
+      instruments: (entry.exactExpertPartVocals
+        ? {
+            vocals: {
+              status: 'present',
+              difficulties: ['expert'],
+              trackNames: ['Canonical lead vocals']
+            }
+          }
+        : {}) as PackageReviewCandidateDto['instruments'],
+      trainingUse: 'review_required',
+      warnings: entry.duplicateMidi ? [{ code: 'duplicate_notes_midi' }] : [],
+      isStrumGenerated: false,
+      canonicalVocalMidi: entry.exactExpertPartVocals,
+      duplicateMidi: entry.duplicateMidi
+    }
+  })
+}
+
+function datasetCatalogParentBookmarkPath(): string {
+  return join(app.getPath('userData'), DATASET_CATALOG_PARENT_KEY)
+}
+
+async function rememberDatasetCatalogParent(
+  parentPath: string,
+  name: string
+): Promise<{
+  parentId: string
+  name: string
+}> {
+  const bookmark = { parentId: randomUUID(), name, path: parentPath }
+  datasetCatalogParents.set(bookmark.parentId, bookmark.path)
+  await writeFile(datasetCatalogParentBookmarkPath(), JSON.stringify(bookmark), 'utf8')
+  return { parentId: bookmark.parentId, name: bookmark.name }
+}
+
+async function restoreDatasetCatalogParent(parentId: string): Promise<{
+  parentId: string
+  name: string
+} | null> {
+  try {
+    const bookmark = JSON.parse(
+      await readFile(datasetCatalogParentBookmarkPath(), 'utf8')
+    ) as DatasetCatalogParentBookmark
+    if (bookmark.parentId !== parentId) return null
+    if (!(await stat(bookmark.path)).isDirectory()) return null
+    datasetCatalogParents.set(bookmark.parentId, bookmark.path)
+    return { parentId: bookmark.parentId, name: bookmark.name }
+  } catch {
+    return null
+  }
+}
 
 type UpdaterState = {
-  state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error'
+  state:
+    | 'idle'
+    | 'checking'
+    | 'available'
+    | 'downloading'
+    | 'downloaded'
+    | 'not-available'
+    | 'error'
   version?: string
   percent?: number
   message?: string
@@ -147,7 +355,10 @@ async function isMacAutoInstallSupported(): Promise<boolean> {
   return new Promise((resolveSupport) => {
     execFile('codesign', ['-dv', '--verbose=4', appBundlePath], (error, _stdout, stderr) => {
       if (error) {
-        console.warn('[Updater] Could not inspect macOS signature. Assuming manual update flow.', error)
+        console.warn(
+          '[Updater] Could not inspect macOS signature. Assuming manual update flow.',
+          error
+        )
         resolveSupport(false)
         return
       }
@@ -168,7 +379,8 @@ async function handleMacCustomInstall(downloadedFile: string, version: string): 
     type: 'info',
     title: 'Update Ready',
     message: `OCTAVE v${version} is ready to install`,
-    detail: 'The app will close and restart to apply the update. You may be prompted for your administrator password.',
+    detail:
+      'The app will close and restart to apply the update. You may be prompted for your administrator password.',
     buttons: ['Restart Now', 'Later'],
     defaultId: 0,
     cancelId: 1
@@ -176,7 +388,7 @@ async function handleMacCustomInstall(downloadedFile: string, version: string): 
 
   if (response !== 0) return
 
-  const currentAppBundle = resolve(process.execPath, '../../..')  // /Applications/OCTAVE.app
+  const currentAppBundle = resolve(process.execPath, '../../..') // /Applications/OCTAVE.app
   const tempDir = join(app.getPath('temp'), 'octave-update-' + version + '-' + Date.now())
   const scriptPath = join(app.getPath('temp'), 'octave-update-' + Date.now() + '.sh')
 
@@ -204,7 +416,7 @@ async function handleMacCustomInstall(downloadedFile: string, version: string): 
     'if rm -rf "$CURRENT_APP" 2>/dev/null && cp -R "$NEW_APP" "$CURRENT_APP" 2>/dev/null; then',
     '  true',
     'else',
-    '  osascript -e "do shell script \\"rm -rf \'$CURRENT_APP\' && cp -R \'$NEW_APP\' \'$CURRENT_APP\'\\" with administrator privileges" 2>/dev/null || true',
+    "  osascript -e \"do shell script \\\"rm -rf '$CURRENT_APP' && cp -R '$NEW_APP' '$CURRENT_APP'\\\" with administrator privileges\" 2>/dev/null || true",
     'fi',
     '',
     '# Clear Gatekeeper quarantine flag',
@@ -232,7 +444,11 @@ function isPathAllowed(targetPath: string): boolean {
   if (!allowedProjectPath) return true // No project opened yet — allow (dialog-gated)
   const resolved = resolve(targetPath)
   // Ensure the path is exactly or a child of the allowed folder (not just a prefix match)
-  return resolved === allowedProjectPath || resolved.startsWith(allowedProjectPath + '/') || resolved.startsWith(allowedProjectPath + '\\')
+  return (
+    resolved === allowedProjectPath ||
+    resolved.startsWith(allowedProjectPath + '/') ||
+    resolved.startsWith(allowedProjectPath + '\\')
+  )
 }
 
 function createWindow(): void {
@@ -449,6 +665,7 @@ app.whenReady().then(() => {
             // "OCTAVE cannot be closed" check.
             try {
               killAllRunningJobs()
+              killAllTrainingJobs()
             } catch (error) {
               console.warn('[Updater] Failed to terminate STRUM workers before install:', error)
             }
@@ -464,8 +681,8 @@ app.whenReady().then(() => {
 
       const rawMessage = String(error instanceof Error ? error.message : error)
       const isMacSignatureFailure =
-        process.platform === 'darwin'
-        && /code signature|did not pass validation|code requirement/i.test(rawMessage)
+        process.platform === 'darwin' &&
+        /code signature|did not pass validation|code requirement/i.test(rawMessage)
 
       broadcastUpdaterState({
         state: 'error',
@@ -681,9 +898,7 @@ ipcMain.handle('dialog:openAudio', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
     title: 'Select Audio File',
-    filters: [
-      { name: 'Audio Files', extensions: ['ogg', 'mp3', 'opus', 'wav'] }
-    ]
+    filters: [{ name: 'Audio Files', extensions: ['ogg', 'mp3', 'opus', 'wav'] }]
   })
   if (result.canceled || result.filePaths.length === 0) return null
   return result.filePaths[0]
@@ -693,9 +908,7 @@ ipcMain.handle('dialog:openAudioFiles', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile', 'multiSelections'],
     title: 'Select Audio Files',
-    filters: [
-      { name: 'Audio Files', extensions: ['ogg', 'mp3', 'opus', 'wav', 'flac'] }
-    ]
+    filters: [{ name: 'Audio Files', extensions: ['ogg', 'mp3', 'opus', 'wav', 'flac'] }]
   })
   if (result.canceled || result.filePaths.length === 0) return []
   return result.filePaths
@@ -719,11 +932,723 @@ ipcMain.handle('dialog:openOutputFolder', async () => {
   return result.filePaths[0]
 })
 
+function pathExtname(fileName: string): string {
+  const index = fileName.lastIndexOf('.')
+  return index === -1 ? '' : fileName.slice(index).toLowerCase()
+}
+
+ipcMain.handle('dataset:choosePackageFolder', async (event) => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Select Folder of .sng / .rb3con / .zip Packages'
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  const controller = new AbortController()
+  datasetPackageDiscoveryControllers.set(event.sender.id, controller)
+  const abort = (): void => controller.abort()
+  event.sender.once('destroyed', abort)
+  try {
+    const discovery = await discoverDatasetPackageSources(result.filePaths[0], {
+      signal: controller.signal,
+      onDirectoryScanned: (directoryCount) => {
+        event.sender.send('dataset:scanProgress', {
+          phase: 'discovering',
+          completed: directoryCount,
+          total: 0
+        })
+      }
+    })
+    const groupId = randomUUID()
+    const groupSources: DatasetCatalogSource[] = []
+    const candidates: Array<{ candidateId: string; groupId: string } & DatasetSourceSummary> = []
+    for (const [index, packagePath] of discovery.packagePaths.entries()) {
+      event.sender.send('dataset:scanProgress', {
+        phase: 'inspecting',
+        completed: index,
+        total: discovery.packagePaths.length
+      })
+      const source: DatasetCatalogSource = {
+        kind:
+          pathExtname(packagePath) === '.sng'
+            ? 'sng'
+            : pathExtname(packagePath) === '.zip'
+              ? 'zip'
+              : 'rb3con',
+        sourcePath: resolve(packagePath)
+      }
+      groupSources.push(source)
+      // Selecting a folder is deliberately stat-only discovery. Do not parse
+      // an arbitrary ZIP/SNG/STFS package merely to render a group. This
+      // opaque package candidate may be inventoried before the user opts in.
+      const candidateId = randomUUID()
+      datasetSources.set(candidateId, source)
+      datasetPackageCandidateGroups.set(candidateId, groupId)
+      candidates.push({
+        candidateId,
+        groupId,
+        kind: source.kind,
+        songCount: 0,
+        metadata: {},
+        midiValid: false,
+        instruments: {},
+        trainingUse: 'review_required',
+        warnings: [{ code: 'source_inventory_required' }],
+        isStrumGenerated: false
+      })
+    }
+    event.sender.send('dataset:scanProgress', {
+      phase: 'inspecting',
+      completed: discovery.packagePaths.length,
+      total: discovery.packagePaths.length
+    })
+    datasetPackageGroups.set(groupId, groupSources)
+    return {
+      groupId,
+      groupName: basename(resolve(result.filePaths[0])),
+      candidates,
+      strumGeneratedCount: 0,
+      packageLimitReached: discovery.packageLimitReached,
+      directoryLimitReached: discovery.directoryLimitReached
+    }
+  } catch {
+    console.error('Dataset package scan failed.')
+    return null
+  } finally {
+    event.sender.removeListener('destroyed', abort)
+    datasetPackageDiscoveryControllers.delete(event.sender.id)
+  }
+})
+
+ipcMain.handle('dataset:cancelPackageDiscovery', (event) => {
+  const controller = datasetPackageDiscoveryControllers.get(event.sender.id)
+  if (!controller) return false
+  controller.abort()
+  return true
+})
+
+ipcMain.handle(
+  'dataset:removePackageGroup',
+  (_event, groupCandidateIds: string[], groupId?: string) => {
+    for (const candidateId of groupCandidateIds) {
+      datasetSources.delete(candidateId)
+      approvedDatasetPackageIds.delete(candidateId)
+      datasetPackageCandidateGroups.delete(candidateId)
+    }
+    if (groupId) {
+      datasetPackageInventoryControllers.get(groupId)?.abort()
+      datasetPackageGroups.delete(groupId)
+      clearPackageReviewCandidates(groupId)
+      datasetPackageInventoryCursors.clearGroup(groupId)
+      return
+    }
+    // Compatibility path for callers from an older preload: only forget a
+    // group when every one of its sources has lost all candidate references.
+    for (const [knownGroupId, sources] of datasetPackageGroups) {
+      const stillReferenced = sources.some((source) =>
+        [...datasetSources.values()].some(
+          (candidate) =>
+            candidate.sourcePath === source.sourcePath && candidate.kind === source.kind
+        )
+      )
+      if (!stillReferenced) {
+        datasetPackageInventoryControllers.get(knownGroupId)?.abort()
+        datasetPackageGroups.delete(knownGroupId)
+        clearPackageReviewCandidates(knownGroupId)
+        datasetPackageInventoryCursors.clearGroup(knownGroupId)
+      }
+    }
+  }
+)
+
+ipcMain.handle(
+  'dataset:inspectPackageGroup',
+  async (_event, groupId: string, resumeCursor?: string) => {
+    const sources = datasetPackageGroups.get(groupId)
+    if (!sources || datasetPackageInventoryControllers.has(groupId)) return null
+    const cursorResolution = resumeCursor
+      ? datasetPackageInventoryCursors.resume(groupId, sources, resumeCursor)
+      : null
+    if (cursorResolution?.cursorRejected) {
+      // A token never selects a path. An absent, cross-group, or stale token is
+      // rejected generically and the renderer can start a fresh bounded run.
+      return { inventory: null, resumeCursor: null, cursorRejected: true }
+    }
+    const started = cursorResolution
+      ? { cursor: resumeCursor as string, session: cursorResolution.session }
+      : datasetPackageInventoryCursors.begin(groupId, sources)
+    if (!started.session) return { inventory: null, resumeCursor: null, cursorRejected: true }
+    // Starting a new inventory invalidates all review capabilities and any
+    // approval made from the prior snapshot. A resume retains its same session.
+    if (!cursorResolution) clearPackageReviewCandidates(groupId)
+    const controller = new AbortController()
+    datasetPackageInventoryControllers.set(groupId, controller)
+    const abort = (): void => controller.abort()
+    _event.sender.once('destroyed', abort)
+    try {
+      const inventory = await runDatasetPackageInventorySession(started.session, {
+        signal: controller.signal,
+        deadlineMs: MAX_DATASET_PACKAGE_INVENTORY_DEADLINE_MS,
+        onProgress: (progress) => {
+          // This event intentionally contains only aggregate counts. The
+          // renderer already owns the active opaque group; locations, source
+          // identifiers, entry names, hashes, buffers, and errors remain main/
+          // worker-local.
+          if (!_event.sender.isDestroyed()) {
+            _event.sender.send('dataset:packageInventoryProgress', progress)
+          }
+        }
+      })
+      // Group removal revokes both its cursor and active controller. Do not
+      // resurrect a removed group by writing completion state or returning a
+      // resume capability after its in-flight worker settles.
+      if (datasetPackageGroups.get(groupId) !== sources) {
+        datasetPackageInventoryCursors.complete(started.cursor)
+        return null
+      }
+      if (isDatasetPackageInventorySessionComplete(started.session)) {
+        const reviewCandidates = createPackageReviewCandidates(
+          groupId,
+          getDatasetPackageInventorySessionReviewEntries(started.session)
+        )
+        datasetPackageInventoryCursors.complete(started.cursor)
+        completedDatasetPackageInventories.add(groupId)
+        return {
+          inventory: getDatasetPackageInventorySessionResult(started.session),
+          resumeCursor: null,
+          cursorRejected: false,
+          reviewCandidates
+        }
+      }
+      return {
+        inventory,
+        resumeCursor: started.cursor,
+        cursorRejected: false,
+        reviewCandidates: null
+      }
+    } catch {
+      // The service is already aggregate-only. Keep IPC failures generic so a
+      // renderer never receives source paths or parser error details.
+      datasetPackageInventoryCursors.complete(started.cursor)
+      return null
+    } finally {
+      _event.sender.removeListener('destroyed', abort)
+      if (datasetPackageInventoryControllers.get(groupId) === controller) {
+        datasetPackageInventoryControllers.delete(groupId)
+      }
+    }
+  }
+)
+
+ipcMain.handle('dataset:cancelPackageInventory', (_event, groupId: string) => {
+  const controller = datasetPackageInventoryControllers.get(groupId)
+  if (!controller) return false
+  controller.abort()
+  return true
+})
+
+ipcMain.handle('dataset:chooseCatalogParent', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Select Parent Directory for New Catalog'
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  const parentPath = resolve(result.filePaths[0])
+  return await rememberDatasetCatalogParent(parentPath, basename(parentPath))
+})
+
+ipcMain.handle('dataset:useDefaultCatalogParent', async () => {
+  if (!allowedProjectPath) return null
+  try {
+    const parentPath = join(allowedProjectPath, 'Catalog Parent')
+    await mkdir(parentPath, { recursive: true })
+    return await rememberDatasetCatalogParent(parentPath, 'Catalog Parent')
+  } catch {
+    console.error('Dataset default catalog parent could not be prepared.')
+    return null
+  }
+})
+
+ipcMain.handle('dataset:restoreCatalogParent', async (_event, parentId: string) => {
+  return await restoreDatasetCatalogParent(parentId)
+})
+
+ipcMain.handle('dataset:listCatalogs', async (_event, parentId: string) => {
+  const parentDir = datasetCatalogParents.get(parentId)
+  if (!parentDir) return []
+  try {
+    return await listSongSourceCatalogs(parentDir)
+  } catch {
+    console.error('Dataset catalog listing failed.')
+    return []
+  }
+})
+
+ipcMain.handle(
+  'dataset:listHarmonyTargets',
+  async (_event, parentId: string, catalogName: string) => {
+    const parentDir = datasetCatalogParents.get(parentId)
+    if (!parentDir) return []
+    try {
+      return await listCatalogHarmonyTargets(parentDir, catalogName)
+    } catch {
+      console.error('Catalog Harmony targets could not be listed.')
+      return []
+    }
+  }
+)
+
+ipcMain.handle('dataset:chooseHarmonyAudio', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Select Isolated Harmony Stem or Pinned Separation Output',
+    properties: ['openFile'],
+    filters: [{ name: 'Audio', extensions: ['ogg', 'mp3', 'opus', 'wav', 'flac'] }]
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  const sourcePath = resolve(result.filePaths[0])
+  const selectionId = randomUUID()
+  datasetHarmonyAudioSources.set(selectionId, { sourcePath })
+  return { selectionId, displayName: redactDatasetDisplayName(basename(sourcePath)) }
+})
+
+ipcMain.handle(
+  'dataset:materializeHarmonySource',
+  async (
+    _event,
+    options: {
+      parentId: string
+      catalogName: string
+      sourceId: string
+      trackName: 'HARM1' | 'HARM2' | 'HARM3'
+      sourceSelectionId: string
+      provenance:
+        | { kind: 'isolated_source_stem/v1'; attestationId: string }
+        | {
+            kind: 'isolated_separation_output/v1'
+            separator: {
+              id: string
+              version: string
+              modelSha256: string
+              configurationSha256: string
+            }
+          }
+    }
+  ) => {
+    const parentDir = datasetCatalogParents.get(options.parentId)
+    const source = datasetHarmonyAudioSources.get(options.sourceSelectionId)
+    if (!parentDir || !source)
+      throw new Error('Choose a Harmony audio source through Dataset Curation.')
+    const result = await materializeCatalogHarmonySource({
+      parentDir,
+      catalogName: options.catalogName,
+      sourceId: options.sourceId,
+      trackName: options.trackName,
+      sourceAudioPath: source.sourcePath,
+      provenance: options.provenance
+    })
+    datasetHarmonyAudioSources.delete(options.sourceSelectionId)
+    return result
+  }
+)
+
+ipcMain.handle('dataset:scanLibrary', async () => {
+  if (!allowedProjectPath) return []
+  try {
+    const librarySongs = await listDatasetLibrarySongs(allowedProjectPath)
+    return await Promise.all(
+      librarySongs.map(async (song) => {
+        const source: DatasetCatalogSource = { kind: 'octave-library', sourcePath: song.path }
+        const candidateId = randomUUID()
+        datasetSources.set(candidateId, source)
+        return {
+          candidateId,
+          ...(await summarizeDatasetSource(source)),
+          isStrumGenerated: song.isStrumGenerated
+        }
+      })
+    )
+  } catch {
+    console.error('Dataset library scan failed.')
+    return []
+  }
+})
+
+ipcMain.handle('dataset:setSongOptIn', async (_event, candidateId: string, optedIn: boolean) => {
+  const source = datasetSources.get(candidateId)
+  if (!source || source.kind !== 'octave-library' || !isPathAllowed(source.sourcePath)) return false
+  try {
+    if (optedIn && (await summarizeDatasetSource(source)).isStrumGenerated) return false
+    const iniPath = join(source.sourcePath, 'song.ini')
+    const metadata = parseIniFile(await readFile(iniPath, 'utf8'))
+    metadata.dataset_opt_in = optedIn ? 'true' : 'false'
+    await writeFile(iniPath, serializeIniFile(metadata), 'utf8')
+    return true
+  } catch {
+    console.error('Dataset opt-in update failed.')
+    return false
+  }
+})
+
+ipcMain.handle('dataset:setPackageApproved', (_event, candidateId: string, approved: boolean) => {
+  const source = datasetSources.get(candidateId)
+  if (!source || source.kind === 'octave-library' || !source.packageReview) return false
+  const groupId = datasetPackageCandidateGroups.get(candidateId)
+  if (!groupId || !completedDatasetPackageInventories.has(groupId)) return false
+  if (approved) approvedDatasetPackageIds.add(candidateId)
+  else approvedDatasetPackageIds.delete(candidateId)
+  return true
+})
+
+ipcMain.handle('dataset:readCandidateArtwork', async (_event, candidateId: string) => {
+  const source = datasetSources.get(candidateId)
+  if (!source || source.kind !== 'octave-library' || !isPathAllowed(source.sourcePath)) return null
+  return await readAlbumArtFromSongPath(source.sourcePath)
+})
+
+ipcMain.handle(
+  'dataset:export',
+  async (
+    event,
+    options: {
+      candidateIds: string[]
+      parentId: string
+      catalogName: string
+      catalogId: string
+      provenance: string
+      license: string
+      mode: SongSourceCatalogWriteMode
+      sourceCatalogName?: string
+    }
+  ) => {
+    const parentDir = datasetCatalogParents.get(options.parentId)
+    if (!['create', 'update', 'clone'].includes(options.mode)) {
+      throw new Error('Choose a valid catalog save mode.')
+    }
+    const selectedSources = options.candidateIds.map((candidateId) =>
+      datasetSources.get(candidateId)
+    )
+    if (!parentDir) throw new Error('Choose a catalog parent directory through Dataset Curation.')
+    if (selectedSources.some((source) => !source))
+      throw new Error('Refresh the curation candidates and try again.')
+    for (const [index, source] of (selectedSources as DatasetCatalogSource[]).entries()) {
+      event.sender.send('dataset:saveProgress', {
+        phase: 'checking',
+        completed: index,
+        total: selectedSources.length
+      })
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      const candidateId = options.candidateIds[index]
+      if (source.kind !== 'octave-library' && !approvedDatasetPackageIds.has(candidateId)) {
+        throw new Error('Review package sources before building the catalog.')
+      }
+      if (source.kind === 'octave-library') {
+        const summary = await summarizeDatasetSource(source)
+        if (summary.trainingUse !== 'allowed') {
+          throw new Error('Only opted-in library songs may be materialized.')
+        }
+      }
+    }
+    event.sender.send('dataset:saveProgress', {
+      phase: 'checking',
+      completed: selectedSources.length,
+      total: selectedSources.length
+    })
+    const result = await buildSongSourceCatalog({
+      // Package approval is an explicit per-song curation action. The catalog
+      // service serializes only allowed records; library consent is re-read
+      // from song.ini before materialization.
+      sources: selectedSources as DatasetCatalogSource[],
+      parentDir,
+      catalogName: options.catalogName,
+      catalogId: options.catalogId,
+      provenance: options.provenance,
+      license: options.license,
+      octaveVersion: app.getVersion(),
+      mode: options.mode,
+      sourceCatalogName: options.sourceCatalogName,
+      onProgress: (progress) => event.sender.send('dataset:saveProgress', progress)
+    })
+    // Keep the catalog location inside the main-process STRUM handoff. The
+    // renderer only receives a safe completion summary.
+    return {
+      recordCount: result.recordCount,
+      skipped: result.skipped
+    }
+  }
+)
+
+ipcMain.handle(
+  'dataset:enrichCatalogAudio',
+  async (
+    event,
+    options: {
+      candidateId: string
+      parentId: string
+      catalogName: string
+      catalogId: string
+      sourceCatalogName: string
+    }
+  ) => {
+    const parentDir = datasetCatalogParents.get(options.parentId)
+    const source = datasetSources.get(options.candidateId)
+    if (!parentDir) throw new Error('Choose a catalog parent directory through Dataset Curation.')
+    if (
+      !source ||
+      source.kind === 'octave-library' ||
+      !source.packageReview ||
+      !approvedDatasetPackageIds.has(options.candidateId)
+    ) {
+      throw new Error('Review and explicitly approve one package chart before audio enrichment.')
+    }
+    event.sender.send('dataset:saveProgress', { phase: 'checking', completed: 0, total: 1 })
+    const result = await buildSongSourceCatalogAudioEnrichmentRevision({
+      source,
+      parentDir,
+      catalogName: options.catalogName,
+      catalogId: options.catalogId,
+      sourceCatalogName: options.sourceCatalogName,
+      octaveVersion: app.getVersion(),
+      onProgress: (progress) => event.sender.send('dataset:saveProgress', progress)
+    })
+    return { recordCount: result.recordCount, skipped: result.skipped }
+  }
+)
+
+function datasetCatalogRoot(parentId: string, catalogName: string): string | null {
+  const parentDir = datasetCatalogParents.get(parentId)
+  if (!parentDir || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(catalogName)) return null
+  const root = resolve(parentDir, catalogName)
+  const relative = root.slice(resolve(parentDir).length)
+  return relative.startsWith('/') || relative.startsWith('\\') ? root : null
+}
+
+ipcMain.handle('training:runtime', async () => {
+  try {
+    return await probeTrainingRuntime()
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('training:enableDeveloperRuntime', async () => {
+  try {
+    return await enableDetectedDeveloperTrainingRuntime()
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('training:chooseDeveloperRuntime', async () => {
+  try {
+    return await chooseDeveloperTrainingRuntime()
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('training:chooseInstalledRuntime', async () => {
+  try {
+    return await chooseInstalledTrainingRuntime()
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('training:pipelines', async () => {
+  try {
+    return await listTrainingPipelines()
+  } catch {
+    return []
+  }
+})
+
+ipcMain.handle('training:artifacts', async () => await listTrainingArtifacts())
+
+ipcMain.handle('training:promotionJobs', async (_event, candidateArtifactId: unknown) => {
+  if (typeof candidateArtifactId !== 'string')
+    throw new Error('Select a trained STRUM candidate first.')
+  try {
+    return await listPromotionJobs(candidateArtifactId)
+  } catch {
+    throw new Error('STRUM could not list post-training jobs for this candidate.')
+  }
+})
+
+ipcMain.handle('training:chooseCheckpointFolder', async () => {
+  try {
+    return await chooseCheckpointFolder()
+  } catch {
+    throw new Error('STRUM could not discover model bundles in that folder.')
+  }
+})
+
+ipcMain.handle('training:inspectDiscoveredCheckpoint', async (_event, artifactId: unknown) => {
+  if (typeof artifactId !== 'string') throw new Error('Select a discovered checkpoint first.')
+  try {
+    return await inspectDiscoveredCheckpoint(artifactId)
+  } catch {
+    throw new Error('STRUM could not inspect the selected checkpoint bundle.')
+  }
+})
+
+ipcMain.handle('training:saveDiscoveredAutoChartProfile', async (_event, options: unknown) => {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    throw new Error('Select a discovered checkpoint profile first.')
+  }
+  const value = options as Record<string, unknown>
+  if (
+    typeof value.artifactId !== 'string' ||
+    typeof value.profileId !== 'string' ||
+    typeof value.difficultyPolicy !== 'string'
+  ) {
+    throw new Error('Select a discovered checkpoint profile first.')
+  }
+  try {
+    return await saveDiscoveredAutoChartProfile({
+      artifactId: value.artifactId,
+      profileId: value.profileId,
+      difficultyPolicy: value.difficultyPolicy
+    })
+  } catch {
+    throw new Error('STRUM did not validate this checkpoint profile for Auto Chart.')
+  }
+})
+
+ipcMain.handle('training:composeAutoChartProfiles', async (_event, options: unknown) => {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    throw new Error('Choose two to four saved STRUM profiles to compose.')
+  }
+  const profileIds = (options as Record<string, unknown>).profileIds
+  if (
+    !Array.isArray(profileIds) ||
+    !profileIds.every((profileId) => typeof profileId === 'string')
+  ) {
+    throw new Error('Choose two to four saved STRUM profiles to compose.')
+  }
+  try {
+    return await composeSavedAutoChartProfiles({ profileIds })
+  } catch {
+    throw new Error('STRUM could not compose the selected validated profiles.')
+  }
+})
+
+ipcMain.handle('training:inspectCheckpoint', async (_event, runId: string) => {
+  try {
+    return await inspectTrainingCheckpoint(runId)
+  } catch {
+    throw new Error('STRUM could not inspect the selected checkpoint bundle.')
+  }
+})
+
+ipcMain.handle(
+  'training:inspectCatalog',
+  async (
+    _event,
+    options: {
+      parentId: string
+      catalogName: string
+      pipelineId: string
+      prepare: Record<string, unknown>
+    }
+  ) => {
+    const root = datasetCatalogRoot(options.parentId, options.catalogName)
+    if (!root || !existsSync(join(root, 'catalog.json'))) {
+      throw new Error('Select a catalog from the active catalog parent first.')
+    }
+    try {
+      return await inspectTrainingCatalog(root, options.pipelineId, options.prepare)
+    } catch {
+      throw new Error('STRUM could not inspect the selected catalog.')
+    }
+  }
+)
+
+ipcMain.handle(
+  'training:prepare',
+  async (
+    _event,
+    options: {
+      parentId: string
+      catalogId: string
+      catalogName: string
+      pipelineId: string
+      prepare: Record<string, unknown>
+    }
+  ) => {
+    const root = datasetCatalogRoot(options.parentId, options.catalogName)
+    if (!root || !existsSync(join(root, 'catalog.json'))) {
+      throw new Error('Select a catalog from the active catalog parent first.')
+    }
+    try {
+      return await startTrainingPrepare({ ...options, catalogRoot: root })
+    } catch {
+      throw new Error('STRUM could not start catalog preparation.')
+    }
+  }
+)
+
+ipcMain.handle(
+  'training:start',
+  async (
+    _event,
+    options: {
+      taskViewId: string
+      pipelineId: string
+      train: Record<string, unknown>
+    }
+  ) => {
+    try {
+      return await startTrainingRun(options)
+    } catch {
+      throw new Error('STRUM could not start this training run.')
+    }
+  }
+)
+
+ipcMain.handle(
+  'training:transformMidi',
+  async (_event, options: { runId: string; includeAudio: boolean }) => {
+    try {
+      return await chooseAndRunTrainingTransform(options)
+    } catch {
+      throw new Error(
+        'STRUM could not transform this chart. Check the selected profile and required source chart/audio.'
+      )
+    }
+  }
+)
+
+ipcMain.handle('training:startPromotionJob', async (_event, options: unknown) => {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    throw new Error('Select a post-training job first.')
+  }
+  const value = options as Record<string, unknown>
+  if (
+    typeof value.candidateArtifactId !== 'string' ||
+    typeof value.jobId !== 'string' ||
+    !value.options ||
+    typeof value.options !== 'object' ||
+    Array.isArray(value.options)
+  ) {
+    throw new Error('Select a post-training job first.')
+  }
+  try {
+    return await startPromotionJob({
+      candidateArtifactId: value.candidateArtifactId,
+      jobId: value.jobId,
+      options: value.options as Record<string, unknown>
+    })
+  } catch {
+    throw new Error('STRUM could not start this post-training job.')
+  }
+})
+
+ipcMain.handle('training:cancel', async (_event, jobId: string) => await cancelTrainingJob(jobId))
+
 // Reveal file in OS file explorer
 ipcMain.handle('dialog:showItemInFolder', async (_event, filePath: string) => {
   try {
     const resolvedPath = resolve(filePath)
-    
+
     // Validate path exists and is a file
     const fStat = await stat(resolvedPath)
     if (!fStat.isFile()) {
@@ -732,8 +1657,12 @@ ipcMain.handle('dialog:showItemInFolder', async (_event, filePath: string) => {
 
     // Safety check: must be a .sng export or belong to the active project folder
     const isSng = resolvedPath.toLowerCase().endsWith('.sng')
-    const isProjectFile = allowedProjectPath && (resolvedPath === allowedProjectPath || resolvedPath.startsWith(allowedProjectPath + '/') || resolvedPath.startsWith(allowedProjectPath + '\\'))
-    
+    const isProjectFile =
+      allowedProjectPath &&
+      (resolvedPath === allowedProjectPath ||
+        resolvedPath.startsWith(allowedProjectPath + '/') ||
+        resolvedPath.startsWith(allowedProjectPath + '\\'))
+
     if (!isSng && !isProjectFile) {
       console.warn('[Security] Refusing to reveal path outside allowed boundaries:', resolvedPath)
       return false
@@ -753,82 +1682,106 @@ ipcMain.handle('strum:getDefaultOutputFolder', async () => {
   return defaultOutputFolder
 })
 
-ipcMain.handle('strum:start', async (_event, options: {
-  outputDir: string
-  files: string[]
-  folders: string[]
-  stemFolders?: string[]
-  stemSongs?: Array<{ name?: string; stems: Record<string, string>; extras?: string[] }>
-  urls: string[]
-  includeKeys?: boolean
-  disableOnlineLookup?: boolean
-  skipHarmonies?: boolean
-  keepStems?: boolean
-  starPower?: boolean
-  snapDrums?: boolean
-  snapDrumsDivision?: number
-  snapDrumsWindowMs?: number
-  autoTempo?: boolean
-  autoTempoDrift?: boolean
-  autoTempoSnap?: boolean
-  enabledTracks?: {
-    drums?: boolean
-    guitar?: boolean
-    bass?: boolean
-    vocals?: boolean
-    harmonies?: boolean
-    keys?: boolean
-    proKeys?: boolean
+ipcMain.handle(
+  'strum:start',
+  async (
+    _event,
+    options: {
+      outputDir: string
+      files: string[]
+      folders: string[]
+      stemFolders?: string[]
+      stemSongs?: Array<{ name?: string; stems: Record<string, string>; extras?: string[] }>
+      urls: string[]
+      includeKeys?: boolean
+      disableOnlineLookup?: boolean
+      skipHarmonies?: boolean
+      keepStems?: boolean
+      starPower?: boolean
+      snapDrums?: boolean
+      snapDrumsDivision?: number
+      snapDrumsWindowMs?: number
+      autoTempo?: boolean
+      autoTempoDrift?: boolean
+      autoTempoSnap?: boolean
+      enabledTracks?: {
+        drums?: boolean
+        guitar?: boolean
+        bass?: boolean
+        vocals?: boolean
+        harmonies?: boolean
+        keys?: boolean
+        proKeys?: boolean
+      }
+      tempoMap?: Array<{ timeSec: number; bpm: number }>
+      manualBpm?: number
+    }
+  ) => {
+    const runId = randomUUID()
+
+    const autoChartOptions = {
+      runId,
+      outputDir: options.outputDir,
+      files: options.files,
+      folders: options.folders,
+      stemFolders: options.stemFolders ?? [],
+      stemSongs: options.stemSongs ?? [],
+      urls: options.urls,
+      includeKeys: options.includeKeys,
+      disableOnlineLookup: options.disableOnlineLookup,
+      skipHarmonies: options.skipHarmonies,
+      keepStems: options.keepStems,
+      starPower: options.starPower,
+      snapDrums: options.snapDrums,
+      snapDrumsDivision: options.snapDrumsDivision,
+      snapDrumsWindowMs: options.snapDrumsWindowMs,
+      autoTempo: options.autoTempo,
+      autoTempoDrift: options.autoTempoDrift,
+      autoTempoSnap: options.autoTempoSnap,
+      enabledTracks: options.enabledTracks,
+      tempoMap: options.tempoMap,
+      manualBpm: options.manualBpm
+    }
+
+    void runDefaultAutoChartProfile(autoChartOptions)
+      .then((profileResult) => profileResult ?? runAutoChart(autoChartOptions))
+      .then(async (result) => {
+        // STRUM output is generated rather than manually curated. Persist an
+        // explicit opt-out. Generated training remains unavailable until manual
+        // edits and approval can be bound to a preserved original revision.
+        await Promise.all(
+          result.songFolders.map(async (songFolder) => {
+            try {
+              const iniPath = join(songFolder, 'song.ini')
+              const metadata = parseIniFile(await readFile(iniPath, 'utf8'))
+              metadata.strum_generated = 'true'
+              metadata.dataset_opt_in = 'false'
+              await writeFile(iniPath, serializeIniFile(metadata), 'utf8')
+            } catch (error) {
+              console.warn(`Failed to mark STRUM output as opted out: ${songFolder}`, error)
+            }
+          })
+        )
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send('strum:complete', { runId, ...result })
+        }
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send('strum:error', {
+            runId,
+            message
+          })
+        }
+      })
+
+    return { runId }
   }
-  tempoMap?: Array<{ timeSec: number; bpm: number }>
-  manualBpm?: number
-}) => {
-  const runId = randomUUID()
-
-  void runAutoChart({
-    runId,
-    outputDir: options.outputDir,
-    files: options.files,
-    folders: options.folders,
-    stemFolders: options.stemFolders ?? [],
-    stemSongs: options.stemSongs ?? [],
-    urls: options.urls,
-    includeKeys: options.includeKeys,
-    disableOnlineLookup: options.disableOnlineLookup,
-    skipHarmonies: options.skipHarmonies,
-    keepStems: options.keepStems,
-    starPower: options.starPower,
-    snapDrums: options.snapDrums,
-    snapDrumsDivision: options.snapDrumsDivision,
-    snapDrumsWindowMs: options.snapDrumsWindowMs,
-    autoTempo: options.autoTempo,
-    autoTempoDrift: options.autoTempoDrift,
-    autoTempoSnap: options.autoTempoSnap,
-    enabledTracks: options.enabledTracks,
-    tempoMap: options.tempoMap,
-    manualBpm: options.manualBpm
-  })
-    .then((result) => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send('strum:complete', { runId, ...result })
-      }
-    })
-    .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error)
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send('strum:error', {
-          runId,
-          message,
-          requirementsPath: getStrumRequirementsPath()
-        })
-      }
-    })
-
-  return { runId }
-})
+)
 
 ipcMain.handle('strum:cancel', async (_event, runId: string) => {
-  return await cancelAutoChart(runId)
+  return (await cancelDefaultAutoChartProfile(runId)) || (await cancelAutoChart(runId))
 })
 
 ipcMain.handle('runtime:status', async () => {
@@ -861,8 +1814,7 @@ ipcMain.handle('runtime:bootstrap', async () => {
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send('strum:error', {
         runId: 'runtime-setup',
-        message,
-        requirementsPath: getStrumRequirementsPath()
+        message
       })
     }
     return { ok: false, message }
@@ -955,30 +1907,33 @@ ipcMain.handle('folder:scan', async (_event, folderPath: string) => {
 })
 
 // Create a new song folder with a default song.ini
-ipcMain.handle('song:createFolder', async (_event, parentPath: string, folderName: string, audioSourcePath?: string) => {
-  if (!isPathAllowed(parentPath)) return null
-  // Sanitize folder name
-  const safeName = folderName.replace(/[<>:"/\\|?*]/g, '_').trim()
-  if (!safeName) return null
-  const songPath = join(parentPath, safeName)
-  try {
-    await mkdir(songPath, { recursive: true })
-    // Write a minimal song.ini
-    const ini = `[song]\nname = ${safeName}\nartist = Unknown Artist\ncharter = OCTAVE\n`
-    await writeFile(join(songPath, 'song.ini'), ini, 'utf-8')
-    // Copy audio file into song folder if provided
-    if (audioSourcePath) {
-      const audioName = basename(audioSourcePath)
-      await copyFile(audioSourcePath, join(songPath, audioName))
+ipcMain.handle(
+  'song:createFolder',
+  async (_event, parentPath: string, folderName: string, audioSourcePath?: string) => {
+    if (!isPathAllowed(parentPath)) return null
+    // Sanitize folder name
+    const safeName = folderName.replace(/[<>:"/\\|?*]/g, '_').trim()
+    if (!safeName) return null
+    const songPath = join(parentPath, safeName)
+    try {
+      await mkdir(songPath, { recursive: true })
+      // Write a minimal song.ini
+      const ini = `[song]\nname = ${safeName}\nartist = Unknown Artist\ncharter = OCTAVE\n`
+      await writeFile(join(songPath, 'song.ini'), ini, 'utf-8')
+      // Copy audio file into song folder if provided
+      if (audioSourcePath) {
+        const audioName = basename(audioSourcePath)
+        await copyFile(audioSourcePath, join(songPath, audioName))
+      }
+      // Update allowed path to include this new folder
+      allowedProjectPath = resolve(parentPath)
+      return { id: safeName, path: songPath, name: safeName }
+    } catch (error) {
+      console.error('Error creating song folder:', error)
+      return null
     }
-    // Update allowed path to include this new folder
-    allowedProjectPath = resolve(parentPath)
-    return { id: safeName, path: songPath, name: safeName }
-  } catch (error) {
-    console.error('Error creating song folder:', error)
-    return null
   }
-})
+)
 
 // Delete a song folder (moves to OS trash)
 ipcMain.handle('song:deleteFolder', async (_event, songPath: string) => {
@@ -1007,31 +1962,41 @@ ipcMain.handle('song:readIni', async (_event, songPath: string) => {
 })
 
 // Write song.ini file
-ipcMain.handle('song:writeIni', async (_event, songPath: string, metadata: Record<string, unknown>) => {
-  if (!isPathAllowed(songPath)) return false
-  const iniPath = join(songPath, 'song.ini')
+ipcMain.handle(
+  'song:writeIni',
+  async (_event, songPath: string, metadata: Record<string, unknown>) => {
+    if (!isPathAllowed(songPath)) return false
+    const iniPath = join(songPath, 'song.ini')
 
-  try {
-    const content = serializeIniFile(metadata)
-    await writeFile(iniPath, content, 'utf-8')
-    return true
-  } catch (error) {
-    console.error('Error writing song.ini:', error)
-    return false
+    try {
+      // Dataset curation may update consent while the editor has an older in-memory
+      // metadata snapshot. Preserve those durable fields unless replaced explicitly.
+      let persisted: Record<string, string | number> = {}
+      try {
+        persisted = parseIniFile(await readFile(iniPath, 'utf8'))
+      } catch {
+        // A new song can legitimately have no prior song.ini.
+      }
+      const content = serializeIniFile({ ...persisted, ...metadata })
+      await writeFile(iniPath, content, 'utf-8')
+      return true
+    } catch (error) {
+      console.error('Error writing song.ini:', error)
+      return false
+    }
   }
-})
+)
 
 ipcMain.handle('song:searchMetadata', async (_event, rawRequest: SongMetadataSearchRequest) => {
   const requestedArtist = rawRequest.artist.trim()
   const request = {
-    artist: /^unknown(?: artist)?$/i.test(requestedArtist)
-      ? ''
-      : requestedArtist.slice(0, 120),
+    artist: /^unknown(?: artist)?$/i.test(requestedArtist) ? '' : requestedArtist.slice(0, 120),
     title: rawRequest.title.trim().slice(0, 160),
     durationMs: rawRequest.durationMs
   }
   if (!request.title) return []
-  const cacheKey = `${request.artist}\n${request.title}\n${request.durationMs ?? ''}`.toLocaleLowerCase()
+  const cacheKey =
+    `${request.artist}\n${request.title}\n${request.durationMs ?? ''}`.toLocaleLowerCase()
   const cached = metadataSearchCache.get(cacheKey)
   if (cached && cached.expiresAt > Date.now()) return cached.results
 
@@ -1081,13 +2046,20 @@ ipcMain.handle('song:searchMetadata', async (_event, rawRequest: SongMetadataSea
 ipcMain.handle('song:fetchMetadataArtwork', async (_event, artwork: MetadataArtwork) => {
   let artworkUrl: string
   if (artwork.source === 'cover-art-archive') {
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(artwork.releaseGroupId)) {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        artwork.releaseGroupId
+      )
+    ) {
       return null
     }
     artworkUrl = `https://coverartarchive.org/release-group/${artwork.releaseGroupId}/front-500`
   } else {
     const url = new URL(artwork.url)
-    if (url.protocol !== 'https:' || !['theaudiodb.com', 'www.theaudiodb.com', 'r2.theaudiodb.com'].includes(url.hostname)) {
+    if (
+      url.protocol !== 'https:' ||
+      !['theaudiodb.com', 'www.theaudiodb.com', 'r2.theaudiodb.com'].includes(url.hostname)
+    ) {
       return null
     }
     artworkUrl = url.toString()
@@ -1114,7 +2086,13 @@ ipcMain.handle('song:readMidi', async (_event, songPath: string) => {
   try {
     const buffer = await readFile(midiPath)
     // Verify it's a real MIDI file (starts with "MThd")
-    if (buffer.length >= 4 && buffer[0] === 0x4D && buffer[1] === 0x54 && buffer[2] === 0x68 && buffer[3] === 0x64) {
+    if (
+      buffer.length >= 4 &&
+      buffer[0] === 0x4d &&
+      buffer[1] === 0x54 &&
+      buffer[2] === 0x68 &&
+      buffer[3] === 0x64
+    ) {
       return { type: 'midi', data: buffer.toString('base64') }
     }
     console.warn('notes.mid exists but is not a valid MIDI file:', midiPath)
@@ -1148,7 +2126,7 @@ ipcMain.handle('song:writeMidi', async (_event, songPath: string, midiBase64: st
       console.error('Refusing to write notes.mid — file too small:', buffer.length, 'bytes')
       return false
     }
-    if (buffer[0] !== 0x4D || buffer[1] !== 0x54 || buffer[2] !== 0x68 || buffer[3] !== 0x64) {
+    if (buffer[0] !== 0x4d || buffer[1] !== 0x54 || buffer[2] !== 0x68 || buffer[3] !== 0x64) {
       console.error('Refusing to write notes.mid — invalid MIDI header')
       return false
     }
@@ -1185,7 +2163,11 @@ ipcMain.handle('song:writeMidi', async (_event, songPath: string, midiBase64: st
   } catch (error) {
     console.error('Error writing notes.mid:', error)
     // Clean up temp file if it exists
-    try { if (existsSync(tempPath)) await unlink(tempPath) } catch { /* ignore */ }
+    try {
+      if (existsSync(tempPath)) await unlink(tempPath)
+    } catch {
+      /* ignore */
+    }
     return false
   }
 })
@@ -1227,40 +2209,47 @@ ipcMain.handle('song:writeChart', async (_event, songPath: string, chartText: st
     return true
   } catch (error) {
     console.error('Error writing notes.chart:', error)
-    try { if (existsSync(tempPath)) await unlink(tempPath) } catch { /* ignore */ }
+    try {
+      if (existsSync(tempPath)) await unlink(tempPath)
+    } catch {
+      /* ignore */
+    }
     return false
   }
 })
 
 // Export song to .sng package
-ipcMain.handle('song:exportSng', async (_event, songPath: string, metadata: Record<string, unknown>, outputPath: string) => {
-  if (!isPathAllowed(songPath)) {
-    return { success: false, error: 'Path to song directory not allowed' }
-  }
-
-  const resolvedOutput = resolve(outputPath)
-  if (!resolvedOutput.toLowerCase().endsWith('.sng')) {
-    return { success: false, error: 'Output path must end with .sng extension' }
-  }
-
-  const parentDir = resolve(resolvedOutput, '..')
-  try {
-    const parentStat = await stat(parentDir)
-    if (!parentStat.isDirectory()) {
-      return { success: false, error: 'Output directory does not exist' }
+ipcMain.handle(
+  'song:exportSng',
+  async (_event, songPath: string, metadata: Record<string, unknown>, outputPath: string) => {
+    if (!isPathAllowed(songPath)) {
+      return { success: false, error: 'Path to song directory not allowed' }
     }
-  } catch {
-    return { success: false, error: 'Output directory does not exist or is inaccessible' }
-  }
 
-  try {
-    await packSng(songPath, metadata as Record<string, string | number | boolean>, resolvedOutput)
-    return { success: true }
-  } catch (error) {
-    console.error('Error packing SNG:', error)
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
+    const resolvedOutput = resolve(outputPath)
+    if (!resolvedOutput.toLowerCase().endsWith('.sng')) {
+      return { success: false, error: 'Output path must end with .sng extension' }
+    }
+
+    const parentDir = resolve(resolvedOutput, '..')
+    try {
+      const parentStat = await stat(parentDir)
+      if (!parentStat.isDirectory()) {
+        return { success: false, error: 'Output directory does not exist' }
+      }
+    } catch {
+      return { success: false, error: 'Output directory does not exist or is inaccessible' }
+    }
+
+    try {
+      await packSng(songPath, metadata as Record<string, string | number | boolean>, resolvedOutput)
+      return { success: true }
+    } catch (error) {
+      console.error('Error packing SNG:', error)
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
+    }
   }
-})
+)
 
 // Export song to .con (Rock Band 3 STFS) package
 ipcMain.handle(
@@ -1381,9 +2370,7 @@ ipcMain.handle('venue:writeJson', async (_event, songPath: string, data: unknown
   }
 })
 
-// Read album art (album.png, album.jpg, or album.jpeg)
-ipcMain.handle('song:readAlbumArt', async (_event, songPath: string) => {
-  if (!isPathAllowed(songPath)) return null
+async function readAlbumArtFromSongPath(songPath: string): Promise<string | null> {
   const extensions = ['png', 'jpg', 'jpeg']
 
   for (const ext of extensions) {
@@ -1398,6 +2385,12 @@ ipcMain.handle('song:readAlbumArt', async (_event, songPath: string) => {
   }
 
   return null
+}
+
+// Read album art (album.png, album.jpg, or album.jpeg)
+ipcMain.handle('song:readAlbumArt', async (_event, songPath: string) => {
+  if (!isPathAllowed(songPath)) return null
+  return await readAlbumArtFromSongPath(songPath)
 })
 
 // Write album art
@@ -1433,7 +2426,10 @@ ipcMain.handle('song:importAudio', async (_event, songPath: string, audioSourceP
     const filename = basename(audioSourcePath)
     const destPath = join(songPath, filename)
     // Only copy if source isn't already in the song folder
-    const srcDir = audioSourcePath.substring(0, audioSourcePath.lastIndexOf(basename(audioSourcePath)) - 1)
+    const srcDir = audioSourcePath.substring(
+      0,
+      audioSourcePath.lastIndexOf(basename(audioSourcePath)) - 1
+    )
     if (srcDir !== songPath) {
       await copyFile(audioSourcePath, destPath)
     }
@@ -1528,10 +2524,14 @@ ipcMain.handle('video:scan', async (_event, songPath: string) => {
         try {
           await stat(videoPath)
           return { filePath: videoPath, filename: entry }
-        } catch { /* skip */ }
+        } catch {
+          /* skip */
+        }
       }
     }
-  } catch { /* folder not readable */ }
+  } catch {
+    /* folder not readable */
+  }
   return null
 })
 
@@ -1546,11 +2546,24 @@ function transcodeVideoToVp8Webm(inputPath: string, songPath: string): Promise<s
       .videoCodec('libvpx')
       .audioCodec('libopus')
       // yuv420p 8-bit + capped bitrate keeps it inside Unity's VP8 decoder.
-      .outputOptions(['-pix_fmt', 'yuv420p', '-b:v', '3M', '-deadline', 'good', '-cpu-used', '2', '-b:a', '128k'])
+      .outputOptions([
+        '-pix_fmt',
+        'yuv420p',
+        '-b:v',
+        '3M',
+        '-deadline',
+        'good',
+        '-cpu-used',
+        '2',
+        '-b:a',
+        '128k'
+      ])
       .on('end', () => {
         // Drop the source file so YARG doesn't pick the undecodable one.
         if (resolve(inputPath) !== resolve(outPath)) {
-          unlink(inputPath).catch(() => { /* best-effort cleanup */ })
+          unlink(inputPath).catch(() => {
+            /* best-effort cleanup */
+          })
         }
         resolvePromise(outPath)
       })
@@ -1581,8 +2594,10 @@ ipcMain.handle('video:download-url', async (event, songPath: string, url: string
   const ytDlpArgs = [
     '-f',
     'bestvideo[vcodec^=avc1][height<=1080]+bestaudio[ext=m4a]/best[vcodec^=avc1][height<=1080]/bestvideo[ext=mp4][height<=1080]+bestaudio/best[ext=mp4]/best',
-    '--merge-output-format', 'mp4',
-    '-o', outputTemplate,
+    '--merge-output-format',
+    'mp4',
+    '-o',
+    outputTemplate,
     '--no-playlist',
     '--progress',
     '--newline',
@@ -1606,74 +2621,89 @@ ipcMain.handle('video:download-url', async (event, songPath: string, url: string
   // still rejected, force a refresh and retry once with the newer build.
   await ensureFreshYtDlp(pythonCmd)
 
-  const attemptDownload = (): Promise<{ success: boolean; filePath?: string; error?: string }> => new Promise((resolvePromise) => {
-    console.log('[yt-dlp] Starting download:', url)
-    const proc = execFile(pythonCmd.command, args, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
-      if (error) {
-        console.error('[yt-dlp] Error:', error.message)
-        console.error('[yt-dlp] stderr:', stderr)
-        resolvePromise({ success: false, error: error.message })
-        return
-      }
-      console.log('[yt-dlp] Done:', stdout.slice(-200))
-      // Locate the downloaded file, then (on Linux) transcode it to VP8/webm so
-      // YARG can actually decode it.
-      const finalize = async (downloadedPath: string): Promise<void> => {
-        if (!isLinux) {
-          resolvePromise({ success: true, filePath: downloadedPath })
-          return
-        }
-        try {
-          event.sender.send('video:download-progress', 99)
-          const webmPath = await transcodeVideoToVp8Webm(downloadedPath, songPath)
-          resolvePromise({ success: true, filePath: webmPath })
-        } catch (err) {
-          console.error('[yt-dlp] Linux VP8 transcode failed:', err)
-          resolvePromise({
-            success: false,
-            error: `Video downloaded but could not be converted for Linux playback: ${err instanceof Error ? err.message : String(err)}`
-          })
-        }
-      }
-      // Find the output file (video.mp4 or similar)
-      const expectedPath = join(songPath, 'video.mp4')
-      if (existsSync(expectedPath)) {
-        void finalize(expectedPath)
-      } else {
-        // Look for any video.* file
-        readdir(songPath).then((entries) => {
-          const videoFile = entries.find((e) => e.startsWith('video.') && !e.endsWith('.part'))
-          if (videoFile) {
-            void finalize(join(songPath, videoFile))
-          } else {
-            resolvePromise({ success: false, error: 'Download completed but output file not found' })
+  const attemptDownload = (): Promise<{ success: boolean; filePath?: string; error?: string }> =>
+    new Promise((resolvePromise) => {
+      console.log('[yt-dlp] Starting download:', url)
+      const proc = execFile(
+        pythonCmd.command,
+        args,
+        { maxBuffer: 10 * 1024 * 1024 },
+        (error, stdout, stderr) => {
+          if (error) {
+            console.error('[yt-dlp] Error:', error.message)
+            console.error('[yt-dlp] stderr:', stderr)
+            resolvePromise({ success: false, error: error.message })
+            return
           }
-        }).catch(() => resolvePromise({ success: false, error: 'Could not read output directory' }))
+          console.log('[yt-dlp] Done:', stdout.slice(-200))
+          // Locate the downloaded file, then (on Linux) transcode it to VP8/webm so
+          // YARG can actually decode it.
+          const finalize = async (downloadedPath: string): Promise<void> => {
+            if (!isLinux) {
+              resolvePromise({ success: true, filePath: downloadedPath })
+              return
+            }
+            try {
+              event.sender.send('video:download-progress', 99)
+              const webmPath = await transcodeVideoToVp8Webm(downloadedPath, songPath)
+              resolvePromise({ success: true, filePath: webmPath })
+            } catch (err) {
+              console.error('[yt-dlp] Linux VP8 transcode failed:', err)
+              resolvePromise({
+                success: false,
+                error: `Video downloaded but could not be converted for Linux playback: ${err instanceof Error ? err.message : String(err)}`
+              })
+            }
+          }
+          // Find the output file (video.mp4 or similar)
+          const expectedPath = join(songPath, 'video.mp4')
+          if (existsSync(expectedPath)) {
+            void finalize(expectedPath)
+          } else {
+            // Look for any video.* file
+            readdir(songPath)
+              .then((entries) => {
+                const videoFile = entries.find(
+                  (e) => e.startsWith('video.') && !e.endsWith('.part')
+                )
+                if (videoFile) {
+                  void finalize(join(songPath, videoFile))
+                } else {
+                  resolvePromise({
+                    success: false,
+                    error: 'Download completed but output file not found'
+                  })
+                }
+              })
+              .catch(() =>
+                resolvePromise({ success: false, error: 'Could not read output directory' })
+              )
+          }
+        }
+      )
+
+      // Forward progress to renderer
+      if (proc.stderr) {
+        proc.stderr.on('data', (data: Buffer) => {
+          const line = data.toString()
+          const match = line.match(/(\d+\.?\d*)%/)
+          if (match) {
+            const percent = parseFloat(match[1])
+            event.sender.send('video:download-progress', percent)
+          }
+        })
+      }
+      if (proc.stdout) {
+        proc.stdout.on('data', (data: Buffer) => {
+          const line = data.toString()
+          const match = line.match(/(\d+\.?\d*)%/)
+          if (match) {
+            const percent = parseFloat(match[1])
+            event.sender.send('video:download-progress', percent)
+          }
+        })
       }
     })
-
-    // Forward progress to renderer
-    if (proc.stderr) {
-      proc.stderr.on('data', (data: Buffer) => {
-        const line = data.toString()
-        const match = line.match(/(\d+\.?\d*)%/)
-        if (match) {
-          const percent = parseFloat(match[1])
-          event.sender.send('video:download-progress', percent)
-        }
-      })
-    }
-    if (proc.stdout) {
-      proc.stdout.on('data', (data: Buffer) => {
-        const line = data.toString()
-        const match = line.match(/(\d+\.?\d*)%/)
-        if (match) {
-          const percent = parseFloat(match[1])
-          event.sender.send('video:download-progress', percent)
-        }
-      })
-    }
-  })
 
   let result = await attemptDownload()
   if (!result.success && result.error && isYtDlpBlockedError(result.error)) {
@@ -1686,8 +2716,9 @@ ipcMain.handle('video:download-url', async (event, songPath: string, url: string
       const versionNote = refresh.version ? ` (yt-dlp ${refresh.version})` : ''
       result = {
         ...result,
-        error: `${result.error}\n\nyt-dlp is already the newest available build${versionNote}. `
-          + 'YouTube may have changed something upstream has not fixed yet — try again later.'
+        error:
+          `${result.error}\n\nyt-dlp is already the newest available build${versionNote}. ` +
+          'YouTube may have changed something upstream has not fixed yet — try again later.'
       }
     }
   }
@@ -1737,59 +2768,68 @@ ipcMain.handle('dialog:saveVideo', async () => {
 })
 
 // Export video with audio overlay
-ipcMain.handle('video:export', async (event, options: {
-  videoPath: string
-  audioPath: string
-  outputPath: string
-  offsetMs: number
-  trimStartMs: number
-  trimEndMs: number
-}) => {
-  const { videoPath, audioPath, outputPath, offsetMs, trimStartMs, trimEndMs } = options
-  const win = BrowserWindow.fromWebContents(event.sender)
-
-  return new Promise<{ success: boolean; error?: string }>((promiseResolve) => {
-    const trimStartSec = trimStartMs / 1000
-    const offsetSec = offsetMs / 1000
-    const absVideoPath = resolve(videoPath)
-    const absAudioPath = resolve(audioPath)
-
-    let cmd = ffmpeg()
-      .input(absVideoPath)
-      .inputOptions(trimStartSec > 0 ? [`-ss ${trimStartSec}`] : [])
-
-    if (trimEndMs > 0) {
-      const durationSec = (trimEndMs - trimStartMs) / 1000
-      cmd = cmd.inputOptions([`-t ${durationSec}`])
+ipcMain.handle(
+  'video:export',
+  async (
+    event,
+    options: {
+      videoPath: string
+      audioPath: string
+      outputPath: string
+      offsetMs: number
+      trimStartMs: number
+      trimEndMs: number
     }
+  ) => {
+    const { videoPath, audioPath, outputPath, offsetMs, trimStartMs, trimEndMs } = options
+    const win = BrowserWindow.fromWebContents(event.sender)
 
-    // Add audio with offset
-    cmd = cmd.input(absAudioPath)
-    if (offsetSec !== 0) {
-      cmd = cmd.inputOptions([`-itsoffset ${-offsetSec}`])
-    }
+    return new Promise<{ success: boolean; error?: string }>((promiseResolve) => {
+      const trimStartSec = trimStartMs / 1000
+      const offsetSec = offsetMs / 1000
+      const absVideoPath = resolve(videoPath)
+      const absAudioPath = resolve(audioPath)
 
-    cmd
-      .outputOptions([
-        '-c:v', 'libx264',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-shortest',
-        '-y' // overwrite
-      ])
-      .output(resolve(outputPath))
-      .on('progress', (progress) => {
-        if (win && progress.percent) {
-          win.webContents.send('video:export-progress', Math.round(progress.percent))
-        }
-      })
-      .on('end', () => {
-        promiseResolve({ success: true })
-      })
-      .on('error', (err: Error) => {
-        console.error('[FFmpeg] Export error:', err.message)
-        promiseResolve({ success: false, error: err.message })
-      })
-      .run()
-  })
-})
+      let cmd = ffmpeg()
+        .input(absVideoPath)
+        .inputOptions(trimStartSec > 0 ? [`-ss ${trimStartSec}`] : [])
+
+      if (trimEndMs > 0) {
+        const durationSec = (trimEndMs - trimStartMs) / 1000
+        cmd = cmd.inputOptions([`-t ${durationSec}`])
+      }
+
+      // Add audio with offset
+      cmd = cmd.input(absAudioPath)
+      if (offsetSec !== 0) {
+        cmd = cmd.inputOptions([`-itsoffset ${-offsetSec}`])
+      }
+
+      cmd
+        .outputOptions([
+          '-c:v',
+          'libx264',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '192k',
+          '-shortest',
+          '-y' // overwrite
+        ])
+        .output(resolve(outputPath))
+        .on('progress', (progress) => {
+          if (win && progress.percent) {
+            win.webContents.send('video:export-progress', Math.round(progress.percent))
+          }
+        })
+        .on('end', () => {
+          promiseResolve({ success: true })
+        })
+        .on('error', (err: Error) => {
+          console.error('[FFmpeg] Export error:', err.message)
+          promiseResolve({ success: false, error: err.message })
+        })
+        .run()
+    })
+  }
+)

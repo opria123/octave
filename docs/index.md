@@ -13,13 +13,13 @@ titleTemplate: ':title - Chart editor & auto-charter for rhythm games'
     </div>
     <h1 class="octave-hero-title">OCTAVE</h1>
     <p class="octave-hero-pitch">
-      Don't spend your night charting.<br>
-      <span class="octave-hero-pitch-accent">Spend it playing.</span>
+      Build the charts you want.<br>
+      <span class="octave-hero-pitch-accent">Edit, preview, and play.</span>
     </p>
     <p class="octave-hero-sub">
-      Drop in an MP3. Get a complete, editable chart for guitar, bass, drums,
-      keys, vocals, and harmonies. Then polish it on a real piano roll with a
-      live 3D preview right above.
+      Edit rhythm-game charts on a piano roll with a live 3D preview.
+      Use compatible STRUM profiles for local generation, or train candidates
+      from an explicitly approved chart library.
     </p>
     <div class="octave-hero-actions">
       <a class="octave-btn octave-btn-primary" href="https://github.com/opria123/octave/releases/latest">
@@ -29,7 +29,7 @@ titleTemplate: ':title - Chart editor & auto-charter for rhythm games'
       <a class="octave-btn octave-btn-ghost" href="https://github.com/opria123/octave">GitHub</a>
     </div>
     <div class="octave-hero-meta">
-      <span><span class="octave-dot"></span>100% local. No account. No cloud upload.</span>
+      <span><span class="octave-dot"></span>Local chart editing and training.</span>
       <span><span class="octave-dot"></span>MIT licensed.</span>
       <span><span class="octave-dot"></span>Reads &amp; writes <code>.mid</code> and <code>.chart</code>.</span>
     </div>
@@ -53,18 +53,19 @@ titleTemplate: ':title - Chart editor & auto-charter for rhythm games'
   <div class="octave-headline-strum-inner">
     <div class="octave-headline-strum-eyebrow">The big one</div>
     <h2 class="octave-headline-strum-title">
-      Auto-chart any song,
-      <span class="octave-grad">in one click.</span>
+      Train, evaluate,
+      <span class="octave-grad">then choose your profile.</span>
     </h2>
     <p class="octave-headline-strum-body">
-      <strong>STRUM</strong>, the bundled audio-to-chart pipeline, takes an MP3,
-      a YouTube URL, or pre-split stems and writes a full chart pack: drums from
-      onset detection, guitar, bass and keys from polyphonic transcription,
-      pitched vocals with aligned lyrics, and harmonies. Open it in OCTAVE,
-      tweak what you want, ship it.
+      <strong>STRUM</strong> runs locally through a selected compatible runtime.
+      OCTAVE curates approved sources, supervises training, and lets you select
+      profiles that pass their evaluation and packaging gates. Instruments,
+      inputs, and difficulties depend on the profile; raw candidates stay
+      separate from deployable models.
     </p>
     <div class="octave-headline-strum-actions">
-      <a class="octave-btn octave-btn-primary" href="/guide/auto-chart">How auto-chart works</a>
+      <a class="octave-btn octave-btn-primary" href="/guide/strum-training">Train with your library</a>
+      <a class="octave-btn octave-btn-ghost" href="/guide/auto-chart">Use a chart profile</a>
       <a class="octave-btn octave-btn-ghost" href="https://github.com/opria123/strum">STRUM on GitHub</a>
     </div>
   </div>
@@ -78,13 +79,13 @@ titleTemplate: ':title - Chart editor & auto-charter for rhythm games'
   <div class="octave-feature-grid">
     <a class="octave-feature" href="/guide/auto-chart">
       <div class="octave-feature-icon"><img src="/icons/feature-strum.svg" alt=""></div>
-      <div class="octave-feature-title">Audio in, full chart out</div>
-      <p>Point STRUM at a file, a YouTube URL, or stems. Get drums, guitar, bass, keys, vocals, and harmonies.</p>
+      <div class="octave-feature-title">Profile-based generation</div>
+      <p>Select a validated audio profile, or transform an Expert MIDI chart with a learned difficulty profile. Review the result before release.</p>
       <div class="octave-feature-cta">Auto-Chart guide <span>&rarr;</span></div>
     </a>
     <a class="octave-feature" href="/guide/midi-editor">
       <div class="octave-feature-icon"><img src="/icons/feature-instruments.svg" alt=""></div>
-      <div class="octave-feature-title">Eight instruments, four difficulties</div>
+      <div class="octave-feature-title">Multi-instrument chart editing</div>
       <p>Pro Drums, 5-fret guitar / bass / keys, 25-key Pro Keys, 6-string Pro Guitar / Bass, and pitched vocals.</p>
       <div class="octave-feature-cta">MIDI editor <span>&rarr;</span></div>
     </a>
@@ -118,13 +119,13 @@ titleTemplate: ':title - Chart editor & auto-charter for rhythm games'
 <section class="octave-section">
   <div class="octave-section-head">
     <div class="octave-section-eyebrow">How it works</div>
-    <h2 class="octave-section-title">From audio to playable in three steps.</h2>
+    <h2 class="octave-section-title">From source chart to reviewed output.</h2>
   </div>
   <div class="octave-steps">
     <div class="octave-step">
       <div class="octave-step-num">01</div>
-      <div class="octave-step-title">Drop in audio</div>
-      <p>An MP3, a YouTube URL, or pre-split stems. STRUM handles separation, transcription, and lyric alignment.</p>
+      <div class="octave-step-title">Open a chart or select a profile</div>
+      <p>Import a chart for editing, or use a compatible STRUM profile with its required audio or source MIDI input.</p>
     </div>
     <div class="octave-step">
       <div class="octave-step-num">02</div>
@@ -147,19 +148,19 @@ titleTemplate: ':title - Chart editor & auto-charter for rhythm games'
   <div class="octave-stats">
     <div class="octave-stat">
       <div class="octave-stat-value">8</div>
-      <div class="octave-stat-label">Instruments charted</div>
+      <div class="octave-stat-label">Instrument editors</div>
     </div>
     <div class="octave-stat">
       <div class="octave-stat-value">4</div>
-      <div class="octave-stat-label">Difficulties per track</div>
+      <div class="octave-stat-label">Editable difficulty levels</div>
     </div>
     <div class="octave-stat">
       <div class="octave-stat-value">2</div>
       <div class="octave-stat-label">Formats round-tripped</div>
     </div>
     <div class="octave-stat">
-      <div class="octave-stat-value">0</div>
-      <div class="octave-stat-label">Files leave your machine</div>
+      <div class="octave-stat-value">Local</div>
+      <div class="octave-stat-label">Editing and training</div>
     </div>
   </div>
 </section>

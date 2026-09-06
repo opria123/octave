@@ -1,0 +1,75 @@
+{
+  "format": "octave-strum-acceptance/v1",
+  "evidence": "synthetic-execution-only",
+  "quality_claim": false,
+  "stages": [
+    {
+      "name": "probe",
+      "status": "passed"
+    },
+    {
+      "name": "pipelines",
+      "status": "passed"
+    },
+    {
+      "name": "inspect-catalog",
+      "status": "passed"
+    },
+    {
+      "name": "prepare",
+      "status": "passed"
+    },
+    {
+      "name": "train",
+      "status": "passed"
+    },
+    {
+      "name": "inspect-candidate",
+      "status": "passed"
+    },
+    {
+      "name": "discover-candidate",
+      "status": "passed"
+    },
+    {
+      "name": "evaluate",
+      "status": "passed"
+    },
+    {
+      "name": "package",
+      "status": "passed"
+    },
+    {
+      "name": "inspect-package",
+      "status": "passed"
+    },
+    {
+      "name": "discover-package",
+      "status": "passed"
+    },
+    {
+      "name": "profile-validate",
+      "status": "passed"
+    },
+    {
+      "name": "chart-preflight",
+      "status": "passed"
+    },
+    {
+      "name": "chart-run",
+      "status": "passed"
+    }
+  ],
+  "runtime": {
+    "id": "strum-0.1.0+git.b32fa0a0943a",
+    "version": "0.1.0",
+    "source_revision": "b32fa0a0943a75184999edfe87c4ce38225d833f",
+    "source_dirty": false,
+    "python": "3.14.7"
+  },
+  "protocol_version": 1,
+  "canonical_quality_gate": "passed-on-fixture-only",
+  "artifact_path_audit": "passed",
+  "positive_chart_execution": "passed",
+  "status": "passed"
+}

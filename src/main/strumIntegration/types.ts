@@ -1,5 +1,14 @@
 export type StrumDevice = 'cuda' | 'mps' | 'cpu'
 
+/** Public, path-free result for a direct STRUM checkpoint-profile run. */
+export interface TypedChartArtifacts {
+  format: 'strum-typed-chart-artifacts/v1'
+  profileId: string
+  capability: string
+  manifestSha256: string
+  artifacts: Array<{ id: 'notes_midi' | 'run_manifest'; name: string; sha256: string }>
+}
+
 export type AutoChartStage =
   | 'bootstrap'
   | 'download'
@@ -57,7 +66,20 @@ export interface AutoChartRunOptions {
    */
   stemSongs?: Array<{
     name?: string
-    stems: Partial<Record<'drums' | 'bass' | 'vocals' | 'other' | 'guitar' | 'piano' | 'vocalsHarm2' | 'vocalsHarm3' | 'crowd', string>>
+    stems: Partial<
+      Record<
+        | 'drums'
+        | 'bass'
+        | 'vocals'
+        | 'other'
+        | 'guitar'
+        | 'piano'
+        | 'vocalsHarm2'
+        | 'vocalsHarm3'
+        | 'crowd',
+        string
+      >
+    >
     extras?: string[]
   }>
   urls: string[]
@@ -152,5 +174,6 @@ export interface AutoChartRunResult {
    * video into the corresponding song folder after charting.
    */
   urlSongFolders?: Array<{ url: string; songFolder: string }>
+  /** Present for direct checkpoint-profile output, never a legacy song package. */
+  typedArtifacts?: TypedChartArtifacts
 }
-

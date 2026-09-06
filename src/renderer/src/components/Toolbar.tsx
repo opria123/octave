@@ -1,15 +1,19 @@
 // Top toolbar with playback controls and global actions
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useProjectStore, useSettingsStore, getSongStore, removeSongStore, useUIStore } from '../stores'
+import {
+  useProjectStore,
+  useSettingsStore,
+  getSongStore,
+  removeSongStore,
+  useUIStore
+} from '../stores'
 import * as audioService from '../services/audioService'
 import * as playbackController from '../services/playbackController'
-import {
-  serializeMidiBase64,
-  serializeChartFile
-} from '../utils/midiParser'
+import { serializeMidiBase64, serializeChartFile } from '../utils/midiParser'
 import { validateChartAsync } from '../utils/chartValidation'
 import { SettingsModal } from './SettingsModal'
 import { ExportModal } from './ExportModal'
+import { TrainingModal, type TrainingActivity } from './DatasetCurationModal'
 import { ValidationPreviewCard } from './ValidationPreviewCard'
 import './Toolbar.css'
 
@@ -23,6 +27,11 @@ type AutoChartProgressState = {
   outputDir: string
   error: string | null
   warnings: string[]
+  typedArtifacts?: {
+    profileId: string
+    capability: string
+    artifacts: Array<{ id: 'notes_midi' | 'run_manifest'; name: string; sha256: string }>
+  }
 }
 
 const EMPTY_AUTO_CHART_URL = ''
@@ -64,6 +73,8 @@ export function Toolbar(): React.JSX.Element {
   } = useSettingsStore()
   const [isAudioLoaded, setIsAudioLoaded] = useState(false)
   const [showOpenDropdown, setShowOpenDropdown] = useState(false)
+  const [isDatasetCurationOpen, setIsDatasetCurationOpen] = useState(false)
+  const [trainingActivity, setTrainingActivity] = useState<TrainingActivity | null>(null)
   const [isAutoChartModalOpen, setIsAutoChartModalOpen] = useState(false)
   const [autoChartFiles, setAutoChartFiles] = useState<string[]>([])
   const [autoChartFolders, setAutoChartFolders] = useState<string[]>([])
@@ -455,21 +466,40 @@ export function Toolbar(): React.JSX.Element {
           percent: 100,
           stage: 'complete',
           message: event.success
-            ? 'Auto-chart complete.'
+            ? event.typedArtifacts
+              ? 'Validated STRUM chart artifacts are ready for review.'
+              : 'Auto-chart complete.'
             : 'Auto-chart finished with no successful songs.',
-          warnings: event.errors
+          warnings: event.errors,
+          typedArtifacts: event.typedArtifacts
         }
       })
 
-      const newSongId = event.success && event.songFolders.length > 0
-        ? event.songFolders[0].split(/[\\/]/).pop()
-        : undefined
+      const newSongId =
+        event.success && event.typedArtifacts && event.outputDir
+          ? event.outputDir.split(/[\\/]/).pop()
+          : event.success && event.songFolders.length > 0
+            ? event.songFolders[0].split(/[\\/]/).pop()
+            : undefined
 
       if (event.outputDir) {
         updateSettings({ autoChartOutputDir: event.outputDir, lastOpenedFolder: event.outputDir })
+        // Typed STRUM profiles write an OCTAVE-readable song.ini and notes.mid
+        // directly in their selected output folder. Load that folder just as
+        // we load legacy song-package output so the generated chart is ready
+        // for review instead of being only an artifact notification.
+        if (event.success && event.typedArtifacts) {
+          loadProjectFolder(event.outputDir, newSongId)
+          return
+        }
         // Optionally pull the source video for any URL inputs into their
         // resulting song folders so it shows up in the timeline / in-game.
-        if (event.success && autoChartDownloadVideo && event.urlSongFolders && event.urlSongFolders.length > 0) {
+        if (
+          event.success &&
+          autoChartDownloadVideo &&
+          event.urlSongFolders &&
+          event.urlSongFolders.length > 0
+        ) {
           void Promise.allSettled(
             event.urlSongFolders.map((entry) =>
               window.api.downloadVideoUrl(entry.songFolder, entry.url).catch((err) => {
@@ -485,8 +515,10 @@ export function Toolbar(): React.JSX.Element {
         }
       }
 
-      if (event.success) {
+      if (event.success && !event.typedArtifacts) {
         setAutoChartCloseCountdown(5)
+      } else if (event.typedArtifacts) {
+        setAutoChartCloseCountdown(null)
       }
     })
   }, [autoChartDownloadVideo, loadProjectFolder, updateSettings])
@@ -886,7 +918,10 @@ export function Toolbar(): React.JSX.Element {
           </button>
           {showOpenDropdown && (
             <>
-              <div className="toolbar-dropdown-backdrop" onClick={() => setShowOpenDropdown(false)} />
+              <div
+                className="toolbar-dropdown-backdrop"
+                onClick={() => setShowOpenDropdown(false)}
+              />
               <div className="toolbar-dropdown-menu">
                 <button
                   className="toolbar-dropdown-item"
@@ -929,6 +964,31 @@ export function Toolbar(): React.JSX.Element {
         >
           <span className="toolbar-icon">📤</span>
           <span className="toolbar-label">Export</span>
+        </button>
+        <button
+          className="toolbar-button"
+          onClick={() => setIsDatasetCurationOpen(true)}
+          title={
+            trainingActivity
+              ? `${trainingActivity.phase}: ${trainingActivity.completed} of ${trainingActivity.total || '?'}`
+              : 'Open the STRUM training wizard'
+          }
+        >
+          <span className="toolbar-icon">🧪</span>
+          <span className="toolbar-label">Train</span>
+          {trainingActivity && (
+            <span
+              className="toolbar-training-status"
+              aria-hidden="true"
+              style={{
+                background: `conic-gradient(var(--accent-color) ${
+                  trainingActivity.total
+                    ? Math.round((trainingActivity.completed / trainingActivity.total) * 100)
+                    : 8
+                }%, var(--bg-tertiary) 0)`
+              }}
+            />
+          )}
         </button>
       </div>
 
@@ -1637,9 +1697,8 @@ export function Toolbar(): React.JSX.Element {
                               auto-generated by summing your stems and any extra audio. Lead vocals
                               are charted strictly as PART VOCALS; backing vocals 1/2 drive
                               HARM2/HARM3 and play back as vocals_1.ogg/vocals_2.ogg. Anything you
-                              add as “Extra audio” is combined into song.ogg (the backing
-                              track); the optional Crowd slot is exported directly as
-                              crowd.ogg.
+                              add as “Extra audio” is combined into song.ogg (the backing track);
+                              the optional Crowd slot is exported directly as crowd.ogg.
                             </p>
                             {autoChartStemSongs.map((song, songIdx) => (
                               <div
@@ -2013,8 +2072,8 @@ export function Toolbar(): React.JSX.Element {
                           <span>
                             Generate Star Power phrases
                             <small style={{ display: 'block', opacity: 0.7 }}>
-                              Uncheck to create charts without any Star Power / Overdrive
-                              phrases. You can always add your own later in the editor.
+                              Uncheck to create charts without any Star Power / Overdrive phrases.
+                              You can always add your own later in the editor.
                             </small>
                           </span>
                         </label>
@@ -2344,6 +2403,20 @@ export function Toolbar(): React.JSX.Element {
                       ))}
                     </div>
                   )}
+                  {autoChartProgress.typedArtifacts && (
+                    <div className="auto-chart-warning-list" data-testid="typed-strum-artifacts">
+                      <strong>Validated STRUM checkpoint output</strong>
+                      <div>
+                        {autoChartProgress.typedArtifacts.capability} · review the listed artifacts
+                        in your selected output folder before curating them.
+                      </div>
+                      {autoChartProgress.typedArtifacts.artifacts.map((artifact) => (
+                        <div key={artifact.id} className="auto-chart-warning-item">
+                          {artifact.name} · {artifact.sha256.slice(0, 12)}…
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </section>
             </div>
@@ -2368,7 +2441,8 @@ export function Toolbar(): React.JSX.Element {
                       isRunning: false,
                       outputDir: getPreferredAutoChartOutputDir(),
                       error: null,
-                      warnings: []
+                      warnings: [],
+                      typedArtifacts: undefined
                     })
                   }}
                 >
@@ -2401,6 +2475,11 @@ export function Toolbar(): React.JSX.Element {
 
       <SettingsModal />
       {isExportModalOpen && <ExportModal onSaveBeforeExport={handleSave} />}
+      <TrainingModal
+        isOpen={isDatasetCurationOpen}
+        onClose={() => setIsDatasetCurationOpen(false)}
+        onActivityChange={setTrainingActivity}
+      />
     </div>
   )
 }

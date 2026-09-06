@@ -1,58 +1,51 @@
 # Auto-Chart <Badge type="warning" text="experimental" />
 
-Generate a complete Clone Hero / YARG chart from an audio source — drums, guitar, bass, keys, vocals, and harmonies — using OCTAVE's bundled **STRUM** pipeline.
+OCTAVE can run a **validated STRUM chart profile** locally, then open the output for editing. The selected profile determines its instruments, input requirements, and difficulty policy. It does not automatically provide every instrument or all four difficulties.
 
 ::: warning Experimental
-The auto-charter is bundled but still evolving. Output quality varies by genre, and you'll usually want to clean the result up in the [MIDI Editor](/guide/midi-editor) before shipping. We mark it experimental so it's clear: this is a starting point, not a finished chart.
+Generated charts need review. A completed training run is a candidate, not a deployable model; packaging and profile validation must pass before you can select it as a default. A passing synthetic test demonstrates software execution, not musical quality.
 :::
 
-## STRUM
+## Choose the right workflow
 
-**STRUM** (Stem-aware Transcription, Rhythm & Universal Mapping) is the open-source audio-to-chart engine that powers Auto-Chart. It lives in its own repository at [github.com/opria123/strum](https://github.com/opria123/strum) and is bundled with OCTAVE under [`resources/strum/`](https://github.com/opria123/octave/tree/master/resources/strum). It runs locally — no cloud, no upload.
+| Goal                                              | Workflow                                                                                                                                               |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Generate a chart from audio                       | Select a compatible validated audio-to-chart profile in **Training → Deploy**, then use **Auto-Chart**.                                                |
+| Apply a learned lower-difficulty transform        | Select a validated learned transform in **Training → Deploy**, then use **Transform MIDI** with an Expert source chart and any required aligned audio. |
+| Train or fine-tune using approved library charts  | Follow the [STRUM training tutorial](/guide/strum-training). Training and deployment are separate decisions.                                           |
+| Derive lower difficulties with local editor rules | Use [Generate from Expert](/guide/midi-editor#generate-from-expert). This editing tool does not train or invoke a learned profile.                     |
 
-What STRUM does, in order:
+STRUM is developed in its own [repository](https://github.com/opria123/strum). OCTAVE's training integration invokes its versioned `strum-worker` interface. The older `resources/strum/strum_worker.py` is a transitional inference adapter, not the standalone training interface or a promise of universal chart coverage.
 
-1. **Stem split** with [Demucs](https://github.com/adefossez/demucs) — drums, bass, vocals, other (skipped if you provide pre-split stems).
-2. **Drum onset detection + classification** — kick, snare, toms, hi-hat, crash, ride mapped to General-MIDI.
-3. **Polyphonic transcription** of guitar / bass / keys via [basic-pitch](https://github.com/spotify/basic-pitch).
-4. **Vocal melody + lyric alignment** — pitched lead with optional HARM2 / HARM3 harmonies.
-5. **Tempo & downbeat detection** (or use a manual tempo map you provide).
-6. **Assembly** into a complete song folder: `notes.mid`, per-stem `.ogg` files, and a `song.ini`.
-
-You can run STRUM standalone from the command line using the same `strum_worker.py` OCTAVE invokes — see the [advanced flags](/guide/auto-chart-advanced) for the env vars and overrides.
-
-## Quick start
+## Run a validated audio profile
 
 ![Auto-Chart modal](/screenshots/auto-chart-modal.png)
 
-1. Click the **Auto-Chart** button in the toolbar.
-2. **Add files**, point at folders, or paste a URL — the modal has tabs for each.
-3. Click **Start Auto-Chart**.
-4. Wait. Progress shows per-stage (bootstrap → split → drums → pitched → vocals → assembly).
-5. The new song folder appears in your [Project Explorer](/guide/project-explorer).
+1. Configure a compatible local STRUM runtime and discover a model bundle in **Training → Deploy**. See the [training tutorial](/guide/strum-training) for setup and profile selection.
+2. Inspect the profile's executable capability and difficulty policy, then explicitly select it as the default.
+3. Open **Auto-Chart** and provide **one local audio file** or a supported **HTTPS URL**. URL audio is acquired privately through `yt-dlp` before the typed chart run.
+4. Choose an output location and start the run. OCTAVE preflights the selected profile and verifies the returned chart artifacts.
+5. Open the output and review it in the [MIDI Editor](/guide/midi-editor). Add any audio and song metadata needed for your distribution format.
 
-That's it for the basic flow. The advanced section covers everything else.
+Typed audio profiles do not currently accept batches, folders, or stem-folder inputs through this host path. A learned difficulty transform requires source MIDI and must use **Transform MIDI** in Deploy; an audio file alone cannot replace that input.
 
-## Input modes
+The profile's declared difficulty policy remains authoritative. Expert profiles produce Expert output unless an explicitly validated alternative is available. OCTAVE does not silently fill missing difficulties or swap in another model.
 
-| Mode | What to provide |
-|------|----------------|
-| **Single file** | Any audio file. Demucs will split it into stems. |
-| **Pre-split stems folder** | A folder with `drums.wav`, `bass.wav`, `vocals.wav`, `other.wav`. Skips Demucs (much faster). |
-| **YouTube URL** | The audio is downloaded with `yt-dlp` and processed as a single file. |
+## Output and availability
 
-## Bundled Python runtime
+A typed run produces `notes.mid` and `run.json`; OCTAVE preserves generated provenance in `song.ini`. This is not a guarantee of a complete song package with separated audio, lyrics, harmonies, and every instrument. Consult the [advanced guide](/guide/auto-chart-advanced) for the distinction from older inference output.
 
-OCTAVE ships with its own Python 3.11 runtime in packaged builds — you don't need to install Python yourself. The runtime is downloaded the first time you click **Auto-Chart** (about 250 MB) and cached in:
+Packaged OCTAVE builds fail closed when no verified profile is selected. They do not fall back to downloading a mutable STRUM checkout. The current installer does not provide a verified universal training runtime or production model for every instrument. Use an explicitly selected compatible installed worker, or a developer checkout when running a development build; see [runtime setup in the tutorial](/guide/strum-training).
 
-- **Windows**: `%APPDATA%/octave/python-runtime/`
-- **macOS**: `~/Library/Application Support/octave/python-runtime/`
-- **Linux**: `~/.config/octave/python-runtime/`
+## Transitional inference controls
 
-In dev builds, OCTAVE prefers a project-local `.venv\Scripts\python.exe` if it exists. See [Python Runtime Setup](/troubleshooting/runtime-setup) for details.
+Development builds retain the older inference adapter. Its folder/stem input modes, separation stages, track toggles, tempo overrides, and song-folder assembly belong to that compatibility path. Their presence in the Auto-Chart dialog does not expand a validated profile's capabilities, and the legacy fallback is unavailable in packaged builds.
+
+Processing runs locally. Remote inputs, dependency/model acquisition in the legacy path, and optional online lookups can still require network access. The dialog's lookup toggle is not a guarantee of zero network activity.
 
 ## Next
 
-- [Advanced options →](/guide/auto-chart-advanced) — track gating, manual BPM, tempo maps, harmonies, offline mode
+- [Train and use a STRUM profile →](/guide/strum-training)
+- [Advanced options and compatibility behavior →](/guide/auto-chart-advanced)
 - [Auto-Chart troubleshooting →](/troubleshooting/auto-chart-issues)
-- [STRUM on GitHub ↗](https://github.com/opria123/strum) — source, issues, and standalone CLI usage
+- [STRUM on GitHub ↗](https://github.com/opria123/strum)

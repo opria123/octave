@@ -28,7 +28,7 @@ import { app, BrowserWindow } from 'electron'
 import { execFile, spawn } from 'child_process'
 import { existsSync, readFileSync } from 'fs'
 import { mkdir, writeFile } from 'fs/promises'
-import { dirname, join } from 'path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'path'
 import { getRuntimeRoot, isBootstrapTarget } from './runtimeBootstrap'
 import type { AutoChartProgressEvent, AutoChartStage } from './types'
 
@@ -94,21 +94,36 @@ type RefreshState = {
   lastError?: string
 }
 
-function stateFilePath(): string {
-  const dir = isBootstrapTarget() ? getRuntimeRoot() : app.getPath('userData')
+function isOCTAVEManagedRuntimePython(python: PythonInvocation): boolean {
+  const runtimeRoot = resolve(getRuntimeRoot())
+  const pythonPath = resolve(python.command)
+  const pathFromRuntime = relative(runtimeRoot, pythonPath)
+  return (
+    pathFromRuntime !== '' &&
+    pathFromRuntime !== '..' &&
+    !pathFromRuntime.startsWith(`..${sep}`) &&
+    !isAbsolute(pathFromRuntime)
+  )
+}
+
+function stateFilePath(python?: PythonInvocation): string {
+  const dir =
+    isBootstrapTarget() || (python && isOCTAVEManagedRuntimePython(python))
+      ? getRuntimeRoot()
+      : app.getPath('userData')
   return join(dir, '.octave-ytdlp-refresh.json')
 }
 
-function readState(): RefreshState | null {
+function readState(python: PythonInvocation): RefreshState | null {
   try {
-    return JSON.parse(readFileSync(stateFilePath(), 'utf-8')) as RefreshState
+    return JSON.parse(readFileSync(stateFilePath(python), 'utf-8')) as RefreshState
   } catch {
     return null
   }
 }
 
-async function writeState(state: RefreshState): Promise<void> {
-  const path = stateFilePath()
+async function writeState(python: PythonInvocation, state: RefreshState): Promise<void> {
+  const path = stateFilePath(python)
   try {
     await mkdir(dirname(path), { recursive: true })
     await writeFile(path, JSON.stringify(state, null, 2), 'utf-8')
@@ -150,6 +165,7 @@ function broadcastProgress(sink: ProgressSink, message: string): void {
 export function isManagedPython(python: PythonInvocation): boolean {
   if (process.env.OCTAVE_YTDLP_AUTO_REFRESH === '0') return false
   if (isBootstrapTarget()) return true
+  if (isOCTAVEManagedRuntimePython(python)) return true
   return /[\\/]\.venv[\\/]/.test(python.command)
 }
 
@@ -279,7 +295,7 @@ export async function ensureFreshYtDlp(
       }
     }
 
-    const state = readState()
+    const state = readState(python)
     const now = Date.now()
     if (!opts.force && state && state.requirement === YT_DLP_REQUIREMENT) {
       const lastSuccess = state.lastSuccessAt ? Date.parse(state.lastSuccessAt) : NaN
@@ -329,7 +345,7 @@ export async function ensureFreshYtDlp(
 
     const version = result.ok ? await probeVersion(python) : previousVersion
     const nowIso = new Date().toISOString()
-    await writeState({
+    await writeState(python, {
       requirement: YT_DLP_REQUIREMENT,
       lastAttemptAt: nowIso,
       ...(result.ok ? { lastSuccessAt: nowIso } : { lastSuccessAt: state?.lastSuccessAt }),

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({
-  app: { getPath: () => '', isPackaged: false },
+  app: { getPath: () => '/tmp/octave-ytdlp-test-user-data', isPackaged: false },
   BrowserWindow: { getAllWindows: () => [] }
 }))
 
@@ -53,6 +53,16 @@ describe('isManagedPython', () => {
       true
     )
     expect(isManagedPython({ command: '/repo/.venv/bin/python', baseArgs: [] })).toBe(true)
+  })
+
+  it('allows OCTAVE managed Python in dev', () => {
+    delete process.env.OCTAVE_YTDLP_AUTO_REFRESH
+    expect(
+      isManagedPython({
+        command: '/tmp/octave-ytdlp-test-user-data/python-runtime/python/bin/python3',
+        baseArgs: []
+      })
+    ).toBe(true)
   })
 
   it('refuses system interpreters in dev', () => {

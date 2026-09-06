@@ -1,7 +1,8 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { execFile, spawn } from 'child_process'
-import { dirname, join } from 'path'
-import { mkdir, unlink, writeFile } from 'fs/promises'
+import { randomUUID } from 'crypto'
+import { dirname, join, sep } from 'path'
+import { mkdir, readdir, rm, unlink, writeFile } from 'fs/promises'
 import { existsSync, mkdirSync, createWriteStream, type WriteStream } from 'fs'
 import { parseAutoChartProgressLine } from './progress'
 import { ensureBootstrappedPython, isBootstrapTarget } from './runtimeBootstrap'
@@ -9,12 +10,34 @@ import { ensureDemucsCpp } from './demucsCppBootstrap'
 import { ensureWhisperCpp } from './whisperCppBootstrap'
 import { detectAccelerator } from './runtimeBootstrap'
 import { ensureFreshYtDlp, isYtDlpBlockedError } from './ytDlpRefresh'
-import type { AutoChartProgressEvent, AutoChartRunOptions, AutoChartRunResult, AutoChartStage } from './types'
+import type {
+  AutoChartProgressEvent,
+  AutoChartRunOptions,
+  AutoChartRunResult,
+  AutoChartStage
+} from './types'
 
 const EVENT_PREFIX = '__OCTAVE_EVENT__'
 const PYTHON_CHECK_TIMEOUT_MS = 10_000
 const NO_OUTPUT_WARN_MS = 30_000
 const HEARTBEAT_TICK_MS = 15_000
+// Keep this in lockstep with REQUIRED_MODULES in strum_worker.py. A local
+// interpreter is eligible only when it can satisfy the worker's full import
+// boundary, not merely the first packages that commonly go missing.
+const STRUM_RUNTIME_MODULES = [
+  'torch',
+  'torchaudio',
+  'librosa',
+  'mido',
+  'basic_pitch',
+  'huggingface_hub',
+  'numpy',
+  'soundfile',
+  'omegaconf',
+  'yaml',
+  'requests',
+  'pyphen'
+] as const
 
 /**
  * Locate the bundled ffmpeg-static binary so we can prepend its directory to
@@ -30,8 +53,8 @@ function resolveBundledFfmpegDir(): string | null {
     // app.asar.unpacked. ffmpeg-static handles this itself by returning the
     // unpacked path at runtime, so dirname() is enough.
     let resolved = ffmpegPath
-    if (resolved.includes(`app.asar${require('path').sep}`)) {
-      resolved = resolved.replace(`app.asar${require('path').sep}`, `app.asar.unpacked${require('path').sep}`)
+    if (resolved.includes(`app.asar${sep}`)) {
+      resolved = resolved.replace(`app.asar${sep}`, `app.asar.unpacked${sep}`)
     }
     if (!existsSync(resolved)) return null
     return dirname(resolved)
@@ -50,7 +73,24 @@ type RunningJob = {
   payloadPath: string
 }
 
+type RunningProfileInputMaterialization = {
+  process: ReturnType<typeof spawn>
+  root: string
+}
+
 const runningJobs = new Map<string, RunningJob>()
+const runningProfileInputMaterializations = new Map<string, RunningProfileInputMaterialization>()
+// A materialization has setup work (including the managed yt-dlp refresh)
+// before there is a child process to kill. Keep cancellation state separately
+// so a cancel in that window cannot turn into a later media download.
+const pendingProfileInputMaterializations = new Set<string>()
+const cancelledProfileInputMaterializations = new Set<string>()
+
+export type MaterializedProfileAudio = {
+  /** Main-process-only local audio path. Never send this over IPC. */
+  audioPath: string
+  cleanup: () => Promise<void>
+}
 
 const STAGE_PERCENT: Partial<Record<AutoChartStage, number>> = {
   bootstrap: 5,
@@ -146,7 +186,9 @@ function openRunLog(runId: string): WriteStream | null {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
     const file = join(dir, `${stamp}_${runId}.log`)
     const stream = createWriteStream(file, { flags: 'a' })
-    stream.write(`# STRUM run log\n# runId=${runId}\n# started=${new Date().toISOString()}\n# packaged=${app.isPackaged}\n# platform=${process.platform}-${process.arch}\n# logPath=${file}\n\n`)
+    stream.write(
+      `# STRUM run log\n# runId=${runId}\n# started=${new Date().toISOString()}\n# packaged=${app.isPackaged}\n# platform=${process.platform}-${process.arch}\n# logPath=${file}\n\n`
+    )
     return stream
   } catch (err) {
     console.warn('[STRUM] failed to open run log:', err)
@@ -206,9 +248,7 @@ function getBundledPythonEnv(): NodeJS.ProcessEnv {
   // ffmpeg without the user installing it system-wide.
   const ffmpegDir = resolveBundledFfmpegDir()
   const existingPath = process.env.PATH ?? process.env.Path ?? ''
-  const augmentedPath = ffmpegDir
-    ? `${ffmpegDir}${pathSeparator}${existingPath}`
-    : existingPath
+  const augmentedPath = ffmpegDir ? `${ffmpegDir}${pathSeparator}${existingPath}` : existingPath
 
   return {
     ...process.env,
@@ -220,9 +260,40 @@ function getBundledPythonEnv(): NodeJS.ProcessEnv {
 
 async function commandExists(candidate: PythonCommand): Promise<boolean> {
   return await new Promise<boolean>((resolve) => {
-    execFile(candidate.command, [...candidate.baseArgs, '--version'], { timeout: PYTHON_CHECK_TIMEOUT_MS }, (error) => {
-      resolve(!error)
-    })
+    execFile(
+      candidate.command,
+      [...candidate.baseArgs, '--version'],
+      { timeout: PYTHON_CHECK_TIMEOUT_MS },
+      (error) => {
+        resolve(!error)
+      }
+    )
+  })
+}
+
+/**
+ * A Python executable being present does not mean it can run STRUM.  In
+ * particular, development machines commonly have `python3` on PATH while the
+ * ML dependencies live nowhere (or in a stale, unrelated environment). Keep
+ * that probe deliberately import-free: importing basic-pitch also imports
+ * torch and can take several seconds just to decide whether to bootstrap.
+ */
+async function hasStrumRuntimeModules(candidate: PythonCommand): Promise<boolean> {
+  const probe = [
+    'import importlib.util, sys',
+    `modules = ${JSON.stringify(STRUM_RUNTIME_MODULES)}`,
+    'sys.exit(0 if all(importlib.util.find_spec(module) is not None for module in modules) else 1)'
+  ].join('; ')
+
+  return await new Promise<boolean>((resolve) => {
+    execFile(
+      candidate.command,
+      [...candidate.baseArgs, '-c', probe],
+      { timeout: PYTHON_CHECK_TIMEOUT_MS },
+      (error) => {
+        resolve(!error)
+      }
+    )
   })
 }
 
@@ -246,9 +317,10 @@ async function findPythonCommand(runId?: string): Promise<PythonCommand> {
   // Prefer a workspace-local virtualenv when present so dev runs are isolated
   // from system per-user site-packages (avoids cross-version contamination
   // such as a 3.11 launcher loading wheels from %APPDATA%\Python\Python310).
-  const venvPython = process.platform === 'win32'
-    ? join(process.cwd(), '.venv', 'Scripts', 'python.exe')
-    : join(process.cwd(), '.venv', 'bin', 'python')
+  const venvPython =
+    process.platform === 'win32'
+      ? join(process.cwd(), '.venv', 'Scripts', 'python.exe')
+      : join(process.cwd(), '.venv', 'bin', 'python')
   if (existsSync(venvPython)) {
     candidates.push({ command: venvPython, baseArgs: [] })
   }
@@ -263,17 +335,44 @@ async function findPythonCommand(runId?: string): Promise<PythonCommand> {
   candidates.push({ command: 'python', baseArgs: [] })
 
   for (const candidate of candidates) {
-    if (await commandExists(candidate)) {
+    if ((await commandExists(candidate)) && (await hasStrumRuntimeModules(candidate))) {
       return candidate
     }
   }
 
-  throw new Error(
-    'A compatible Python runtime for development was not found. Set OCTAVE_STRUM_PYTHON, or install Python 3.10/3.11 and ensure it is available on PATH.'
-  )
+  // Source builds should behave like installed builds: a bare system Python
+  // must never produce the worker's opaque "install these packages globally"
+  // failure. The isolated user-data runtime is cacheable and emits bootstrap
+  // progress through the normal STRUM UI while it is being prepared.
+  const requirementsPath = getStrumRequirementsPath()
+  if (!existsSync(requirementsPath)) {
+    throw new Error('OCTAVE could not find the bundled STRUM runtime requirements.')
+  }
+  return { command: await ensureBootstrappedPython(requirementsPath, runId), baseArgs: [] }
 }
 
-export async function resolvePythonCommand(runId?: string): Promise<PythonCommand> {
+export async function resolvePythonCommand(
+  runId?: string,
+  options?: { developerSourceRoot?: string }
+): Promise<PythonCommand> {
+  if (options?.developerSourceRoot !== undefined) {
+    // Developer activation selects an existing environment. The versioned
+    // worker probe owns dependency/capability validation for that checkout.
+    const configured = process.env.OCTAVE_STRUM_PYTHON?.trim()
+    const root = options.developerSourceRoot
+    if (!root.trim()) throw new Error('Select a STRUM checkout with a Python environment.')
+    const localPython =
+      process.platform === 'win32'
+        ? join(root, '.venv', 'Scripts', 'python.exe')
+        : join(root, '.venv', 'bin', 'python')
+    const candidate: PythonCommand = { command: configured || localPython, baseArgs: [] }
+    if ((configured || existsSync(localPython)) && (await commandExists(candidate))) {
+      return candidate
+    }
+    throw new Error(
+      'The developer STRUM Python environment is unavailable. Configure OCTAVE_STRUM_PYTHON or create a .venv in the selected checkout.'
+    )
+  }
   return findPythonCommand(runId)
 }
 
@@ -326,12 +425,14 @@ function handleStructuredEvent(
       const inferred = message ? parseAutoChartProgressLine(runId, message) : null
       const percentFromPayload = typeof payload.percent === 'number' ? payload.percent : undefined
       const payloadStage = String(payload.stage ?? '') as AutoChartStage
-      const stage = payloadStage === 'bootstrap' && inferred?.stage && inferred.stage !== 'bootstrap'
-        ? inferred.stage
-        : (payloadStage || inferred?.stage || 'bootstrap') as AutoChartStage
-      const percent = typeof percentFromPayload === 'number'
-        ? normalizeGlobalPercent(stage, percentFromPayload)
-        : (inferred?.percent ?? getFallbackPercent(stage))
+      const stage =
+        payloadStage === 'bootstrap' && inferred?.stage && inferred.stage !== 'bootstrap'
+          ? inferred.stage
+          : ((payloadStage || inferred?.stage || 'bootstrap') as AutoChartStage)
+      const percent =
+        typeof percentFromPayload === 'number'
+          ? normalizeGlobalPercent(stage, percentFromPayload)
+          : (inferred?.percent ?? getFallbackPercent(stage))
 
       const progressEvent = {
         ...payload,
@@ -397,6 +498,122 @@ function isRemoteUrl(value: unknown): boolean {
 }
 
 /**
+ * Download one user-provided HTTPS media URL into a private, ephemeral local
+ * audio file for a typed STRUM profile. The URL is never written into a
+ * profile request, worker request, renderer event, or log line. The caller
+ * must remove the returned file after the profile run finishes.
+ */
+export async function materializeProfileUrlAudio(
+  runId: string,
+  url: string
+): Promise<MaterializedProfileAudio> {
+  if (!/^https:\/\//i.test(url.trim())) {
+    throw new Error('The selected STRUM profile requires a valid HTTPS media URL.')
+  }
+  const root = join(app.getPath('temp'), `octave-profile-audio-${runId}-${randomUUID()}`)
+  pendingProfileInputMaterializations.add(runId)
+  const cleanup = async (): Promise<void> => {
+    runningProfileInputMaterializations.delete(runId)
+    pendingProfileInputMaterializations.delete(runId)
+    cancelledProfileInputMaterializations.delete(runId)
+    await rm(root, { recursive: true, force: true }).catch(() => undefined)
+  }
+  const throwIfCancelled = async (): Promise<void> => {
+    if (!cancelledProfileInputMaterializations.has(runId)) return
+    await cleanup()
+    throw new Error('The validated STRUM profile chart run was cancelled.')
+  }
+  try {
+    await mkdir(root, { recursive: true })
+    await throwIfCancelled()
+    const python = await findPythonCommand(runId)
+    await throwIfCancelled()
+    await ensureFreshYtDlp(python, { runId, stage: 'download' })
+    // Do not spawn yt-dlp if cancellation happened while its managed update
+    // was pending. This is deliberately checked immediately before download.
+    await throwIfCancelled()
+    broadcast('strum:progress', {
+      runId,
+      stage: 'download',
+      percent: 10,
+      message: 'Materializing the selected URL as a private local audio input.'
+    } satisfies AutoChartProgressEvent)
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(
+        python.command,
+        [
+          ...python.baseArgs,
+          '-m',
+          'yt_dlp',
+          '--no-playlist',
+          '--no-warnings',
+          '--extract-audio',
+          '--audio-format',
+          'wav',
+          '--output',
+          join(root, 'source.%(ext)s'),
+          url
+        ],
+        {
+          stdio: ['ignore', 'ignore', 'ignore'],
+          env: getBundledPythonEnv(),
+          detached: process.platform !== 'win32'
+        }
+      )
+      runningProfileInputMaterializations.set(runId, { process: child, root })
+      child.once('error', () => {
+        void cleanup().then(() =>
+          reject(new Error('OCTAVE could not materialize the selected URL.'))
+        )
+      })
+      child.once('close', (exitCode: number | null) => {
+        runningProfileInputMaterializations.delete(runId)
+        if (cancelledProfileInputMaterializations.has(runId)) {
+          void cleanup().then(() =>
+            reject(new Error('The validated STRUM profile chart run was cancelled.'))
+          )
+        } else if (exitCode === 0) resolve()
+        else
+          void cleanup().then(() =>
+            reject(new Error('OCTAVE could not materialize the selected URL.'))
+          )
+      })
+    })
+    const entries = await readdir(root, { withFileTypes: true })
+    const audio = entries.filter(
+      (entry) => entry.isFile() && /^source\.(?:wav|wave)$/i.test(entry.name)
+    )
+    if (audio.length !== 1) {
+      await cleanup()
+      throw new Error('OCTAVE could not materialize the selected URL as WAV audio.')
+    }
+    return { audioPath: join(root, audio[0].name), cleanup }
+  } catch (error) {
+    await cleanup()
+    throw error
+  }
+}
+
+export async function cancelProfileUrlMaterialization(runId: string): Promise<boolean> {
+  if (!pendingProfileInputMaterializations.has(runId)) return false
+  cancelledProfileInputMaterializations.add(runId)
+  const job = runningProfileInputMaterializations.get(runId)
+  // The download process is created only after runtime refresh. The signal is
+  // still enough to stop the future spawn when cancellation wins that race.
+  if (!job) return true
+  try {
+    if (process.platform !== 'win32' && job.process.pid) process.kill(-job.process.pid, 'SIGTERM')
+    else job.process.kill('SIGTERM')
+  } catch {
+    // It may have exited between lookup and kill; the cancellation signal
+    // still guarantees no further materialization work is started.
+  }
+  runningProfileInputMaterializations.delete(runId)
+  await rm(job.root, { recursive: true, force: true }).catch(() => undefined)
+  return true
+}
+
+/**
  * True when the run will download something with yt-dlp (URL inputs, or
  * stem-song entries whose stems/extras are URLs).
  */
@@ -409,7 +626,18 @@ function hasRemoteInputs(options: Omit<AutoChartRunOptions, 'cacheDir'>): boolea
   return false
 }
 
-export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'>): Promise<AutoChartRunResult> {
+export async function runAutoChart(
+  options: Omit<AutoChartRunOptions, 'cacheDir'>
+): Promise<AutoChartRunResult> {
+  // The legacy adapter bootstraps from a STRUM source tree. A packaged OCTAVE
+  // build must never let that compatibility path acquire mutable remote code
+  // when no verified Deploy profile is active. Profiled charting is resolved
+  // before this fallback in the main-process IPC handler.
+  if (app.isPackaged) {
+    throw new Error(
+      'No verified STRUM Auto Chart profile is selected. Choose a validated local model bundle in Training → Deploy before charting.'
+    )
+  }
   const remote = hasRemoteInputs(options)
   try {
     return await runAutoChartOnce(options, { allowYtDlpRetry: remote, refreshYtDlp: remote })
@@ -422,7 +650,10 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
     // and, if that produced a newer build, run again. Downloads happen at the
     // very start of a run, so nothing expensive is lost by retrying.
     const runId = options.runId
-    warnStrum(runId, `yt-dlp download was rejected (${message.split('\n')[0]}); refreshing yt-dlp and retrying.`)
+    warnStrum(
+      runId,
+      `yt-dlp download was rejected (${message.split('\n')[0]}); refreshing yt-dlp and retrying.`
+    )
     const python = await findPythonCommand(runId)
     const refresh = await ensureFreshYtDlp(python, {
       runId,
@@ -435,9 +666,9 @@ export async function runAutoChart(options: Omit<AutoChartRunOptions, 'cacheDir'
     if (!refresh.changed) {
       const versionNote = refresh.version ? ` (yt-dlp ${refresh.version})` : ''
       throw new Error(
-        `${message}\n\nyt-dlp is already the newest available build${versionNote}. `
-        + 'YouTube may have changed something upstream has not fixed yet — try again later, '
-        + 'or download the audio yourself and pass the file in.'
+        `${message}\n\nyt-dlp is already the newest available build${versionNote}. ` +
+          'YouTube may have changed something upstream has not fixed yet — try again later, ' +
+          'or download the audio yourself and pass the file in.'
       )
     }
     broadcast('strum:progress', {
@@ -495,9 +726,13 @@ async function runAutoChartOnce(
   // the worker uses Python `demucs -d cuda`, which is dramatically
   // faster than the CPU-only demucs.cpp binary.
   const accelerator = detectAccelerator()
-  let demucsCppEnv: { OCTAVE_DEMUCS_CPP_BIN: string; OCTAVE_DEMUCS_CPP_WEIGHTS: string } | null = null
+  let demucsCppEnv: { OCTAVE_DEMUCS_CPP_BIN: string; OCTAVE_DEMUCS_CPP_WEIGHTS: string } | null =
+    null
   if (accelerator === 'cuda') {
-    logStrum(runId, 'CUDA detected; routing demucs separation through Python (torch) instead of demucs.cpp.')
+    logStrum(
+      runId,
+      'CUDA detected; routing demucs separation through Python (torch) instead of demucs.cpp.'
+    )
   } else {
     try {
       const { binaryPath, weightsPath } = await ensureDemucsCpp(runId)
@@ -516,7 +751,8 @@ async function runAutoChartOnce(
   // package for vocals transcription. Only relevant when the user
   // actually charts vocals; the bootstrap is cheap to skip if the model
   // is already on disk.
-  let whisperCppEnv: { OCTAVE_WHISPER_CPP_BIN: string; OCTAVE_WHISPER_CPP_MODEL: string } | null = null
+  let whisperCppEnv: { OCTAVE_WHISPER_CPP_BIN: string; OCTAVE_WHISPER_CPP_MODEL: string } | null =
+    null
   try {
     const { binaryPath, modelPath } = await ensureWhisperCpp(runId)
     whisperCppEnv = {
@@ -569,7 +805,13 @@ async function runAutoChartOnce(
       {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: app.isPackaged
-          ? { ...getBundledPythonEnv(), ...(demucsCppEnv ?? {}), ...(whisperCppEnv ?? {}), ...offlineEnv, ...harmoniesEnv }
+          ? {
+              ...getBundledPythonEnv(),
+              ...(demucsCppEnv ?? {}),
+              ...(whisperCppEnv ?? {}),
+              ...offlineEnv,
+              ...harmoniesEnv
+            }
           : devEnv
       }
     )
@@ -580,7 +822,11 @@ async function runAutoChartOnce(
     const runLog = openRunLog(runId)
     const writeLog = (line: string): void => {
       if (!runLog) return
-      try { runLog.write(line.endsWith('\n') ? line : `${line}\n`) } catch { /* noop */ }
+      try {
+        runLog.write(line.endsWith('\n') ? line : `${line}\n`)
+      } catch {
+        /* noop */
+      }
     }
     if (runLog) {
       writeLog(`# python=${python.command} args=${JSON.stringify(python.baseArgs)}`)
@@ -589,7 +835,10 @@ async function runAutoChartOnce(
       writeLog(`# outputDir=${options.outputDir}`)
       writeLog(`# pid=${child.pid ?? 'unknown'}`)
       writeLog('')
-      logStrum(runId, `Run log: ${(runLog as unknown as { path?: string }).path ?? getStrumLogsDir()}`)
+      logStrum(
+        runId,
+        `Run log: ${(runLog as unknown as { path?: string }).path ?? getStrumLogsDir()}`
+      )
     }
 
     let stdoutRemainder = ''
@@ -597,7 +846,8 @@ async function runAutoChartOnce(
     const completion: { result?: AutoChartRunResult; error?: string } = {}
     // Hold back the worker's own error broadcast when runAutoChart may still
     // refresh yt-dlp and retry; the final rejection path re-broadcasts it.
-    const suppressYtDlpError = (message: string): boolean => allowYtDlpRetry && isYtDlpBlockedError(message)
+    const suppressYtDlpError = (message: string): boolean =>
+      allowYtDlpRetry && isYtDlpBlockedError(message)
     let lastOutputAt = Date.now()
     let lastProgressPercent = 0
     let lastProgressStage: AutoChartStage = 'bootstrap'
@@ -616,7 +866,10 @@ async function runAutoChartOnce(
       }
 
       const silenceSec = Math.floor(silenceMs / 1000)
-      warnStrum(runId, `No worker output for ${silenceSec}s (stage=${lastProgressStage}, percent=${lastProgressPercent}%)`)
+      warnStrum(
+        runId,
+        `No worker output for ${silenceSec}s (stage=${lastProgressStage}, percent=${lastProgressPercent}%)`
+      )
       broadcast('strum:progress', {
         runId,
         stage: lastProgressStage,
@@ -631,7 +884,11 @@ async function runAutoChartOnce(
       // Always tee raw output to the per-run log file so packaged builds
       // can be debugged without devtools.
       if (runLog) {
-        try { runLog.write(text) } catch { /* noop */ }
+        try {
+          runLog.write(text)
+        } catch {
+          /* noop */
+        }
       }
       const split = splitLines(text, stream === 'stdout' ? stdoutRemainder : stderrRemainder)
       if (stream === 'stdout') {
@@ -645,29 +902,40 @@ async function runAutoChartOnce(
           logStrum(runId, `${stream}> ${line}`)
         }
 
-        if (!handleStructuredEvent(line, completion, (event) => {
-          const incomingRank = getStageRank(event.stage)
-          const currentRank = getStageRank(lastProgressStage)
+        if (
+          !handleStructuredEvent(
+            line,
+            completion,
+            (event) => {
+              const incomingRank = getStageRank(event.stage)
+              const currentRank = getStageRank(lastProgressStage)
 
-          if (event.stage !== 'error' && event.stage !== 'complete' && incomingRank < currentRank) {
-            return
-          }
+              if (
+                event.stage !== 'error' &&
+                event.stage !== 'complete' &&
+                incomingRank < currentRank
+              ) {
+                return
+              }
 
-          if (incomingRank > currentRank) {
-            lastProgressStage = event.stage
-            if (typeof event.percent === 'number') {
-              lastProgressPercent = event.percent
-            } else {
-              lastProgressPercent = getFallbackPercent(event.stage) ?? lastProgressPercent
-            }
-            return
-          }
+              if (incomingRank > currentRank) {
+                lastProgressStage = event.stage
+                if (typeof event.percent === 'number') {
+                  lastProgressPercent = event.percent
+                } else {
+                  lastProgressPercent = getFallbackPercent(event.stage) ?? lastProgressPercent
+                }
+                return
+              }
 
-          lastProgressStage = event.stage
-          if (typeof event.percent === 'number') {
-            lastProgressPercent = Math.max(lastProgressPercent, event.percent)
-          }
-        }, suppressYtDlpError)) {
+              lastProgressStage = event.stage
+              if (typeof event.percent === 'number') {
+                lastProgressPercent = Math.max(lastProgressPercent, event.percent)
+              }
+            },
+            suppressYtDlpError
+          )
+        ) {
           // Check if it's a tqdm progress line (e.g. " 10%|██      |")
           const tqdmMatch = line.match(/(\d+)%\|/)
           if (tqdmMatch) {
@@ -687,7 +955,11 @@ async function runAutoChartOnce(
           if (parsed) {
             const incomingRank = getStageRank(parsed.stage)
             const currentRank = getStageRank(lastProgressStage)
-            if (parsed.stage !== 'error' && parsed.stage !== 'complete' && incomingRank < currentRank) {
+            if (
+              parsed.stage !== 'error' &&
+              parsed.stage !== 'complete' &&
+              incomingRank < currentRank
+            ) {
               continue
             }
 
@@ -719,7 +991,13 @@ async function runAutoChartOnce(
       clearInterval(heartbeat)
       warnStrum(runId, 'Worker process error', error)
       writeLog(`# WORKER ERROR: ${error.message}`)
-      if (runLog) { try { runLog.end() } catch { /* noop */ } }
+      if (runLog) {
+        try {
+          runLog.end()
+        } catch {
+          /* noop */
+        }
+      }
       runningJobs.delete(runId)
       try {
         await unlink(payloadPath)
@@ -732,8 +1010,16 @@ async function runAutoChartOnce(
     child.on('close', async (code, signal) => {
       clearInterval(heartbeat)
       logStrum(runId, `Worker closed (code=${code ?? 'null'}, signal=${signal ?? 'null'})`)
-      writeLog(`# WORKER CLOSED code=${code ?? 'null'} signal=${signal ?? 'null'} at=${new Date().toISOString()}`)
-      if (runLog) { try { runLog.end() } catch { /* noop */ } }
+      writeLog(
+        `# WORKER CLOSED code=${code ?? 'null'} signal=${signal ?? 'null'} at=${new Date().toISOString()}`
+      )
+      if (runLog) {
+        try {
+          runLog.end()
+        } catch {
+          /* noop */
+        }
+      }
       runningJobs.delete(runId)
       try {
         await unlink(payloadPath)
@@ -745,13 +1031,15 @@ async function runAutoChartOnce(
         if (verboseDebug) {
           logStrum(runId, `stdout(remainder)> ${stdoutRemainder}`)
         }
-        handleStructuredEvent(stdoutRemainder, completion, undefined, suppressYtDlpError) || handlePlainLine(runId, stdoutRemainder)
+        handleStructuredEvent(stdoutRemainder, completion, undefined, suppressYtDlpError) ||
+          handlePlainLine(runId, stdoutRemainder)
       }
       if (stderrRemainder) {
         if (verboseDebug) {
           logStrum(runId, `stderr(remainder)> ${stderrRemainder}`)
         }
-        handleStructuredEvent(stderrRemainder, completion, undefined, suppressYtDlpError) || handlePlainLine(runId, stderrRemainder)
+        handleStructuredEvent(stderrRemainder, completion, undefined, suppressYtDlpError) ||
+          handlePlainLine(runId, stderrRemainder)
       }
 
       if (signal === 'SIGTERM') {
