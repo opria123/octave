@@ -1,0 +1,65 @@
+Highway Asset Attributions
+==========================
+
+The 3D note models, fret models and textures in this folder were copied from
+YARG (Yet Another Rhythm Game) by YARC (Yet Another Rhythm Company) and the
+YARG contributors, and are redistributed here under the terms of their
+original license. They are NOT covered by OCTAVE's MIT license.
+
+  Project:    YARG
+  Authors:    Copyright (c) YARC and the YARG contributors
+  Repository: https://github.com/YARC-Official/YARG
+  License:    GNU Lesser General Public License v3.0 or later (LGPL-3.0-or-later)
+              Full text: LICENSE.LGPL-3.0.txt and LICENSE.GPL-3.0.txt in this
+              folder (the LGPL incorporates the GPL by reference), or
+              https://www.gnu.org/licenses/lgpl-3.0.html
+
+The files below are unmodified, byte-for-byte copies of the upstream files
+(verified against YARG commit f5bfbe6996b4af35722d4204a93c6cc5c8f52a45).
+Upstream paths are relative to the YARG repository root.
+
+Models (models/)
+----------------
+  AccentNote.fbx           Assets/Art/Meshes/Gameplay/Notes/Rectangular/AccentNote.fbx
+  CircularFretBase.fbx     Assets/Art/Meshes/Gameplay/Frets/CircularFretBase.fbx
+  CircularFretTop.fbx      Assets/Art/Meshes/Gameplay/Frets/CircularFretTop.fbx
+  CymbalNote.fbx           Assets/Art/Meshes/Gameplay/Notes/Rectangular/CymbalNote.fbx
+  GhostNote.fbx            Assets/Art/Meshes/Gameplay/Notes/Rectangular/GhostNote.fbx
+  HOPONote.fbx             Assets/Art/Meshes/Gameplay/Notes/Rectangular/HOPONote.fbx
+  KickNote.fbx             Assets/Art/Meshes/Gameplay/Notes/Rectangular/KickNote.fbx
+  NormalNote.fbx           Assets/Art/Meshes/Gameplay/Notes/Rectangular/NormalNote.fbx
+  RectangularFret.fbx      Assets/Art/Meshes/Gameplay/Frets/RectangularFret.fbx
+  RectangularKickFret.fbx  Assets/Art/Meshes/Gameplay/Frets/RectangularKickFret.fbx
+  TapNote.fbx              Assets/Art/Meshes/Gameplay/Notes/Rectangular/TapNote.fbx
+  TrackTrim.fbx            Assets/Art/Meshes/Gameplay/Track/TrackTrim.fbx
+
+Textures (textures/)
+--------------------
+  KickNote.png             Assets/Art/Textures/Gameplay/Notes/Rectangular/KickNote.png
+  NormalNote.png           Assets/Art/Textures/Gameplay/Notes/Rectangular/NormalNote.png
+  NormalNoteEmission.png   Assets/Art/Textures/Gameplay/Notes/Circular/NormalNoteEmission.png
+  RectangularFret.png      Assets/Art/Textures/Gameplay/Frets/RectangularFret.png
+  RectangularFretShine.png Assets/Art/Textures/Gameplay/Frets/RectangularFretShine.png
+  RectangularKickFret.png  Assets/Art/Textures/Gameplay/Frets/RectangularKickFret.png
+  SidePattern_Default.png  Assets/Art/Textures/Gameplay/Track/SidePattern_Default.png
+  TrackTrim.png            Assets/Art/Textures/Gameplay/Track/TrackTrim.png
+
+Derived code
+------------
+Parts of OCTAVE's chart preview renderer (src/renderer/src/components/
+chartPreviewModules/, in particular constants.ts, Highway.tsx, Strikeline.tsx
+and BeatGrid.tsx) reproduce layout values, colour values and visual behaviour
+from YARG's C# sources (TrackPlayer.cs, FretArray.cs, GenericTrackPlayer.cs),
+Track.shadergraph and RectangularFret.prefab so that the preview matches the
+game. Those sources are also LGPL-3.0-or-later, Copyright (c) YARC and the
+YARG contributors.
+
+Your rights
+-----------
+These assets are loaded by OCTAVE at runtime from this folder and can be
+replaced with your own files of the same name. If you redistribute OCTAVE or
+these assets, keep this notice and the license texts with them. Modified
+versions of these assets must be made available under the LGPL-3.0-or-later.
+
+Venue models in venue/default/ and venue/user/ have their own
+ASSET-LICENSES.txt files and are not from YARG.

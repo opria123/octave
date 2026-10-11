@@ -874,7 +874,7 @@ export function Toolbar(): React.JSX.Element {
   return (
     <div className="toolbar">
       {/* File actions */}
-      <div className="toolbar-group">
+      <div className="toolbar-group toolbar-file">
         <div className="toolbar-dropdown-wrapper">
           <button
             className={`toolbar-button ${showOpenDropdown ? 'active' : ''}`}
@@ -935,7 +935,7 @@ export function Toolbar(): React.JSX.Element {
       <div className="toolbar-separator" />
 
       {/* Edit actions */}
-      <div className="toolbar-group">
+      <div className="toolbar-group toolbar-edit">
         <button
           className="toolbar-button"
           onClick={handleUndo}
@@ -1067,14 +1067,17 @@ export function Toolbar(): React.JSX.Element {
       <div className="toolbar-spacer" />
 
       {/* Settings */}
-      <div className="toolbar-group">
+      <div className="toolbar-group toolbar-prefs">
         <label className="toolbar-toggle" title="Auto-save">
           <input
             type="checkbox"
             checked={autosaveEnabled}
             onChange={(e) => updateSettings({ autosaveEnabled: e.target.checked })}
           />
-          <span className="toolbar-toggle-label">Auto-save</span>
+          <span className="toolbar-toggle-label">
+            <span className="toolbar-toggle-label-full">Auto-save</span>
+            <span className="toolbar-toggle-label-short">Auto</span>
+          </span>
         </label>
         <label
           className="toolbar-toggle"
@@ -1085,14 +1088,17 @@ export function Toolbar(): React.JSX.Element {
             checked={leftyFlip ?? false}
             onChange={(e) => updateSettings({ leftyFlip: e.target.checked })}
           />
-          <span className="toolbar-toggle-label">Lefty Flip</span>
+          <span className="toolbar-toggle-label">
+            <span className="toolbar-toggle-label-full">Lefty Flip</span>
+            <span className="toolbar-toggle-label-short">Lefty</span>
+          </span>
         </label>
       </div>
 
       <div className="toolbar-separator" />
 
       {/* Auto-charter integration (placeholder) */}
-      <div className="toolbar-group">
+      <div className="toolbar-group toolbar-autochart">
         <button
           className="toolbar-button toolbar-button-accent"
           disabled={!enableAutoChart}
@@ -1117,7 +1123,7 @@ export function Toolbar(): React.JSX.Element {
       <div className="toolbar-separator" />
 
       {/* Validate chart */}
-      <div className="toolbar-group">
+      <div className="toolbar-group toolbar-validate">
         <style>{`
           @keyframes spin {
             0% { transform: rotate(0deg); }

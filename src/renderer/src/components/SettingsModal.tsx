@@ -314,6 +314,44 @@ export function SettingsModal(): React.JSX.Element | null {
               </div>
             </div>
           </section>
+          <section className="settings-preferences-group">
+            <h3 className="settings-hotkey-group-title">Licenses &amp; Credits</h3>
+            <div className="settings-preferences-body">
+              <p className="settings-field-hint">
+                OCTAVE is open source under the MIT License.{' '}
+                <a className="settings-link" href="https://github.com/opria123/octave" target="_blank" rel="noreferrer">
+                  github.com/opria123/octave
+                </a>
+              </p>
+              <p className="settings-field-hint">
+                The 3D highway preview uses note models, fret models and textures from{' '}
+                <a className="settings-link" href="https://github.com/YARC-Official/YARG" target="_blank" rel="noreferrer">
+                  YARG
+                </a>
+                , Copyright &copy; YARC and the YARG contributors, licensed under the{' '}
+                <a className="settings-link" href="https://www.gnu.org/licenses/lgpl-3.0.html" target="_blank" rel="noreferrer">
+                  GNU Lesser General Public License v3.0 or later
+                </a>
+                . These files keep their original license. The per-file list and the full license
+                text ship with the app in <code>highway-assets/ASSET-LICENSES.txt</code>,{' '}
+                <code>LICENSE.LGPL-3.0.txt</code> and <code>LICENSE.GPL-3.0.txt</code>. Parts of the
+                preview renderer reproduce layout and colour values from YARG&apos;s sources so the
+                preview matches the game.
+              </p>
+              <p className="settings-field-hint">
+                Venue sample models come from the Khronos glTF Sample Assets and Google model-viewer
+                (Apache-2.0 / CC-BY-4.0).{' '}
+                <a
+                  className="settings-link"
+                  href="https://github.com/opria123/octave/blob/master/THIRD-PARTY-NOTICES.md"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Full third-party notices
+                </a>
+              </p>
+            </div>
+          </section>
           {hasConflicts && (
             <div className="settings-hotkey-conflicts-banner">
               Resolve duplicate bindings before saving. Conflicting shortcuts are highlighted below.

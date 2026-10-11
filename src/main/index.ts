@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net, Menu, session } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net, Menu, screen, session } from 'electron'
 import { join, resolve, basename } from 'path'
 import { readdir, readFile, writeFile, stat, rename, copyFile, unlink, mkdir, open } from 'fs/promises'
 import { existsSync, readFileSync } from 'fs'
@@ -11,6 +11,7 @@ import ffmpeg from 'fluent-ffmpeg'
 import { cancelAutoChart, getStrumRequirementsPath, killAllRunningJobs, openStrumLogsFolder, resolvePythonCommand, runAutoChart } from './strumIntegration/runner'
 import { ensureBootstrappedPython, getRuntimeStatus, isBootstrapTarget } from './strumIntegration/runtimeBootstrap'
 import { ensureFreshYtDlp, isYtDlpBlockedError } from './strumIntegration/ytDlpRefresh'
+import { fitBoundsToDisplays, loadWindowState, saveWindowState } from './windowState'
 import { packSng } from './sngPacker'
 import { packRb3con } from './conPacker'
 import { importSng } from './import/sngImporter'
@@ -235,13 +236,25 @@ function isPathAllowed(targetPath: string): boolean {
   return resolved === allowedProjectPath || resolved.startsWith(allowedProjectPath + '/') || resolved.startsWith(allowedProjectPath + '\\')
 }
 
+const WINDOW_MIN = { width: 1024, height: 600 }
+const WINDOW_DEFAULT = { width: 1400, height: 900 }
+
 function createWindow(): void {
+  // Restore the last window size / position / maximized state (issue #73).
+  const windowStateFile = join(app.getPath('userData'), 'window-state.json')
+  const savedWindowState = loadWindowState(windowStateFile)
+  const initialBounds = fitBoundsToDisplays(
+    savedWindowState,
+    screen.getAllDisplays().map((display) => display.workArea),
+    WINDOW_DEFAULT,
+    WINDOW_MIN
+  )
+
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 1024,
-    minHeight: 600,
+    ...initialBounds,
+    minWidth: WINDOW_MIN.width,
+    minHeight: WINDOW_MIN.height,
     show: false,
     autoHideMenuBar: false,
     icon,
@@ -254,7 +267,30 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.setMenuBarVisibility(true)
+    if (savedWindowState?.isMaximized) mainWindow.maximize()
     mainWindow.show()
+  })
+
+  // Persist window geometry. getNormalBounds() reports the un-maximized
+  // rectangle so a maximized window restores to its previous size when the
+  // user un-maximizes it later.
+  const persistWindowState = (): void => {
+    if (mainWindow.isDestroyed()) return
+    saveWindowState(windowStateFile, {
+      ...mainWindow.getNormalBounds(),
+      isMaximized: mainWindow.isMaximized()
+    })
+  }
+  let windowStateTimer: ReturnType<typeof setTimeout> | null = null
+  const scheduleWindowStateSave = (): void => {
+    if (windowStateTimer) clearTimeout(windowStateTimer)
+    windowStateTimer = setTimeout(persistWindowState, 400)
+  }
+  mainWindow.on('resize', scheduleWindowStateSave)
+  mainWindow.on('move', scheduleWindowStateSave)
+  mainWindow.on('close', () => {
+    if (windowStateTimer) clearTimeout(windowStateTimer)
+    persistWindowState()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -355,6 +391,18 @@ app.whenReady().then(() => {
 
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
+
+  // The renderer owns the persisted panel layout; mirror it into the native
+  // View menu checkboxes (issue #73).
+  ipcMain.on('menu:sync-view-panels', (_event, state: unknown) => {
+    const menu = Menu.getApplicationMenu()
+    if (!menu || !state || typeof state !== 'object') return
+    for (const [panel, visible] of Object.entries(state as Record<string, unknown>)) {
+      if (typeof visible !== 'boolean') continue
+      const item = menu.getMenuItemById(`view-panel-${panel}`)
+      if (item) item.checked = visible
+    }
+  })
 
   createWindow()
   createApplicationMenu()

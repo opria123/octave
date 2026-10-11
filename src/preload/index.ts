@@ -277,6 +277,12 @@ const api = {
     return () => ipcRenderer.removeListener('updater:status', handler)
   },
 
+  // Tell the main process which View-menu panels are currently shown so the
+  // native checkboxes match the restored layout.
+  syncViewPanels: (state: Record<string, boolean>): void => {
+    ipcRenderer.send('menu:sync-view-panels', state)
+  },
+
   // App menu command events
   onMenuCommand: (callback: (command: string, payload?: unknown) => void): (() => void) => {
     const handler = (_event: unknown, data: { command: string; payload?: unknown }): void => {

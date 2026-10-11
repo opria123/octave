@@ -365,7 +365,16 @@ export interface NoteModifiers {
   talkie: boolean        // Vocal talkie (pitchless/spoken note)
 }
 
+export type LayoutPanelName = 'explorer' | 'preview' | 'properties' | 'midi' | 'video'
+export type PanelVisibility = Record<LayoutPanelName, boolean>
+
 export interface UIState {
+  /** Which layout panels are shown (View menu). Persisted between sessions (issue #73). */
+  panelVisible: PanelVisibility
+  /** Last dragged sizes of the explorer / preview / properties split. Persisted. */
+  topPaneSizes: number[] | null
+  /** Last dragged sizes of the top / bottom split. Persisted. */
+  mainPaneSizes: number[] | null
   leftPanelWidth: number
   rightPanelWidth: number
   bottomPanelHeight: number

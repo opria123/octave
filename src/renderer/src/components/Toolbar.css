@@ -939,3 +939,83 @@
 .dropdown-label {
   font-weight: 500;
 }
+
+/* ==================== */
+/* Responsive toolbar (issue #72) */
+/* ==================== */
+/* Everything in the toolbar is fixed-width except the song title, which is
+   the only thing that may shrink. Below that, progressively drop text labels
+   and decoration so every control stays reachable down to the 1024px window
+   minimum instead of being pushed off the right edge. */
+
+.toolbar {
+  min-width: 0;
+}
+
+.toolbar-song-info {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.toolbar-song-name {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.toolbar-song-artist {
+  flex: 0 2 auto;
+  min-width: 0;
+}
+
+.toolbar-toggle-label-short {
+  display: none;
+}
+
+@media (max-width: 1750px) {
+  .toolbar-experimental-tag {
+    display: none;
+  }
+}
+
+@media (max-width: 1560px) {
+  .toolbar {
+    gap: 6px;
+    padding: 0 10px;
+  }
+
+  .toolbar-file .toolbar-label,
+  .toolbar-speed-label {
+    display: none;
+  }
+
+  .toolbar-volume-slider {
+    width: 64px;
+  }
+
+  .toolbar-speed-slider {
+    width: 56px;
+  }
+}
+
+@media (max-width: 1280px) {
+  .toolbar-group {
+    gap: 4px;
+    padding: 3px;
+  }
+
+  .toolbar-autochart .toolbar-label,
+  .toolbar-validate .toolbar-label,
+  .toolbar-speed-value,
+  .toolbar-song-artist,
+  .toolbar-toggle-label-full {
+    display: none;
+  }
+
+  .toolbar-toggle-label-short {
+    display: inline;
+  }
+
+  .toolbar-song-info {
+    padding: 0 10px;
+  }
+}

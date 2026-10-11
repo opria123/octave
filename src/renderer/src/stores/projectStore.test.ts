@@ -2,6 +2,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 let useSettingsStore: (typeof import('./projectStore'))['useSettingsStore']
 let useProjectStore: (typeof import('./projectStore'))['useProjectStore']
+let useUIStore: (typeof import('./projectStore'))['useUIStore']
 
 describe('Auto-Chart settings', () => {
   beforeAll(async () => {
@@ -16,7 +17,7 @@ describe('Auto-Chart settings', () => {
         return values.size
       }
     })
-    ;({ useProjectStore, useSettingsStore } = await import('./projectStore'))
+    ;({ useProjectStore, useSettingsStore, useUIStore } = await import('./projectStore'))
   })
 
   afterEach(() => {
@@ -92,5 +93,24 @@ describe('Auto-Chart settings', () => {
     useProjectStore.getState().setLoadedFolder('/other-songs')
 
     expect(useProjectStore.getState().pendingActiveSongId).toBeNull()
+  })
+})
+
+describe('Layout persistence (issue #73)', () => {
+  it('persists panel visibility, split sizes and the bottom tab, but not transient UI state', () => {
+    useUIStore.getState().setPanelVisible('properties', false)
+    useUIStore.getState().setTopPaneSizes([200, 700, 0])
+    useUIStore.getState().setMainPaneSizes([600, 250])
+    useUIStore.getState().setBottomPanelTab('video')
+    useUIStore.getState().setFocusedPanel('midi')
+
+    const persisted = JSON.parse(localStorage.getItem('chart-editor-layout') ?? '{}')
+    expect(persisted.state).toEqual({
+      panelVisible: { explorer: true, preview: true, properties: false, midi: true, video: true },
+      topPaneSizes: [200, 700, 0],
+      mainPaneSizes: [600, 250],
+      bottomPanelTab: 'video'
+    })
+    expect(persisted.state.focusedPanel).toBeUndefined()
   })
 })
