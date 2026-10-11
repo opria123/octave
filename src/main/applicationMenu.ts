@@ -49,6 +49,7 @@ export function createApplicationMenuTemplate({
       label: 'View',
       submenu: [
         {
+          id: 'view-panel-explorer',
           label: 'File Explorer',
           type: 'checkbox',
           checked: true,
@@ -56,6 +57,7 @@ export function createApplicationMenuTemplate({
             sendCommand('view:toggle-panel', { panel: 'explorer', visible: item.checked })
         },
         {
+          id: 'view-panel-preview',
           label: 'Preview',
           type: 'checkbox',
           checked: true,
@@ -63,6 +65,7 @@ export function createApplicationMenuTemplate({
             sendCommand('view:toggle-panel', { panel: 'preview', visible: item.checked })
         },
         {
+          id: 'view-panel-properties',
           label: 'Properties',
           type: 'checkbox',
           checked: true,
@@ -71,6 +74,7 @@ export function createApplicationMenuTemplate({
         },
         { type: 'separator' },
         {
+          id: 'view-panel-midi',
           label: 'Piano Roll',
           type: 'checkbox',
           checked: true,
@@ -78,6 +82,7 @@ export function createApplicationMenuTemplate({
             sendCommand('view:toggle-panel', { panel: 'midi', visible: item.checked })
         },
         {
+          id: 'view-panel-video',
           label: 'Timeline',
           type: 'checkbox',
           checked: true,
@@ -101,6 +106,12 @@ export function createApplicationMenuTemplate({
         {
           label: 'Support',
           click: () => openExternal('https://github.com/opria123/octave/issues')
+        },
+        { type: 'separator' },
+        {
+          label: 'Third-Party Licenses',
+          click: () =>
+            openExternal('https://github.com/opria123/octave/blob/master/THIRD-PARTY-NOTICES.md')
         }
       ]
     }

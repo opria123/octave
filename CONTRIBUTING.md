@@ -107,3 +107,5 @@ major), so no manual version edits are needed.
 
 
 By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
+
+Bundled third-party assets keep their own licenses (see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)). If you add or replace assets under `src/renderer/public/highway-assets/`, record the source and license in the matching `ASSET-LICENSES.txt`.

@@ -244,3 +244,15 @@
     grid-template-columns: 1fr;
   }
 }
+
+.settings-link {
+  color: var(--accent-color);
+  text-decoration: underline;
+}
+
+.settings-field-hint code {
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+}

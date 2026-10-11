@@ -1,4 +1,9 @@
 // Asset Provider - Loads FBX models and textures into context
+//
+// The models and textures under public/highway-assets/{models,textures} are
+// copied from YARG (https://github.com/YARC-Official/YARG), Copyright (c) YARC
+// and the YARG contributors, LGPL-3.0-or-later. See
+// public/highway-assets/ASSET-LICENSES.txt for the per-file list and license.
 import { useMemo, createContext } from 'react'
 import { useFBX, useTexture } from '@react-three/drei'
 import * as THREE from 'three'
