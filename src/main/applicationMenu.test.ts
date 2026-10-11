@@ -21,4 +21,23 @@ describe('application menu', () => {
       'selectAll'
     ])
   })
+
+  it('gives every View panel toggle an id so the renderer can sync its checked state', () => {
+    const template = createApplicationMenuTemplate({
+      version: '1.0.0',
+      sendCommand: vi.fn(),
+      openExternal: vi.fn()
+    })
+    const viewMenu = template.find((item) => item.label === 'View')
+    const submenu = viewMenu?.submenu as MenuItemConstructorOptions[]
+    const toggles = submenu.filter((item) => item.type === 'checkbox')
+
+    expect(toggles.map((item) => item.id)).toEqual([
+      'view-panel-explorer',
+      'view-panel-preview',
+      'view-panel-properties',
+      'view-panel-midi',
+      'view-panel-video'
+    ])
+  })
 })

@@ -247,4 +247,14 @@ src/
 
 ## License
 
-MIT
+OCTAVE's source code is released under the [MIT License](LICENSE).
+
+The 3D highway preview bundles note models, fret models and textures from
+[YARG](https://github.com/YARC-Official/YARG) (Copyright (c) YARC and the YARG
+contributors), which are licensed under the
+[LGPL-3.0-or-later](https://www.gnu.org/licenses/lgpl-3.0.html) and keep that
+license. They are listed file-by-file, with the full license text, in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) and in
+`src/renderer/public/highway-assets/ASSET-LICENSES.txt`. Parts of the preview
+renderer also reproduce layout and colour values from YARG's sources so the
+preview matches the game.

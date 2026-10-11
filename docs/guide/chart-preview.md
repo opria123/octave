@@ -27,6 +27,8 @@ OCTAVE ships with a default venue. You can install additional venues into:
 
 The default venue lives at `highway-assets/venue/default/`. Both folders include `ASSET-LICENSES.txt` documenting their sources.
 
+The note models, fret models and textures in `highway-assets/models/` and `highway-assets/textures/` are copied from [YARG](https://github.com/YARC-Official/YARG) and remain under the LGPL-3.0-or-later. See `highway-assets/ASSET-LICENSES.txt` and the app's Settings > Licenses & Credits section.
+
 > Custom venues, gem skins, and highway textures use the same conventions as YARG — most YARG community assets work out of the box.
 
 ## Edit overlay

@@ -159,6 +159,7 @@ interface ChartEditorAPI {
   }) => void) => () => void
 
   // App menu events
+  syncViewPanels: (state: Record<string, boolean>) => void
   onMenuCommand: (callback: (command: string, payload?: unknown) => void) => () => void
 }
 

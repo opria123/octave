@@ -1,7 +1,9 @@
 // Project-level store (global state)
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { ProjectState, AppSettings, UIState, NoteModifiers, ValidationIssue } from '../types'
+import type {
+  LayoutPanelName,
+  PanelVisibility, ProjectState, AppSettings, UIState, NoteModifiers, ValidationIssue } from '../types'
 import { cloneDefaultHotkeys } from '../utils/hotkeys'
 
 interface ProjectStore extends ProjectState {
@@ -142,6 +144,9 @@ export const useSettingsStore = create<SettingsStore>()(
 
 // UI state store
 interface UIStore extends UIState {
+  setPanelVisible: (panel: LayoutPanelName, visible: boolean) => void
+  setTopPaneSizes: (sizes: number[]) => void
+  setMainPaneSizes: (sizes: number[]) => void
   setLeftPanelWidth: (width: number) => void
   setRightPanelWidth: (width: number) => void
   setBottomPanelHeight: (height: number) => void
@@ -169,8 +174,24 @@ const defaultModifiers: NoteModifiers = {
   talkie: false
 }
 
-export const useUIStore = create<UIStore>()((set) => ({
+const defaultPanelVisible: PanelVisibility = {
+  explorer: true,
+  preview: true,
+  properties: true,
+  midi: true,
+  video: true
+}
+
+// Layout state the user arranges by hand is persisted so the workspace comes
+// back the way it was left (issue #73). Everything else in the UI store is
+// transient and intentionally left out of `partialize`.
+export const useUIStore = create<UIStore>()(
+  persist(
+    (set) => ({
   // Initial state
+  panelVisible: { ...defaultPanelVisible },
+  topPaneSizes: null,
+  mainPaneSizes: null,
   leftPanelWidth: 250,
   rightPanelWidth: 300,
   bottomPanelHeight: 200,
@@ -187,6 +208,10 @@ export const useUIStore = create<UIStore>()((set) => ({
   validationIssues: null,
 
   // Actions
+  setPanelVisible: (panel, visible) =>
+    set((state) => ({ panelVisible: { ...state.panelVisible, [panel]: visible } })),
+  setTopPaneSizes: (sizes) => set({ topPaneSizes: sizes }),
+  setMainPaneSizes: (sizes) => set({ mainPaneSizes: sizes }),
   setLeftPanelWidth: (width) => set({ leftPanelWidth: width }),
   setRightPanelWidth: (width) => set({ rightPanelWidth: width }),
   setBottomPanelHeight: (height) => set({ bottomPanelHeight: height }),
@@ -223,4 +248,23 @@ export const useUIStore = create<UIStore>()((set) => ({
   toggleVocalPitchPlayback: () => set((state) => ({ vocalPitchPlayback: !state.vocalPitchPlayback })),
   toggleHighwayWaveform: () => set((state) => ({ showHighwayWaveform: !state.showHighwayWaveform })),
   setValidationIssues: (issues) => set({ validationIssues: issues })
-}))
+    }),
+    {
+      name: 'chart-editor-layout',
+      partialize: (state) => ({
+        panelVisible: state.panelVisible,
+        topPaneSizes: state.topPaneSizes,
+        mainPaneSizes: state.mainPaneSizes,
+        bottomPanelTab: state.bottomPanelTab
+      }),
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<UIState>
+        return {
+          ...current,
+          ...saved,
+          panelVisible: { ...current.panelVisible, ...(saved.panelVisible ?? {}) }
+        }
+      }
+    }
+  )
+)
