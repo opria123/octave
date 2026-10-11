@@ -1,6 +1,6 @@
 # Editor Layout
 
-OCTAVE's interface is split into resizable panels. Drag any divider to adjust their widths or heights — sizes persist between sessions.
+OCTAVE's interface is split into resizable panels. Drag any divider to adjust their widths or heights. Panel sizes, which panels are shown or hidden in the **View** menu, the active bottom tab, and the window size and position are all remembered between sessions.
 
 ![OCTAVE editor layout](/screenshots/editor-layout.png)
 

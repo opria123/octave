@@ -1,8 +1,9 @@
 // Main application layout with resizable panels (Unity/Unreal style)
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
 import { useUIStore } from '../stores'
+import type { LayoutPanelName } from '../types'
 import { ProjectExplorer } from './ProjectExplorer'
 import { ChartPreview } from './ChartPreview'
 import { PropertyPanel } from './PropertyPanel'
@@ -10,17 +11,37 @@ import { BottomPanel } from './BottomPanel'
 import { Toolbar } from './Toolbar'
 import './Layout.css'
 
-export function Layout(): React.JSX.Element {
-  const { setFocusedPanel, setSettingsModalOpen } = useUIStore()
-  const isPreviewFullscreen = useUIStore((s) => s.isPreviewFullscreen)
-  type PanelName = 'explorer' | 'preview' | 'properties' | 'midi' | 'video'
-  const [panelVisible, setPanelVisible] = useState({
-    explorer: true,
-    preview: true,
-    properties: true,
-    midi: true,
-    video: true
+const TOP_PANELS: LayoutPanelName[] = ['explorer', 'preview', 'properties']
+const VALID_PANELS: LayoutPanelName[] = ['explorer', 'preview', 'properties', 'midi', 'video']
+
+/**
+ * Allotment only reads `defaultSizes` when it mounts, so hidden panes must be
+ * zeroed there; otherwise the saved width of a hidden pane would be laid out
+ * and then clamped, shifting the visible ones.
+ */
+function initialSizes(saved: number[] | null, visible: boolean[]): number[] | undefined {
+  if (!saved || saved.length !== visible.length) return undefined
+  return saved.map((size, index) => (visible[index] ? size : 0))
+}
+
+/**
+ * Merge freshly dragged sizes into the saved ones, keeping the last known size
+ * of any pane that is currently hidden so it comes back at its old size.
+ */
+function rememberSizes(previous: number[] | null, next: number[], visible: boolean[]): number[] {
+  return next.map((size, index) => {
+    if (visible[index]) return size
+    const old = previous?.[index]
+    return typeof old === 'number' && old > 0 ? old : size
   })
+}
+
+export function Layout(): React.JSX.Element {
+  const { setFocusedPanel, setSettingsModalOpen, setPanelVisible, setTopPaneSizes, setMainPaneSizes } = useUIStore()
+  const isPreviewFullscreen = useUIStore((s) => s.isPreviewFullscreen)
+  const panelVisible = useUIStore((s) => s.panelVisible)
+  const topPaneSizes = useUIStore((s) => s.topPaneSizes)
+  const mainPaneSizes = useUIStore((s) => s.mainPaneSizes)
 
   useEffect(() => {
     return window.api.onMenuCommand((command, payload) => {
@@ -31,17 +52,22 @@ export function Layout(): React.JSX.Element {
       if (command !== 'view:toggle-panel') return
       const data = payload as { panel?: string; visible?: boolean } | undefined
       if (!data?.panel || typeof data.visible !== 'boolean') return
-      const validPanels: PanelName[] = ['explorer', 'preview', 'properties', 'midi', 'video']
-      if (!validPanels.includes(data.panel as PanelName)) return
-      setPanelVisible((prev) => {
-        const panel = data.panel as PanelName
-        return { ...prev, [panel]: data.visible }
-      })
+      if (!VALID_PANELS.includes(data.panel as LayoutPanelName)) return
+      setPanelVisible(data.panel as LayoutPanelName, data.visible)
     })
-  }, [setSettingsModalOpen])
+  }, [setSettingsModalOpen, setPanelVisible])
+
+  // Keep the native View menu checkboxes in step with the persisted state,
+  // both on startup (restored from a previous session) and after toggles.
+  useEffect(() => {
+    window.api.syncViewPanels?.(panelVisible)
+  }, [panelVisible])
 
   const hasTopPanel = panelVisible.explorer || panelVisible.preview || panelVisible.properties
   const hasBottomPanel = panelVisible.midi || panelVisible.video
+
+  const topVisible = useMemo(() => TOP_PANELS.map((panel) => panelVisible[panel]), [panelVisible])
+  const mainVisible = useMemo(() => [hasTopPanel, hasBottomPanel], [hasTopPanel, hasBottomPanel])
 
   const topPaneConfig = useMemo(() => ({
     explorer: panelVisible.explorer
@@ -64,7 +90,11 @@ export function Layout(): React.JSX.Element {
       </div>
     </div>
   ) : (
-    <Allotment proportionalLayout={true}>
+    <Allotment
+      proportionalLayout={true}
+      defaultSizes={initialSizes(topPaneSizes, topVisible)}
+      onDragEnd={(sizes) => setTopPaneSizes(rememberSizes(topPaneSizes, sizes, topVisible))}
+    >
       <Allotment.Pane
         preferredSize={topPaneConfig.explorer.preferredSize}
         minSize={topPaneConfig.explorer.minSize}
@@ -120,7 +150,12 @@ export function Layout(): React.JSX.Element {
     <div className="layout">
       <Toolbar />
       <div className="layout-main">
-        <Allotment vertical proportionalLayout={true}>
+        <Allotment
+          vertical
+          proportionalLayout={true}
+          defaultSizes={initialSizes(mainPaneSizes, mainVisible)}
+          onDragEnd={(sizes) => setMainPaneSizes(rememberSizes(mainPaneSizes, sizes, mainVisible))}
+        >
           <Allotment.Pane
             preferredSize={hasBottomPanel ? (hasTopPanel ? '70%' : 0) : '100%'}
             minSize={hasTopPanel ? 200 : 0}
