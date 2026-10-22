@@ -1,14 +1,29 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useStore } from 'zustand'
 import { useSettingsStore, useUIStore, useProjectStore, getSongStore } from '../stores'
+import {
+  EXPORT_FORMATS,
+  joinExportPath,
+  resolveExportName,
+  type ExportFormat
+} from '../utils/exportNaming'
+import { serializeSongToChartText } from '../utils/chartFile'
 import './ExportModal.css'
 
 interface ExportModalProps {
   onSaveBeforeExport: () => Promise<void>
 }
 
-function sanitizeFilename(name: string): string {
-  return name.replace(/[\\/:*?"<>|]/g, '_').trim()
+const SUCCESS_MESSAGES: Record<ExportFormat, string> = {
+  sng: 'Your song has been successfully packaged into a single Clone Hero .sng file.',
+  chart: 'Your song has been exported as a Clone Hero song folder with a plain-text notes.chart.',
+  rb3con: 'Your song has been successfully packaged into a Rock Band 3 STFS CON file.'
+}
+
+const PROGRESS_MESSAGES: Record<ExportFormat, string> = {
+  sng: 'Building .sng package...',
+  chart: 'Writing .chart song folder...',
+  rb3con: 'Building .con package...'
 }
 
 export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX.Element | null {
@@ -27,12 +42,11 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
   const [outputFolder, setOutputFolder] = useState<string>(
     sngLastExportDir || autoChartOutputDir || ''
   )
-  const [filename, setFilename] = useState<string>(() => {
-    const name = song?.metadata.name || 'song'
-    return `${sanitizeFilename(name)}.sng`
-  })
+  const [filename, setFilename] = useState<string>(() =>
+    resolveExportName('', 'sng', song?.metadata.name)
+  )
   const [saveBeforeExport, setSaveBeforeExport] = useState<boolean>(true)
-  const [exportFormat, setExportFormat] = useState<'sng' | 'rb3con'>('sng')
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('sng')
 
   const [status, setStatus] = useState<'idle' | 'saving' | 'exporting' | 'success' | 'error'>(
     'idle'
@@ -43,54 +57,31 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
   const [showOverwriteWarning, setShowOverwriteWarning] = useState<boolean>(false)
 
   const showReset = outputFolder !== (autoChartOutputDir || '')
+  const formatInfo = EXPORT_FORMATS.find((f) => f.id === exportFormat) ?? EXPORT_FORMATS[0]
+  const isBusy = status === 'saving' || status === 'exporting'
 
   const getFullOutputPath = useCallback(
-    (folder: string, name: string, formatOverride?: 'sng' | 'rb3con'): string => {
+    (folder: string, name: string, formatOverride?: ExportFormat): string => {
       if (!folder.trim()) return ''
-      let finalFilename = name.trim()
-      const songName = sanitizeFilename(song?.metadata.name || 'song')
       const format = formatOverride || exportFormat
-      if (!finalFilename) {
-        finalFilename = format === 'sng' ? `${songName}.sng` : `${songName}_rb3con`
-      } else {
-        if (format === 'sng') {
-          if (!finalFilename.toLowerCase().endsWith('.sng')) {
-            let base = finalFilename
-            if (base.toLowerCase().endsWith('_rb3con')) {
-              base = base.slice(0, -7)
-            }
-            finalFilename = `${base}.sng`
-          }
-        } else {
-          if (!finalFilename.toLowerCase().endsWith('_rb3con')) {
-            let base = finalFilename
-            if (base.toLowerCase().endsWith('.sng')) {
-              base = base.slice(0, -4)
-            }
-            finalFilename = `${base}_rb3con`
-          }
-        }
-      }
-      const separator = folder.includes('\\') ? '\\' : '/'
-      return folder.endsWith(separator)
-        ? `${folder}${finalFilename}`
-        : `${folder}${separator}${finalFilename}`
+      return joinExportPath(folder, resolveExportName(name, format, song?.metadata.name))
     },
     [song, exportFormat]
   )
 
   const checkOverwrite = useCallback(
-    async (folder: string, file: string, formatOverride?: 'sng' | 'rb3con') => {
+    async (folder: string, file: string, formatOverride?: ExportFormat) => {
       const fullPath = getFullOutputPath(folder, file, formatOverride)
       if (!fullPath) {
         setShowOverwriteWarning(false)
         return
       }
       try {
-        const exists = await window.api.fileExists(fullPath)
+        // A .chart export is a folder, so look for anything at the path.
+        const exists = await window.api.pathExists(fullPath)
         setShowOverwriteWarning(exists)
       } catch (err) {
-        console.error('Error checking if file exists:', err)
+        console.error('Error checking if export target exists:', err)
         setShowOverwriteWarning(false)
       }
     },
@@ -116,23 +107,13 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
   }, [isOpen, status, setExportModalOpen])
 
   const handleFormatChange = useCallback(
-    (newFormat: 'sng' | 'rb3con'): void => {
+    (newFormat: ExportFormat): void => {
       setExportFormat(newFormat)
-
-      let baseName = filename.trim()
-      if (baseName.toLowerCase().endsWith('.sng')) {
-        baseName = baseName.slice(0, -4)
-      }
-      if (baseName.toLowerCase().endsWith('_rb3con')) {
-        baseName = baseName.slice(0, -7)
-      }
-
-      const newFilename = newFormat === 'sng' ? `${baseName}.sng` : `${baseName}_rb3con`
+      const newFilename = resolveExportName(filename, newFormat, song?.metadata.name)
       setFilename(newFilename)
-
       checkOverwrite(outputFolder, newFilename, newFormat)
     },
-    [filename, outputFolder, checkOverwrite]
+    [filename, outputFolder, checkOverwrite, song]
   )
 
   if (!isOpen || !activeSongId || !song) return null
@@ -156,29 +137,7 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
       return
     }
 
-    let finalFilename = filename.trim()
-    const songName = sanitizeFilename(song.metadata.name || 'song')
-    if (!finalFilename) {
-      finalFilename = exportFormat === 'sng' ? `${songName}.sng` : `${songName}_rb3con`
-    } else {
-      if (exportFormat === 'sng') {
-        if (!finalFilename.toLowerCase().endsWith('.sng')) {
-          let base = finalFilename
-          if (base.toLowerCase().endsWith('_rb3con')) {
-            base = base.slice(0, -7)
-          }
-          finalFilename = `${base}.sng`
-        }
-      } else {
-        if (!finalFilename.toLowerCase().endsWith('_rb3con')) {
-          let base = finalFilename
-          if (base.toLowerCase().endsWith('.sng')) {
-            base = base.slice(0, -4)
-          }
-          finalFilename = `${base}_rb3con`
-        }
-      }
-    }
+    const finalFilename = resolveExportName(filename, exportFormat, song.metadata.name)
 
     setStatus('saving')
     setErrorMessage('')
@@ -192,24 +151,19 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
       // 2. Perform the export
       setStatus('exporting')
 
-      const separator = outputFolder.includes('\\') ? '\\' : '/'
-      const fullOutputPath = outputFolder.endsWith(separator)
-        ? `${outputFolder}${finalFilename}`
-        : `${outputFolder}${separator}${finalFilename}`
+      const fullOutputPath = joinExportPath(outputFolder, finalFilename)
+      const metadata = song.metadata as Record<string, unknown>
 
       let result
       if (exportFormat === 'rb3con') {
-        result = await window.api.exportCon(
-          song.folderPath,
-          song.metadata as Record<string, unknown>,
-          fullOutputPath
-        )
+        result = await window.api.exportCon(song.folderPath, metadata, fullOutputPath)
+      } else if (exportFormat === 'chart') {
+        // The chart is serialized from the live editor state so MIDI-sourced
+        // songs export without first being converted on disk (issue #77).
+        const chartText = serializeSongToChartText(song)
+        result = await window.api.exportChart(song.folderPath, metadata, chartText, fullOutputPath)
       } else {
-        result = await window.api.exportSng(
-          song.folderPath,
-          song.metadata as Record<string, unknown>,
-          fullOutputPath
-        )
+        result = await window.api.exportSng(song.folderPath, metadata, fullOutputPath)
       }
 
       if (result.success) {
@@ -242,7 +196,7 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
           <button
             className="export-modal-close"
             onClick={() => setExportModalOpen(false)}
-            disabled={status === 'saving' || status === 'exporting'}
+            disabled={isBusy}
           >
             ✕
           </button>
@@ -253,11 +207,7 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
             <div className="export-status-container success">
               <span className="export-status-icon">✅</span>
               <h3>Export Successful!</h3>
-              <p className="export-success-message">
-                {exportFormat === 'rb3con'
-                  ? 'Your song has been successfully packaged into a Rock Band 3 STFS CON file.'
-                  : 'Your song has been successfully packaged into a single Clone Hero .sng file.'}
-              </p>
+              <p className="export-success-message">{SUCCESS_MESSAGES[exportFormat]}</p>
               <div className="export-path-preview">
                 <div className="export-path-code-container">
                   <strong>Destination:</strong>
@@ -287,46 +237,33 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
               <div className="export-section">
                 <h3 className="export-section-title">Format Option</h3>
                 <div className="export-formats-grid">
-                  {exportFormat === 'sng' ? (
-                    <>
-                      <div className="export-format-card active">
+                  {EXPORT_FORMATS.map((format) =>
+                    format.id === exportFormat ? (
+                      <div className="export-format-card active" key={format.id}>
                         <div className="export-format-card-header">
                           <span className="export-format-badge">Active</span>
-                          <span className="export-format-icon">🎸</span>
+                          <span className="export-format-icon">{format.icon}</span>
                         </div>
-                        <h4>Clone Hero (.sng)</h4>
-                        <p>
-                          Standard encrypted archive packaging notes, audio stems, and art into a
-                          single file container.
-                        </p>
+                        <h4>{format.title}</h4>
+                        <p>{format.description}</p>
                       </div>
+                    ) : (
                       <div
                         className="export-format-card inactive"
-                        onClick={() => handleFormatChange('rb3con')}
+                        key={format.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleFormatChange(format.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            handleFormatChange(format.id)
+                          }
+                        }}
                       >
-                        <h4>Rockband 3 RB3con</h4>
+                        <h4>{format.title}</h4>
                       </div>
-                    </>
-                  ) : (
-                    <>
-                      <div
-                        className="export-format-card inactive"
-                        onClick={() => handleFormatChange('sng')}
-                      >
-                        <h4>Clone Hero (.sng)</h4>
-                      </div>
-                      <div className="export-format-card active">
-                        <div className="export-format-card-header">
-                          <span className="export-format-badge">Active</span>
-                          <span className="export-format-icon">💿</span>
-                        </div>
-                        <h4>Rockband 3 RB3con</h4>
-                        <p>
-                          Xbox 360 Rock Band 3 STFS container package containing MIDI charts, MOGG
-                          audio stems, and catalog metadata.
-                        </p>
-                      </div>
-                    </>
+                    )
                   )}
                 </div>
               </div>
@@ -348,7 +285,7 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
                             setOutputFolder(defaultDir)
                             checkOverwrite(defaultDir, filename)
                           }}
-                          disabled={status === 'saving' || status === 'exporting'}
+                          disabled={isBusy}
                         >
                           Reset to Default
                         </button>
@@ -362,30 +299,30 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
                         placeholder="Click browse to choose an export directory..."
                         onChange={(e) => setOutputFolder(e.target.value)}
                         onBlur={() => checkOverwrite(outputFolder, filename)}
-                        disabled={status === 'saving' || status === 'exporting'}
+                        disabled={isBusy}
                       />
                       <button
                         className="export-modal-secondary"
                         onClick={handleBrowse}
-                        disabled={status === 'saving' || status === 'exporting'}
+                        disabled={isBusy}
                       >
                         Browse
                       </button>
                     </div>
                   </div>
 
-                  {/* Filename Input */}
+                  {/* Filename / folder name Input */}
                   <div className="export-field-stack" style={{ marginTop: '12px' }}>
-                    <label className="export-field-label">File Name</label>
+                    <label className="export-field-label">{formatInfo.nameLabel}</label>
                     <input
                       className="export-folder-input"
                       style={{ width: '100%' }}
                       type="text"
                       value={filename}
-                      placeholder="e.g. My_Song.sng"
+                      placeholder={formatInfo.namePlaceholder}
                       onChange={(e) => setFilename(e.target.value)}
                       onBlur={() => checkOverwrite(outputFolder, filename)}
-                      disabled={status === 'saving' || status === 'exporting'}
+                      disabled={isBusy}
                     />
                   </div>
 
@@ -393,8 +330,16 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
                     <div className="export-warning-banner">
                       <span className="warning-icon">⚠️</span>
                       <div className="warning-text">
-                        <strong>File Already Exists</strong>
-                        <p>Exporting will overwrite the existing file at this location.</p>
+                        <strong>
+                          {exportFormat === 'chart'
+                            ? 'Folder Already Exists'
+                            : 'File Already Exists'}
+                        </strong>
+                        <p>
+                          {exportFormat === 'chart'
+                            ? 'Exporting will overwrite notes.chart, song.ini and matching audio/art files inside the existing folder.'
+                            : 'Exporting will overwrite the existing file at this location.'}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -405,7 +350,7 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
                       type="checkbox"
                       checked={saveBeforeExport}
                       onChange={(e) => setSaveBeforeExport(e.target.checked)}
-                      disabled={status === 'saving' || status === 'exporting'}
+                      disabled={isBusy}
                     />
                     <span>Save song edits to source directory before exporting</span>
                   </label>
@@ -413,15 +358,11 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
               </div>
 
               {/* Progress Overlay / State */}
-              {(status === 'saving' || status === 'exporting') && (
+              {isBusy && (
                 <div className="export-loading-overlay">
                   <div className="export-loading-spinner"></div>
                   <p>
-                    {status === 'saving'
-                      ? 'Saving song edits...'
-                      : exportFormat === 'rb3con'
-                        ? 'Building .con package...'
-                        : 'Building .sng package...'}
+                    {status === 'saving' ? 'Saving song edits...' : PROGRESS_MESSAGES[exportFormat]}
                   </p>
                 </div>
               )}
@@ -439,14 +380,14 @@ export function ExportModal({ onSaveBeforeExport }: ExportModalProps): React.JSX
               <button
                 className="export-modal-secondary"
                 onClick={() => setExportModalOpen(false)}
-                disabled={status === 'saving' || status === 'exporting'}
+                disabled={isBusy}
               >
                 Cancel
               </button>
               <button
                 className="export-modal-primary"
                 onClick={handleExport}
-                disabled={status === 'saving' || status === 'exporting' || !outputFolder.trim()}
+                disabled={isBusy || !outputFolder.trim()}
               >
                 Export
               </button>

@@ -38,7 +38,14 @@ interface ChartEditorAPI {
     metadata: Record<string, unknown>,
     outputPath: string
   ) => Promise<{ success: boolean; error?: string }>
+  exportChart: (
+    songPath: string,
+    metadata: Record<string, unknown>,
+    chartText: string,
+    outputPath: string
+  ) => Promise<{ success: boolean; error?: string }>
   fileExists: (filePath: string) => Promise<boolean>
+  pathExists: (targetPath: string) => Promise<boolean>
 
   // Album art APIs
   readAlbumArt: (songPath: string) => Promise<string | null>

@@ -1,3 +1,5 @@
+import type { LibraryGroup, LibrarySort } from '../utils/libraryOrganization'
+
 // Chart Editor Type Definitions
 
 // Note types for different instruments
@@ -303,6 +305,8 @@ export interface AppSettings {
   autoChartSnapDrums: boolean
   autoChartEnabledTracks: AutoChartEnabledTracks
   sngLastExportDir?: string
+  librarySort: LibrarySort // Project Explorer sort order, remembered between sessions (issue #76)
+  libraryGroup: LibraryGroup // Project Explorer grouping, remembered between sessions (issue #76)
   betaUpdates: boolean // Opt into beta/pre-release auto-updates
   invertPianoRollVerticalScroll: boolean // Reverse vertical wheel direction in the piano roll
   hotkeys: AppHotkeys

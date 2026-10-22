@@ -81,8 +81,19 @@ const api = {
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('song:exportCon', songPath, metadata, outputPath),
 
+  exportChart: (
+    songPath: string,
+    metadata: Record<string, unknown>,
+    chartText: string,
+    outputPath: string
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('song:exportChart', songPath, metadata, chartText, outputPath),
+
   fileExists: (filePath: string): Promise<boolean> =>
     ipcRenderer.invoke('fs:fileExists', filePath),
+
+  pathExists: (targetPath: string): Promise<boolean> =>
+    ipcRenderer.invoke('fs:pathExists', targetPath),
 
   // Album art APIs
   readAlbumArt: (songPath: string): Promise<string | null> =>
