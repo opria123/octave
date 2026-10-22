@@ -14,6 +14,7 @@ import { ensureFreshYtDlp, isYtDlpBlockedError } from './strumIntegration/ytDlpR
 import { fitBoundsToDisplays, loadWindowState, saveWindowState } from './windowState'
 import { packSng } from './sngPacker'
 import { packRb3con } from './conPacker'
+import { exportChartFolder } from './chartExporter'
 import { importSng } from './import/sngImporter'
 import { importCon } from './import/conImporter'
 import {
@@ -1342,6 +1343,51 @@ ipcMain.handle(
     }
   }
 )
+
+// Export song to a Clone Hero .chart song folder (issue #77)
+ipcMain.handle(
+  'song:exportChart',
+  async (
+    _event,
+    songPath: string,
+    metadata: Record<string, unknown>,
+    chartText: string,
+    outputPath: string
+  ) => {
+    if (!isPathAllowed(songPath)) {
+      return { success: false, error: 'Path to song directory not allowed' }
+    }
+
+    const resolvedOutput = resolve(outputPath)
+    const parentDir = resolve(resolvedOutput, '..')
+    try {
+      const parentStat = await stat(parentDir)
+      if (!parentStat.isDirectory()) {
+        return { success: false, error: 'Output directory does not exist' }
+      }
+    } catch {
+      return { success: false, error: 'Output directory does not exist or is inaccessible' }
+    }
+
+    try {
+      await exportChartFolder(songPath, metadata, chartText, resolvedOutput)
+      return { success: true }
+    } catch (error) {
+      console.error('Error exporting .chart folder:', error)
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+)
+
+// Check if anything (file or folder) exists at a path
+ipcMain.handle('fs:pathExists', async (_event, targetPath: string) => {
+  try {
+    await stat(resolve(targetPath))
+    return true
+  } catch {
+    return false
+  }
+})
 
 // Check if a file exists
 ipcMain.handle('fs:fileExists', async (_event, filePath: string) => {

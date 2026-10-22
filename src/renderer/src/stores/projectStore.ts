@@ -103,6 +103,8 @@ const defaultSettings: AppSettings = {
     proKeys: true
   },
   sngLastExportDir: undefined,
+  librarySort: 'title',
+  libraryGroup: 'title-initial',
   betaUpdates: false,
   invertPianoRollVerticalScroll: false,
   hotkeys: cloneDefaultHotkeys(),
