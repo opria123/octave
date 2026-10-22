@@ -7,6 +7,31 @@ export type LibrarySort =
   | 'year-oldest'
 export type LibraryGroup = 'none' | 'title-initial' | 'artist' | 'year'
 
+export const LIBRARY_SORTS: readonly LibrarySort[] = [
+  'title',
+  'artist',
+  'added-newest',
+  'added-oldest',
+  'year-newest',
+  'year-oldest'
+]
+export const LIBRARY_GROUPS: readonly LibraryGroup[] = ['none', 'title-initial', 'artist', 'year']
+
+export const DEFAULT_LIBRARY_SORT: LibrarySort = 'title'
+export const DEFAULT_LIBRARY_GROUP: LibraryGroup = 'title-initial'
+
+/** Coerces a persisted (possibly stale or malformed) value to a valid sort. */
+export function normalizeLibrarySort(value: unknown): LibrarySort {
+  return LIBRARY_SORTS.includes(value as LibrarySort) ? (value as LibrarySort) : DEFAULT_LIBRARY_SORT
+}
+
+/** Coerces a persisted (possibly stale or malformed) value to a valid grouping. */
+export function normalizeLibraryGroup(value: unknown): LibraryGroup {
+  return LIBRARY_GROUPS.includes(value as LibraryGroup)
+    ? (value as LibraryGroup)
+    : DEFAULT_LIBRARY_GROUP
+}
+
 export interface LibrarySongSummary {
   id: string
   name: string

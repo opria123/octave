@@ -96,6 +96,21 @@ describe('Auto-Chart settings', () => {
   })
 })
 
+describe('Library sort/group persistence (issue #76)', () => {
+  it('defaults to title sort grouped A-Z', () => {
+    expect(useSettingsStore.getState().librarySort).toBe('title')
+    expect(useSettingsStore.getState().libraryGroup).toBe('title-initial')
+  })
+
+  it('writes the chosen sort and grouping to the persisted settings', () => {
+    useSettingsStore.getState().updateSettings({ librarySort: 'added-newest', libraryGroup: 'none' })
+
+    const persisted = JSON.parse(localStorage.getItem('chart-editor-settings') ?? '{}')
+    expect(persisted.state.librarySort).toBe('added-newest')
+    expect(persisted.state.libraryGroup).toBe('none')
+  })
+})
+
 describe('Layout persistence (issue #73)', () => {
   it('persists panel visibility, split sizes and the bottom tab, but not transient UI state', () => {
     useUIStore.getState().setPanelVisible('properties', false)

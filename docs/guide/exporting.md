@@ -19,13 +19,15 @@ If [Autosave](/guide/project-explorer#autosave) is enabled, manual save is rarel
 
 ## Export
 
-*File → Export* offers format-specific exports:
+*File → Export* packages the current song for a target game:
 
-| Format | Notes |
-|--------|-------|
-| **MIDI (.mid)** | Just the notes file, no `song.ini` or stems |
-| **Chart (.chart)** | Clone Hero plain-text chart format |
-| **YARG ZIP** | A self-contained folder zipped for easy sharing |
+| Format | What you get |
+|--------|--------------|
+| **Clone Hero (.sng)** | A single encrypted `.sng` archive with the chart, audio stems, art and metadata |
+| **Clone Hero (.chart folder)** | A song folder with a plain-text `notes.chart`, `song.ini`, audio stems and art — works in Clone Hero, YARG and Moonscraper. MIDI-sourced songs are converted on the fly |
+| **Rock Band 3 (RB3con)** | An Xbox 360 STFS CON package with MIDI chart, MOGG stems and catalog metadata |
+
+Exports never modify the source song folder. Tick *Save song edits before exporting* to flush unsaved changes first.
 
 ## What gets written
 

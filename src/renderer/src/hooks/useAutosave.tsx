@@ -1,7 +1,8 @@
 // Autosave hook - automatically saves dirty songs
 import { useEffect, useRef, useCallback } from 'react'
 import { useSettingsStore, useProjectStore, getSongStore } from '../stores'
-import { serializeMidiBase64, serializeChartFile } from '../utils/midiParser'
+import { serializeMidiBase64 } from '../utils/midiParser'
+import { serializeSongToChartText } from '../utils/chartFile'
 
 const DEFAULT_DEBOUNCE_MS = 2000
 
@@ -62,20 +63,7 @@ export function useAutosave(): void {
 
       // Save notes in the original format (notes.mid or notes.chart)
       if (state.song.sourceFormat === 'chart') {
-        const chartText = serializeChartFile(
-          state.song.notes,
-          state.song.tempoEvents,
-          state.song.timeSignatures,
-          state.song.starPowerPhrases,
-          state.song.vocalNotes,
-          state.song.vocalPhrases,
-          state.song.soloSections,
-          state.song.songSections,
-          state.song.metadata as Record<string, unknown>,
-          192,
-          state.song.laneMarkers,
-          state.song.venueTrack
-        )
+        const chartText = serializeSongToChartText(state.song)
         await window.api.writeSongChart(state.song.folderPath, chartText)
       } else {
         const midiBase64 = serializeMidiBase64(

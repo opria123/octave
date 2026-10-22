@@ -7,9 +7,9 @@ import type { Instrument, VideoSync, AudioSync, VenueTrackData } from '../types'
 import { subscribeAlbumArtUpdates } from '../utils/albumArtEvents'
 import { readLibraryCache, writeLibraryCache, type CachedLibrarySong } from '../services/libraryCache'
 import {
-  organizeLibrarySongs,
-  type LibraryGroup,
-  type LibrarySort
+  normalizeLibraryGroup,
+  normalizeLibrarySort,
+  organizeLibrarySongs
 } from '../utils/libraryOrganization'
 import './ProjectExplorer.css'
 
@@ -167,13 +167,13 @@ export function ProjectExplorer(): React.JSX.Element {
     removeSong
   } = useProjectStore()
   const { lastOpenedFolder, updateSettings } = useSettingsStore()
+  const librarySort = useSettingsStore((s) => normalizeLibrarySort(s.librarySort))
+  const libraryGroup = useSettingsStore((s) => normalizeLibraryGroup(s.libraryGroup))
   const [isLoading, setIsLoading] = useState(false)
   const [showNewSongDialog, setShowNewSongDialog] = useState(false)
   const [newSongName, setNewSongName] = useState('')
   const [newSongAudioPath, setNewSongAudioPath] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [librarySort, setLibrarySort] = useState<LibrarySort>('title')
-  const [libraryGroup, setLibraryGroup] = useState<LibraryGroup>('title-initial')
   const [songAddedTimes, setSongAddedTimes] = useState<Map<string, number>>(new Map())
   const loadGenerationRef = useRef(0)
   const handledLoadVersionRef = useRef(-1)
@@ -828,7 +828,9 @@ export function ProjectExplorer(): React.JSX.Element {
               <div className="explorer-library-selects">
                 <select
                   value={librarySort}
-                  onChange={(event) => setLibrarySort(event.target.value as LibrarySort)}
+                  onChange={(event) =>
+                    updateSettings({ librarySort: normalizeLibrarySort(event.target.value) })
+                  }
                   aria-label="Sort song library"
                 >
                   <option value="title">Sort: Title</option>
@@ -840,7 +842,9 @@ export function ProjectExplorer(): React.JSX.Element {
                 </select>
                 <select
                   value={libraryGroup}
-                  onChange={(event) => setLibraryGroup(event.target.value as LibraryGroup)}
+                  onChange={(event) =>
+                    updateSettings({ libraryGroup: normalizeLibraryGroup(event.target.value) })
+                  }
                   aria-label="Group song library"
                 >
                   <option value="title-initial">Group: Title A–Z</option>
