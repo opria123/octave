@@ -34,6 +34,7 @@ import {
 } from '../shared/songMetadata'
 import { parseIniFile, serializeIniFile } from '../shared/iniFile'
 import { createApplicationMenuTemplate } from './applicationMenu'
+import { chromiumSwitchesFor } from './chromiumSwitches'
 
 // Point fluent-ffmpeg at the bundled static binary
 try {
@@ -44,8 +45,12 @@ try {
   console.warn('[FFmpeg] ffmpeg-static not found — export will use system ffmpeg if available')
 }
 
-// Allow AudioContext to start without user gesture requirement in Electron
-app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+// Chromium switches (autoplay policy, Windows driver post-processing
+// workaround for issue #80 — see chromiumSwitches.ts for the reasoning).
+for (const chromiumSwitch of chromiumSwitchesFor(process.platform)) {
+  if (chromiumSwitch.value === undefined) app.commandLine.appendSwitch(chromiumSwitch.name)
+  else app.commandLine.appendSwitch(chromiumSwitch.name, chromiumSwitch.value)
+}
 
 // Enforce a single running OCTAVE instance. Without this, NSIS auto-update
 // fails with "two running versions" because the installer refuses to replace
